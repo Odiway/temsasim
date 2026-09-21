@@ -1,0 +1,125 @@
+/* Simulation stage: a full-bleed 3D scene with glass panels floating over it.
+   The panels use the app's own tokens made translucent, so both light and dark
+   themes sit well over a sky that has its own colours. */
+main.fullbleed { padding: 0; max-width: none; }
+.simx-stage { position: relative; height: calc(100vh - 65px); min-height: 600px; overflow: hidden; background: #d8e6f1; }
+.simx-canvas { position: absolute; inset: 0; }
+.simx-canvas canvas { display: block; width: 100%; height: 100%; outline: none; }
+.simx-nogl { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); max-width: 460px; background: var(--panel); padding: 16px 18px; border-radius: 10px; border: 1px solid var(--rule); font-size: 13.5px; }
+
+.hud {
+  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
+  border: 1px solid color-mix(in srgb, var(--rule) 75%, transparent);
+  border-radius: 12px;
+  box-shadow: 0 10px 34px rgba(12, 22, 34, .16), 0 1px 0 rgba(255, 255, 255, .25) inset;
+}
+.hud-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid color-mix(in srgb, var(--rule) 60%, transparent); }
+.hud-body { padding: 14px 16px; overflow: auto; flex: 1; min-height: 0; }
+.hud-x { padding: 4px 8px; font-size: 12.5px; }
+
+.simx-setup { position: absolute; left: 16px; top: 16px; bottom: 118px; width: 300px; display: flex; flex-direction: column; z-index: 3; }
+.simx-setup[hidden] { display: none; }
+.simx-setup .lab.simx-lab { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.simx-setup .seg button { padding: 6px 10px; }
+.simx-run { width: 100%; justify-content: center; padding: 11px 16px; font-size: 14.5px; }
+.simx-more summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
+.simx-pill { position: absolute; left: 16px; top: 16px; z-index: 3; font: 600 13px var(--display); padding: 9px 16px; color: var(--ink); cursor: pointer; }
+.simx-pill[hidden] { display: none; }
+
+.simx-cams { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); padding: 5px; display: flex; gap: 10px; align-items: center; z-index: 2; border-radius: 10px; }
+.simx-cams .seg { border: 0; background: transparent; }
+.simx-cams .seg button { font-size: 13px; padding: 6px 12px; border-radius: 6px; }
+.simx-cams .seg button + button { border-left: 0; }
+.simx-cams > span { padding-right: 8px; }
+
+.simx-tele { position: absolute; right: 16px; top: 16px; bottom: 118px; width: 372px; display: flex; flex-direction: column; z-index: 3; }
+.tele-title { font: 600 16px var(--display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tele-title .muted { font-weight: 400; }
+.tele-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.tele-report { padding: 6px 12px; font-size: 12.5px; flex: none; }
+.tele-body > * + * { margin-top: 14px; }
+.simx-idle { color: var(--ink-2); font-size: 13.5px; margin: 4px 0; line-height: 1.6; }
+.tele-sec .sec-t { font: 600 11px var(--cond); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.tele-sec { border-top: 1px solid color-mix(in srgb, var(--rule) 55%, transparent); padding-top: 12px; }
+
+.gauges { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.gauge { width: 100%; height: auto; }
+.gauge .g-num { font: 600 27px var(--display); fill: var(--ink); font-variant-numeric: tabular-nums; }
+.gauge .g-unit { font: 500 11px var(--body); fill: var(--muted); }
+.gauge .g-lab { font: 600 10.5px var(--cond); letter-spacing: .08em; fill: var(--ink-2); text-transform: uppercase; }
+.gauge .g-val { transition: stroke-dasharray .12s linear; }
+
+.batt { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.batt-num { font: 600 24px var(--display); }
+.batt-lab { font-size: 12px; color: var(--muted); }
+.flow-row { display: grid; grid-template-columns: 78px 1fr 74px; gap: 10px; align-items: center; font-size: 12.5px; padding: 3px 0; }
+.flow-row b { text-align: right; font-size: 12.5px; font-weight: 600; }
+.flow-bar { height: 6px; background: color-mix(in srgb, var(--rule) 70%, transparent); border-radius: 3px; overflow: hidden; }
+.flow-bar i { display: block; height: 100%; width: 0; border-radius: 3px; transition: width .15s linear; }
+
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+.stat span { display: block; font-size: 11.5px; color: var(--muted); }
+.stat b { font-size: 14px; font-weight: 600; }
+
+.split { display: flex; gap: 2px; height: 12px; border-radius: 4px; overflow: hidden; background: color-mix(in srgb, var(--rule) 60%, transparent); }
+.split i { display: block; min-width: 0; transition: flex .2s linear; }
+.split-legend { font-size: 11.5px; gap: 3px 12px; }
+
+.strip-wrap { position: relative; }
+.strip { display: block; width: 100%; height: 74px; }
+.strip-axis { position: absolute; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: space-between; font: 10.5px var(--mono); color: var(--muted); pointer-events: none; }
+
+.feed { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow: auto; position: relative; }
+.ev { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 7px 8px; border-radius: 7px; cursor: pointer; opacity: .42; transition: opacity .2s, background .2s; }
+.ev.past { opacity: 1; }
+.ev.now { background: color-mix(in srgb, var(--amber) 16%, transparent); }
+.ev:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.ev svg { width: 18px; height: 18px; margin-top: 1px; }
+.ev-stop svg { color: var(--amber-ink); }
+.ev-climb svg, .ev-descent svg { color: var(--ink-2); }
+.ev-regen svg { color: #1f9d5c; }
+.ev-hvac svg { color: var(--s2); }
+.ev-soc svg { color: var(--s1); }
+.ev-signal svg { color: #d03b3b; }
+.ev-jam svg { color: var(--s2); }
+.ev-top { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.ev-top .num { font-size: 11.5px; }
+.ev-text { font-size: 12px; color: var(--ink-2); margin-top: 1px; }
+.tele-warn summary { cursor: pointer; font-size: 12.5px; color: var(--amber-ink); font-weight: 600; margin-top: 10px; }
+.tele-warn ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--ink-2); }
+
+.simx-timeline { position: absolute; left: 16px; right: 16px; bottom: 16px; height: 88px; display: flex; gap: 16px; align-items: center; padding: 10px 16px; z-index: 3; }
+.simx-tl-controls { display: flex; align-items: center; gap: 12px; flex: none; }
+.simx-play { width: 46px; height: 46px; border-radius: 50%; background: var(--ink); border: 0; display: grid; place-items: center; padding: 0; }
+.simx-play svg { width: 18px; height: 18px; fill: var(--panel); }
+.simx-play:disabled { opacity: .35; cursor: not-allowed; }
+.simx-tl-controls .seg button { padding: 5px 9px; font-size: 12.5px; }
+.simx-clock { font-size: 12.5px; color: var(--ink-2); min-width: 170px; }
+.simx-tl { flex: 1; min-width: 0; cursor: pointer; touch-action: none; }
+.tl-svg { display: block; width: 100%; height: 48px; }
+.tl-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+.simx-loading { position: absolute; inset: 0; display: grid; place-items: center; z-index: 5; background: color-mix(in srgb, var(--bg) 35%, transparent); }
+.simx-loading[hidden] { display: none; }
+.simx-loading > * { grid-area: 1 / 1; }
+.simx-loading span { margin-top: 84px; font: 600 14px var(--display); background: var(--panel); padding: 8px 14px; border-radius: 8px; border: 1px solid var(--rule); }
+.simx-spinner { width: 42px; height: 42px; border-radius: 50%; border: 3px solid var(--rule); border-top-color: var(--amber); animation: spin .9s linear infinite; }
+.simx-empty-lib { padding: 28px 32px; display: grid; gap: 12px; justify-items: start; }
+
+@media (max-width: 1100px) {
+  .simx-stage { height: auto; min-height: 0; overflow: visible; background: transparent; }
+  .simx-canvas { position: relative; height: 58vh; min-height: 340px; }
+  .simx-setup, .simx-tele, .simx-timeline { position: static; width: auto; margin: 12px 16px 0; }
+  .simx-timeline { height: auto; flex-wrap: wrap; }
+  .simx-pill { position: absolute; top: 12px; left: 12px; }
+  .simx-cams { top: 12px; left: auto; right: 12px; transform: none; }
+  .simx-cams > span { display: none; }
+}
+
+/* refinements after first render */
+.hud-foot { padding: 12px 16px; border-top: 1px solid color-mix(in srgb, var(--rule) 60%, transparent); }
+.simx-tele.idle { bottom: auto; }
+.gauges { max-width: 300px; margin: 0 auto; }
+.gauge { max-height: 124px; }

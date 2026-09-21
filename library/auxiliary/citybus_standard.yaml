@@ -1,0 +1,19 @@
+kind: auxiliary
+name: citybus_standard_aux
+description: >
+  Electrified auxiliaries for a 12 m low-floor city bus. PLACEHOLDER DATA.
+  These are the easiest numbers in the whole model to measure properly: put a
+  clamp meter on each branch of the HV distribution box for one shift and you
+  will have better data than any supplier will give you.
+
+constant_w: 1200            # controllers, telematics, ticketing, CCTV, PIS, DC-DC losses
+lighting_w: 700
+lighting_night_w: 1400
+steering_pump_w: 1800
+steering_speed_factor: 0.55
+air_compressor_w: 5500
+air_compressor_duty_base: 0.06
+air_per_stop_j: 95000       # doors + service brake + kneel and rise, per stop
+dcdc_efficiency: 0.94
+
+validated: false

@@ -1,0 +1,34 @@
+kind: hvac
+name: rooftop_resistive_30kw
+description: >
+  Identical cabin envelope to rooftop_heatpump_30kw, but heated by a resistive
+  element instead of a heat pump. Exists so the two can be compared on the same
+  route: that comparison is one of the clearest arguments a bus engineering
+  team can put in front of a procurement decision. PLACEHOLDER DATA.
+
+system_type: resistive
+cabin_volume_m3: 62
+glazing_area_m2: 26
+opaque_area_m2: 78
+u_glazing_w_per_m2k: 5.4
+u_opaque_w_per_m2k: 1.3
+thermal_bridge_factor: 1.15
+interior_thermal_mass_kj_per_k: 350
+shgc: 0.45
+fresh_air_m3_per_h_per_passenger: 12
+fresh_air_minimum_m3_per_h: 300
+door_count: 3
+door_width_m: 1.20
+door_height_m: 1.95
+door_discharge_coefficient: 0.50
+heating_capacity_kw: 30
+cooling_capacity_kw: 32
+resistive_efficiency: 0.98
+blower_power_w: 1400
+condenser_fan_power_w: 900
+setpoint_heating_c: 18
+setpoint_cooling_c: 24
+control_time_constant_s: 420
+passenger_sensible_w: 80
+
+validated: false

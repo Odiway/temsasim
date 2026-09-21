@@ -1,0 +1,49 @@
+kind: hvac
+name: rooftop_heatpump_30kw
+description: >
+  Rooftop reversible heat pump with resistive backup below cutoff, the
+  configuration most new European electric city buses use. PLACEHOLDER DATA:
+  the COP curves are generic. Get the real ones from the unit supplier at
+  several ambient temperatures -- COP at -7 degC is the single number that
+  decides your winter range, and catalogue figures are quoted at +7 degC.
+
+system_type: hybrid
+backup_heat_source: resistive
+heat_pump_cutoff_c: -12
+
+# --- cabin envelope: a 12 m low-floor city bus ------------------------------
+cabin_volume_m3: 62
+glazing_area_m2: 26          # large for a bus, and it dominates the UA
+opaque_area_m2: 78
+u_glazing_w_per_m2k: 5.4     # single glazed, framed
+u_opaque_w_per_m2k: 1.3
+thermal_bridge_factor: 1.15
+interior_thermal_mass_kj_per_k: 350
+shgc: 0.45
+
+# --- ventilation and doors --------------------------------------------------
+fresh_air_m3_per_h_per_passenger: 12
+fresh_air_minimum_m3_per_h: 300
+door_count: 3
+door_width_m: 1.20
+door_height_m: 1.95
+door_discharge_coefficient: 0.50   # reduced from the clear-opening 0.6:
+                                   # passengers and the step well obstruct flow.
+                                   # CALIBRATE THIS against measured cabin
+                                   # temperature drop at a winter stop.
+
+# --- capacity and parasitics ------------------------------------------------
+heating_capacity_kw: 30
+cooling_capacity_kw: 32
+resistive_efficiency: 0.98
+blower_power_w: 1400
+condenser_fan_power_w: 900
+
+# --- control ----------------------------------------------------------------
+setpoint_heating_c: 18       # asymmetric, with a dead band to 24.
+setpoint_cooling_c: 24       # Specifying 22 degC in both directions is a
+                             # common and expensive mistake.
+control_time_constant_s: 420
+passenger_sensible_w: 80
+
+validated: false

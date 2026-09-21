@@ -1,0 +1,27 @@
+kind: motor
+name: central_250kw_pmsm
+description: >
+  Central permanent-magnet traction motor with integrated inverter, of the
+  class used in a 12 m electric city bus. PLACEHOLDER DATA built from a
+  synthetic loss model. Ask the supplier for the measured efficiency map --
+  they have it, and a signed NDA usually gets it.
+
+technology: PMSM
+peak_power_kw: 250
+continuous_power_kw: 150
+peak_torque_nm: 2800
+continuous_torque_nm: 1500
+max_speed_rpm: 3000
+
+# Calibration points for the synthetic map. Replace the whole block with
+#   efficiency_map: maps/central_250kw_eff.csv
+# once a measured grid exists; these three keys are then ignored.
+peak_efficiency: 0.955
+peak_efficiency_at_rpm: 1100
+peak_efficiency_at_torque_nm: 1100
+
+field_weakening_exponent: 1.08
+max_regen_power_kw: 220
+regen_efficiency_penalty: 0.005
+
+validated: false

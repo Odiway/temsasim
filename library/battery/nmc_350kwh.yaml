@@ -1,0 +1,41 @@
+kind: battery
+name: nmc_350kwh_roof
+description: >
+  Roof-mounted NMC traction pack, roughly 350 kWh nominal. PLACEHOLDER DATA.
+  The OCV curve is a generic NMC shape; replace it with your supplier's
+  measured pseudo-OCV. Internal resistance is the number that most affects
+  both energy and available power, and it is the one most worth measuring
+  properly, at several temperatures.
+
+chemistry: NMC
+cells_series: 200
+cells_parallel: 5
+cell_capacity_ah: 94
+cell_nominal_voltage_v: 3.65
+
+cell_resistance_mohm: 1.1          # at 25 degC, mid SOC
+resistance_activation_j_per_mol: 20000
+resistance_reference_temp_c: 25
+coulombic_efficiency: 0.995
+
+cell_voltage_min_v: 2.80
+cell_voltage_max_v: 4.15
+max_discharge_c_rate: 3.0
+max_charge_c_rate: 1.5
+
+# Operating window. Narrower than the pack allows, to protect warranty life.
+soc_min: 0.10
+soc_max: 0.98
+
+pack_mass_kg: 2500
+specific_heat_j_per_kgk: 1000
+thermal_conductance_to_ambient_w_per_k: 55
+cooling_capacity_kw: 14
+heating_capacity_kw: 7
+cooling_cop: 2.2
+heating_cop: 1.0                   # coolant heater, resistive
+thermal_target_c: 25
+cooling_on_above_c: 32
+heating_on_below_c: 8
+
+validated: false

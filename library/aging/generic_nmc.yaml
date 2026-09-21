@@ -1,0 +1,28 @@
+kind: aging
+name: generic_nmc_aging
+description: >
+  LITERATURE COEFFICIENTS, NOT CALIBRATED TO ANY TEMSA CELL.
+  The functional form follows Wang et al., J. Power Sources 196 (2011)
+  3942-3948. The form transfers between cells; the coefficients do not.
+
+  Until these are fitted to your supplier's cycle-life and storage data, treat
+  every year-N number this model produces as a sensitivity study, not a
+  prediction, and never put one in a warranty document.
+
+chemistry: NMC
+cal_prefactor: 0.0010
+cal_activation_j_per_mol: 55000
+cal_reference_temp_c: 25
+cal_time_exponent: 0.5
+cal_soc_reference: 0.5
+cal_soc_exponent: 1.4
+
+cyc_prefactor: 0.0175
+cyc_activation_j_per_mol: 31700
+cyc_c_rate_alpha: 370.3
+cyc_throughput_exponent: 0.55
+cyc_reference_temp_c: 25
+
+end_of_life_capacity: 0.80
+
+validated: false

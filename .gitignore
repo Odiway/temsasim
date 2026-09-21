@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# generated reports and outputs
+out/
+
+# components deleted from the interface (recoverable locally, not versioned)
+library/.cop_kutusu/
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

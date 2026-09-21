@@ -1,0 +1,16 @@
+kind: driveline
+name: direct_drive_6r2
+description: >
+  Central motor, no gearbox, straight into a 6.2:1 hypoid rear axle.
+  PLACEHOLDER DATA. The final drive ratio is the cheapest lever you have for
+  trading gradeability against top speed -- worth a sweep before it is frozen.
+
+layout: direct_drive
+gear_ratios: [1.0]
+final_drive_ratio: 6.2
+gearbox_efficiency: 1.0       # no gearbox in this layout
+final_drive_efficiency: 0.96
+motor_inertia_kgm2: 0.42
+spin_loss_nm: 45.0            # brake drag and seal friction at the wheel
+
+validated: false

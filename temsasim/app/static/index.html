@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Otobüs Simülasyonu</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23121110'/%3E%3Cg fill='%23ffb000'%3E%3Ccircle cx='4' cy='5' r='1.2'/%3E%3Ccircle cx='8' cy='5' r='1.2'/%3E%3Ccircle cx='12' cy='5' r='1.2'/%3E%3Ccircle cx='4' cy='11' r='1.2'/%3E%3Ccircle cx='8' cy='8' r='1.2'/%3E%3Ccircle cx='12' cy='11' r='1.2'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/sim.css">
+</head>
+<body>
+<header class="signbar">
+  <canvas id="sign" aria-hidden="true"></canvas>
+  <div class="tools">
+    <button type="button" id="themeBtn" title="Açık / koyu tema">Tema</button>
+  </div>
+</header>
+<div class="shell">
+  <nav class="rail" aria-label="Bölümler">
+    <a href="#/kutuphane" data-page="kutuphane">Kütüphane</a>
+    <a href="#/yukle" data-page="yukle">Veri yükle</a>
+    <a href="#/arac/yeni" data-page="arac">Araç kur</a>
+    <a href="#/simulasyon" data-page="simulasyon">Simülasyon</a>
+    <a href="#/dogrulama" data-page="dogrulama">Doğrulama</a>
+    <div class="foot">Kütüphane klasörü<br><code id="libroot"></code></div>
+  </nav>
+  <main id="main" tabindex="-1"></main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="tip" id="tip"></div>
+<script type="importmap">{"imports": {"three": "/static/vendor/three/three.module.min.js"}}</script>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+kind: chassis
+name: city_bus_12m_glider
+description: >
+  Generic 12 m low-floor city bus glider, two-axle. PLACEHOLDER DATA.
+  Every number here is a plausible industry value, not a TEMSA measurement.
+  Replace kerb mass from the weighbridge, and replace the road load with
+  coast-down coefficients measured to SAE J1263/J2263 before this file is
+  used for anything anyone acts on.
+
+kerb_mass_kg: 13500        # complete e-bus incl. pack, no passengers
+gross_mass_kg: 19500
+passenger_mass_kg: 68.0    # UNECE R107 / VECTO convention
+rotational_inertia_kgm2: 90.0   # 6 wheels + hubs + brake discs, about the wheel axis
+
+# --- road load: physical parameterisation -----------------------------------
+# Used because no coast-down has been run yet. When it has, fill in the
+# coastdown_* fields below and these are ignored.
+rolling_c0: 0.0075         # low-rolling-resistance city tyre, correctly inflated
+rolling_c1_s_per_m: 0.00006
+drag_coefficient: 0.62
+frontal_area_m2: 7.7       # 2.55 m wide x ~3.2 m high, less corner radii
+
+# coastdown_a_n: ...
+# coastdown_b_n_per_mps: ...
+# coastdown_c_n_per_mps2: ...
+# coastdown_test_mass_kg: ...
+
+tyre_dynamic_radius_m: 0.478   # 295/80 R22.5 under load
+
+validated: false
+notes: >
+  Rolling resistance is the least certain parameter here and it dominates city
+  consumption below 40 km/h. A 0.001 error in rolling_c0 moves consumption by
+  roughly 0.03 kWh/km, which is about 3 % of the total. Measure it.
