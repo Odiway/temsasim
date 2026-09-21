@@ -154,6 +154,33 @@ def cmd_validate(args):
     return 0 if rep.passed else 1
 
 
+def cmd_maraton(args):
+    """Maraton GEN3 fuel and brake-pad regressions on a duty cycle."""
+    from .maraton import FuelInputs, fuel_l100, pad_wear, speed_stats
+    lib = Library(args.library)
+    if args.route:
+        route = Route.from_csv(lib.root / "route" / f"{args.route}.csv")
+        cyc = route.to_cycle(traffic=args.traffic)
+    else:
+        cyc = lib.load_cycle(args.cycle)
+    st = speed_stats(cyc.speed_mps, cyc.time_s)
+    x = FuelInputs(idle_l100=args.idle, ac_pct=args.ac, v_mean_kmh=st["v_mean_kmh"],
+                   rpm1200_pct=args.rpm1200, pedal_pct=args.pedal, week=args.week,
+                   gt102_pct=st["gt102_pct"], gt80_pct=st["gt80_pct"], ambient_c=args.ambient,
+                   kale_radiator=args.kale, body=args.body)
+    f, p = fuel_l100(x), pad_wear(st["v030_pct"])
+    print(f"{cyc.name}: v_mean {st['v_mean_kmh']:.1f} km/h, >80 {st['gt80_pct']:.0f} %, "
+          f">102 {st['gt102_pct']:.1f} %, 0-30 km/h {st['v030_pct']:.1f} %")
+    print(f"\nFuel  {f['fuel_l100']:.2f} L/100 km  (LOOCV RMSE {f['rmse_l100']} L/100 km)")
+    for k, v in f["terms"].items():
+        print(f"  {k:12s} {v:+7.2f}")
+    print("\nBrake pads (to 20 %):")
+    for w in ("front_right", "front_left", "rear"):
+        print(f"  {w:12s} {p['rate_pct_per_10k'][w]:5.2f} %/10k km  {p['life_km_to_20pct'][w]:9,.0f} km")
+    for wmsg in f["warnings"] + p["warnings"]:
+        print("  ! " + wmsg)
+
+
 def cmd_gui(args):
     from .app.server import serve
     serve(args.library, port=args.port, open_browser=not args.no_browser)
@@ -219,6 +246,20 @@ def build_parser() -> argparse.ArgumentParser:
                     help="energy error tolerance in percent")
     sp.add_argument("--overlay", default=None, help="write aligned sim/meas CSV")
     sp.set_defaults(func=cmd_validate)
+
+    sp = sub.add_parser("maraton", help="Maraton GEN3 fuel and brake-pad regressions")
+    sp.add_argument("--cycle", default="hhddt65")
+    sp.add_argument("--route", default=None)
+    sp.add_argument("--traffic", default="yok")
+    sp.add_argument("--ambient", type=float, default=20.0)
+    sp.add_argument("--week", type=float, default=30.0)
+    sp.add_argument("--ac", type=float, default=0.0, help="A/C usage %%")
+    sp.add_argument("--rpm1200", type=float, default=17.0, help="share of time >= 1200 rpm %%")
+    sp.add_argument("--pedal", type=float, default=76.0, help="mean accelerator pedal %%")
+    sp.add_argument("--idle", type=float, default=1.0, help="idle fuel L/100 km")
+    sp.add_argument("--kale", action="store_true", help="Kale radiator (else Raal)")
+    sp.add_argument("--body", default="CD", choices=["CD", "ND"])
+    sp.set_defaults(func=cmd_maraton)
 
     sp = sub.add_parser("gui", help="open the web interface in a browser")
     sp.add_argument("--port", type=int, default=8765)

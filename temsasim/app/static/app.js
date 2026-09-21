@@ -1071,7 +1071,8 @@ async function pageSim() {
           field("Günlük mesafe", daily, { hint: "Batarya ömrü projeksiyonu için." }),
           field("Karşılaştırılacak araç", cmpSel, { hint: "İsteğe bağlı; aynı görevde −15…+40 °C." }),
           h("button", { type: "button", onclick: e => busy(e.currentTarget, () => openSweep({ ...params(), vehicles: [vSel.value, cmpSel.value].filter((x, i, a) => x && a.indexOf(x) === i) })) }, "Taramayı aç"),
-          h("button", { type: "button", onclick: e => busy(e.currentTarget, () => openTrafficCompare(params())) }, "Trafik seviyelerini karşılaştır")))),
+          h("button", { type: "button", onclick: e => busy(e.currentTarget, () => openTrafficCompare(params())) }, "Trafik seviyelerini karşılaştır"),
+          h("button", { type: "button", onclick: () => openMaraton(params()) }, "Maraton yakıt ve balata modeli")))),
     h("div", { class: "hud-foot" }, runBtn));
   const setupPill = h("button", { type: "button", class: "hud simx-pill", hidden: true, onclick: () => toggleSetup(true) }, "Kurulum");
   const toggleSetup = open => { setup.hidden = !open; setupPill.hidden = open; recenter(); };
@@ -1472,6 +1473,45 @@ async function openTrafficCompare(p) {
           h("td", { class: "n" }, fmt(q.kwh_per_h, 1)), h("td", { class: "n" }, `${fmt(q.range_km, 0)} km`),
           h("td", { class: "n" }, fmt(q.hvac_kwh, 2)), h("td", { class: "n" }, fmt(q.aux_kwh, 2)), h("td", { class: "n" }, fmt(q.brake_kwh, 2)),
           h("td", { class: "n" }, `${q.red_lights} · ${fmt(q.red_wait_s, 0)} s`), h("td", { class: "n" }, `${q.jams} · ${fmt(q.jam_s, 0)} s`))))))));
+  document.body.append(dlg);
+  dlg.showModal();
+}
+
+/* Maraton GEN3 regressions (diesel coach): fuel and brake-pad life for the chosen duty. */
+function openMaraton(p) {
+  const dlg = h("dialog", {});
+  const close = () => { dlg.close(); dlg.remove(); };
+  const f = { ac: numInput(20, { unit: "%" }), rpm1200: numInput(17, { unit: "%" }), pedal: numInput(76, { unit: "%" }),
+              idle: numInput(1.0, { unit: "L/100km" }), week: numInput(30), ambient: numInput(p.ambient, { unit: "°C" }) };
+  const body = select([["CD", "Mevcut tasarım (CD)"], ["ND", "Yeni tasarım (ND)"]], "CD");
+  const kale = h("input", { type: "checkbox" });
+  const out = h("div", { class: "stack" });
+  const run = async () => {
+    const val = k => parseNum($("input", f[k]).value);
+    const r = await api.post("/api/maraton", { route: p.route, cycle: p.cycle, traffic: p.traffic,
+      ac: val("ac"), rpm1200: val("rpm1200"), pedal: val("pedal"), idle: val("idle"), week: val("week"),
+      ambient: val("ambient"), body: body.value, kale: kale.checked });
+    const T = r.fuel.terms, s = r.stats, pw = r.pads;
+    const names = { idle: "Rölanti", intercept: "Sabit", ac: "Klima", time_per_km: "Km başına süre", rpm1200: "≥1200 rpm",
+      pedal: "Pedal", season: "Mevsim", gt102: ">102 km/h", temperature: "Sıcaklık fiziği", kale: "Kale radyatör", body_nd: "ND gövde" };
+    out.replaceChildren(
+      h("div", { class: "kpis" },
+        kpi("Yakıt", fmt(r.fuel.fuel_l100, 2), "L/100 km"), kpi("Belirsizlik", "±" + fmt(r.fuel.rmse_l100, 2), "L/100 km"),
+        kpi("Balata ömrü (ön sağ)", fmt(pw.life_km_to_20pct.front_right / 1000, 0), "bin km"), kpi("v₀₋₃₀", "%" + fmt(s.v030_pct, 1), "")),
+      h("p", { class: "small muted", style: "margin:0" }, `${r.cycle}: ortalama ${fmt(s.v_mean_kmh, 1)} km/h, >80 km/h %${fmt(s.gt80_pct, 0)}, >102 km/h %${fmt(s.gt102_pct, 1)} (hız profilinden)`),
+      h("table", { class: "data" }, h("tbody", {}, Object.entries(T).map(([k, v]) => h("tr", {}, h("td", {}, names[k] || k), h("td", { class: "n" }, (v >= 0 ? "+" : "") + fmt(v, 2)))))),
+      h("table", { class: "data" }, h("thead", {}, h("tr", {}, h("th", {}, "Tekerlek"), h("th", {}, "% / 10 bin km"), h("th", {}, "%20'ye km"))),
+        h("tbody", {}, [["front_right", "Ön sağ"], ["front_left", "Ön sol"], ["rear", "Arka"]].map(([k, n]) =>
+          h("tr", {}, h("td", {}, n), h("td", { class: "n" }, fmt(pw.rate_pct_per_10k[k], 2)), h("td", { class: "n" }, fmt(pw.life_km_to_20pct[k], 0)))))),
+      [...r.fuel.warnings, ...pw.warnings].length ? notice("warn", "Model aralığı dışında", [...r.fuel.warnings, ...pw.warnings]) : null);
+  };
+  dlg.append(h("div", { class: "dlg-head" }, h("h2", {}, "Maraton GEN3 · yakıt ve balata regresyonu"), h("span", { class: "spacer" }), h("button", { type: "button", class: "ghost", onclick: close }, "Kapat")),
+    h("div", { class: "dlg-body stack" },
+      h("p", { class: "small muted", style: "margin:0" }, "Dizel şehirlerarası otobüs filo modeli (AR-GE Test Merkezi, Eylül 2026). Hız payları seçili görevden hesaplanır; motor devri ve pedal simülatörde modellenmediği için girdidir."),
+      h("div", { class: "formgrid" }, field("Klima kullanımı", f.ac), field("≥1200 rpm payı", f.rpm1200), field("Ort. pedal", f.pedal),
+        field("Rölanti yakıtı", f.idle), field("Yılın haftası", f.week), field("Dış sıcaklık", f.ambient), field("Gövde", body),
+        h("label", { class: "check" }, kale, h("span", {}, "Kale radyatör"))),
+      h("div", {}, h("button", { class: "primary", type: "button", onclick: e => busy(e.currentTarget, run) }, "Hesapla")), out));
   document.body.append(dlg);
   dlg.showModal();
 }

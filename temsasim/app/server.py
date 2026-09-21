@@ -408,6 +408,26 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
         return jsonify({"rows": rows, "route": b["route"], "ambient": env.ambient_c,
                         "synthetic_signals": bool((cyc.meta or {}).get("signals_synthetic"))})
 
+    @app.post("/api/maraton")
+    def maraton():
+        """Maraton GEN3 fuel and pad regressions; speed inputs from the chosen duty."""
+        from ..maraton import FuelInputs, fuel_l100, pad_wear, speed_stats
+        b = request.get_json(force=True)
+        L = lib()
+        if b.get("route"):
+            cyc = Route.from_csv(L.root / "route" / f"{b['route']}.csv").to_cycle(
+                traffic=b.get("traffic") or "yok")
+        else:
+            cyc = L.load_cycle(b.get("cycle") or "hhddt65")
+        st = speed_stats(cyc.speed_mps, cyc.time_s)
+        num = lambda k, d: float(b[k]) if b.get(k) not in (None, "") else d
+        x = FuelInputs(idle_l100=num("idle", 1.0), ac_pct=num("ac", 0.0), v_mean_kmh=st["v_mean_kmh"],
+                       rpm1200_pct=num("rpm1200", 17.0), pedal_pct=num("pedal", 76.0),
+                       week=num("week", 30.0), gt102_pct=st["gt102_pct"], gt80_pct=st["gt80_pct"],
+                       ambient_c=num("ambient", 20.0), kale_radiator=bool(b.get("kale")),
+                       body=b.get("body") or "CD")
+        return jsonify({"cycle": cyc.name, "stats": st, "fuel": fuel_l100(x), "pads": pad_wear(st["v030_pct"])})
+
     @app.get("/report/<rid>")
     def get_report(rid):
         return Response(reports.get(rid), mimetype="text/html")

@@ -1,0 +1,20 @@
+kind: chassis
+name: Maraton GEN3 - New Design (ND)
+description: >
+  Road load from the coastdown campaign of 30.07.2026 (SAE J1263, harmonised):
+  CdA 3.66 ± 0.16 m², f0 4.95 ± 0.28 kg/t (f0 difference to CD not significant).
+  Road load at 80 km/h is 23 % below CD, but only about a third of that
+  (−6.5 % fuel, Mersin) was realised in measured fuel: do not read the
+  simulated body difference as a fuel difference without that calibration.
+  PLACEHOLDER: kerb/gross/test mass, tyre radius and inertia are not in the report.
+
+kerb_mass_kg: 13400            # DERIVED: (F@80 − aero at ρ 1.2256) / (f0·g) from the report ≈ 13.3–13.5 t; confirm test mass
+gross_mass_kg: 24000           # PLACEHOLDER
+passenger_mass_kg: 68.0
+rotational_inertia_kgm2: 110.0 # PLACEHOLDER
+rolling_c0: 0.00495            # measured: f0 4.95 kg/t
+drag_coefficient: 0.4067       # measured CdA 3.66 m² / 9.0 m²
+frontal_area_m2: 9.0           # same frontal area assumed as CD (PLACEHOLDER)
+tyre_dynamic_radius_m: 0.478   # PLACEHOLDER, 295/80 R22.5
+validated: false
+notes: Measured road load, placeholder mass and frontal area.

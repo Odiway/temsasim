@@ -14,3 +14,6 @@ library/.cop_kutusu/
 .idea/
 .DS_Store
 Thumbs.db
+
+# internal reports and source documents: kept local, not versioned
+*.pdf

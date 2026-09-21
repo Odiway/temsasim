@@ -1,0 +1,20 @@
+kind: chassis
+name: Maraton GEN3 - Current Design (CD)
+description: >
+  Road load from the coastdown campaign of 30.07.2026 (SAE J1263, harmonised):
+  CdA 5.49 ± 0.50 m², f0 4.59 ± 0.31 kg/t. CdA is entered as Cd x frontal area
+  with the 2025 study's frontal area of 9.0 m²; the report notes absolute CdA
+  from the F0 + F2·v² fit is method-dependent (1.16-1.29x the Cd·A study), so
+  use it for comparisons, not absolutes.
+  PLACEHOLDER: kerb/gross/test mass, tyre radius and inertia are not in the report.
+
+kerb_mass_kg: 13400            # DERIVED: (F@80 − aero at ρ 1.2256) / (f0·g) from the report ≈ 13.3–13.5 t; confirm test mass
+gross_mass_kg: 24000           # PLACEHOLDER
+passenger_mass_kg: 68.0
+rotational_inertia_kgm2: 110.0 # PLACEHOLDER
+rolling_c0: 0.00459            # measured: f0 4.59 kg/t
+drag_coefficient: 0.610        # measured CdA 5.49 m² / 9.0 m²
+frontal_area_m2: 9.0           # 2025 aerodynamic benchmark study
+tyre_dynamic_radius_m: 0.478   # PLACEHOLDER, 295/80 R22.5
+validated: false
+notes: Measured road load, placeholder mass. Coastdown test mass and conditions needed.
