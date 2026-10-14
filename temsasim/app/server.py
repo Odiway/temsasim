@@ -19,13 +19,14 @@ import traceback
 import uuid
 import webbrowser
 from collections import OrderedDict
+from dataclasses import replace
 
 import numpy as np
 import yaml
 from flask import Flask, Response, jsonify, request, send_from_directory
 from werkzeug.exceptions import HTTPException
 
-from ..cycle import Environment, Route
+from ..cycle import DriveCycle, Environment, Route
 from ..importers import (LOG_ROLES_TR, build_log, detect_log_columns, import_curve,
                          import_map, import_route, read_table)
 from ..library import Library, LibraryError
@@ -36,6 +37,7 @@ from ..schema import (COMPONENT_KINDS, KIND_LABELS_TR, VEHICLE_SLOTS, component_
                       raw_description, safe_stem, save_component, save_vehicle, schema)
 from ..simulator import simulate
 from ..traffic import LEVELS as TRAFFIC_LEVELS
+from ..units import air_density
 from ..validate import validate
 
 STATIC = pathlib.Path(__file__).parent / "static"
@@ -326,19 +328,94 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                         "motor_kw": veh.motor.peak_power_w / 1e3,
                         "hvac_kw": veh.hvac.heating_capacity_w / 1e3},
         }
-        t = result.totals
         return jsonify({
-            "report_id": rid,
-            "kpi": {"kwh_per_km": round(result.energy_per_km_kwh, 3),
-                    "range_km": round(result.range_km, 1),
-                    "distance_km": round(t["distance_km"], 2),
-                    "duration_min": round(t["duration_s"] / 60, 1),
-                    "hvac_share": round(t["hvac_share"], 3),
-                    "regen_kwh": round(t["regen_recovered_kwh"], 2),
-                    "regen_lost_kwh": round(t["regen_lost_kwh"], 2),
-                    "soc_end": round(float(result.series["soc"][-1]), 3)},
+            "report_id": rid, "kpi": _kpi(result),
             "achievable": result.achievable, "warnings": localise(result.warnings, "tr"),
             "cycle": _cycle_tr(cyc), "play": play})
+
+    # ------------------------------------------------------------ free drive
+    @app.post("/api/drive/setup")
+    def drive_setup():
+        """What the browser needs to drive the bus live: the vehicle's own
+        parameters, plus the cabin and pack thermal draw the real model settles
+        to in these conditions (the live view cannot run the thermal model)."""
+        b = request.get_json(force=True)
+        L = lib()
+        base = L.load_vehicle(b["vehicle"])
+        veh = _tuned(base, b.get("tune"))
+        env = _env_from(b)
+        pax = float(b.get("passengers") or 0)
+        ch, dl, mot, batt, aux = veh.chassis, veh.driveline, veh.motor, veh.battery, veh.auxiliaries
+        # steady thermal draw: 15 min at a steady 30 km/h, averaged over the last 5
+        n = 900
+        warm = simulate(veh, DriveCycle(np.arange(n, dtype=float), np.full(n, 8.33),
+                                        passengers=np.full(n, pax), doors_open=np.zeros(n, bool),
+                                        name="drive-setup"), env)
+        s = warm.series
+        v_tab = [0.0, 2.0, 5.0, 8.33, 12.0, 16.0, 20.0, 25.0]
+        return jsonify({
+            "vehicle": {"name": veh.name, "variant": veh.variant},
+            "mass_kg": ch.kerb_mass_kg, "passenger_mass_kg": ch.passenger_mass_kg,
+            "m_eq_kg": ch.equivalent_rotating_mass_kg(dl.referred_inertia_kgm2(0)),
+            "coastdown": ([ch.coastdown_a_n, ch.coastdown_b_n_per_mps, ch.coastdown_c_n_per_mps2,
+                           ch.coastdown_test_mass_kg, ch.coastdown_air_density]
+                          if ch.uses_coastdown else None),
+            "rolling_c0": ch.rolling_c0, "rolling_c1": ch.rolling_c1_s_per_m,
+            "cda_m2": ch.drag_coefficient * ch.frontal_area_m2,
+            "rho": air_density(env.ambient_c, env.air_pressure_pa),
+            "wheel_r_m": ch.tyre_dynamic_radius_m,
+            "ratios": [dl.total_ratio(g) for g in range(len(dl.gear_ratios))],
+            "shift_up_mps": dl.shift_up_speed_mps, "shift_down_mps": dl.shift_down_speed_mps,
+            "driveline_eff": dl.gearbox_efficiency * dl.final_drive_efficiency,
+            "motor": {"peak_power_w": mot.peak_power_w, "peak_torque_nm": mot.peak_torque_nm,
+                      "max_speed_rads": mot.max_speed_rads,
+                      "max_regen_power_w": mot.max_regen_power_w or mot.peak_power_w,
+                      "eff": mot.peak_efficiency},
+            "battery": {"usable_kwh": batt.usable_energy_kwh, "nominal_kwh": batt.nominal_energy_kwh,
+                        "max_charge_w": batt.max_charge_c_rate * batt.capacity_ah * batt.nominal_voltage_v,
+                        "max_discharge_w": batt.max_discharge_c_rate * batt.capacity_ah * batt.nominal_voltage_v,
+                        "soc_start": veh.control.soc_start, "soc_min": batt.soc_min},
+            "aux_v_mps": v_tab,
+            "aux_w": [aux.power(v, night=env.night)["total_w"] for v in v_tab],
+            "hvac_w": float(np.mean(s["p_hvac_w"][-300:])),
+            "pack_thermal_w": float(np.mean(s["p_pack_thermal_w"][-300:])),
+            "cabin_c": float(s["cabin_c"][-1]),
+            "pack_c": float(s["pack_c"][-1]),
+            "surfaces": [{"key": k, "label": lab, "factor": f, "note": note}
+                         for k, lab, f, note in SURFACES],
+            "tune": {"base": _tune_values(base), "now": _tune_values(veh),
+                     "limits": {k: [lo, hi] for k, (_, _, _, lo, hi) in TUNABLES.items()}},
+        })
+
+    @app.post("/api/drive/simulate")
+    def drive_simulate():
+        """Replay a drive recorded in the browser through the real model."""
+        b = request.get_json(force=True)
+        L = lib()
+        veh = _tuned(L.load_vehicle(b["vehicle"]), b.get("tune"))
+        t = np.asarray(b["t"], dtype=float)
+        if t.size < 3 or np.any(np.diff(t) <= 0):
+            raise ValueError("Sürüş kaydı çok kısa ya da zaman sırası bozuk.")
+        n = t.size
+        pax = float(b.get("passengers") or 0)
+        cyc = DriveCycle(t - t[0], np.clip(np.asarray(b["v"], dtype=float), 0, None),
+                         grade_rad=np.arctan(np.asarray(b["grade_pct"], dtype=float) / 100.0),
+                         passengers=np.full(n, pax),
+                         doors_open=np.asarray(b.get("doors") or np.zeros(n), dtype=float) > 0.5,
+                         name=b.get("name") or "Serbest sürüş", source="interactive drive",
+                         surface_factor=np.asarray(b.get("surface") or np.ones(n), dtype=float))
+        env = _env_from(b)
+        result = simulate(veh, cyc, env)
+        rid = reports.put(render_report(result, lang="tr", daily_km=float(b.get("daily_km") or 200)))
+        tt = result.totals
+        return jsonify({
+            "report_id": rid, "kpi": _kpi(result),
+            "kwh": {k: round(float(tt[k]), 3) for k in (
+                "battery_energy_kwh", "traction_kwh", "regen_recovered_kwh", "regen_lost_kwh",
+                "hvac_kwh", "auxiliary_kwh", "pack_thermal_kwh", "rolling_kwh", "aero_kwh",
+                "grade_kwh", "friction_brake_kwh", "motor_loss_kwh", "driveline_loss_kwh",
+                "battery_loss_kwh")},
+            "achievable": result.achievable, "warnings": localise(result.warnings, "tr")})
 
     @app.get("/api/preview")
     def preview():
@@ -579,6 +656,85 @@ def _vehicles_using(L: Library, kind: str, stem: str) -> list:
                 users.append(v)
                 break
     return users
+
+
+# Vehicle settings the free-drive page may change for one session. They are
+# applied to a copy of the vehicle; the library file is never touched.
+# key: (component, field, UI unit -> SI factor, low, high) in UI units.
+TUNABLES = {
+    "kerb_mass_kg": ("chassis", "kerb_mass_kg", 1.0, 3000.0, 40000.0),
+    "motor_peak_kw": ("motor", "peak_power_w", 1000.0, 30.0, 800.0),
+    "motor_peak_nm": ("motor", "peak_torque_nm", 1.0, 200.0, 8000.0),
+    "regen_kw": ("motor", "max_regen_power_w", 1000.0, 0.0, 800.0),
+    "rolling_c0": ("chassis", "rolling_c0", 1.0, 0.003, 0.03),
+    "drag_cd": ("chassis", "drag_coefficient", 1.0, 0.3, 1.0),
+    "battery_kwh": ("battery", None, 1.0, 50.0, 1000.0),
+    "soc_start_pct": ("control", "soc_start", 0.01, 20.0, 100.0),
+}
+
+
+def _tune_values(veh) -> dict:
+    """The tunable settings of a vehicle, in the units the form shows."""
+    m = veh.motor
+    return {"kerb_mass_kg": veh.chassis.kerb_mass_kg, "motor_peak_kw": m.peak_power_w / 1e3,
+            "motor_peak_nm": m.peak_torque_nm,
+            "regen_kw": (m.max_regen_power_w if m.max_regen_power_w is not None else m.peak_power_w) / 1e3,
+            "rolling_c0": veh.chassis.rolling_c0, "drag_cd": veh.chassis.drag_coefficient,
+            "battery_kwh": veh.battery.nominal_energy_kwh, "soc_start_pct": veh.control.soc_start * 100,
+            "coastdown": veh.chassis.uses_coastdown}
+
+
+def _tuned(veh, tune):
+    """A copy of the vehicle with the session's settings applied."""
+    if not tune:
+        return veh
+    parts = {"chassis": {}, "motor": {}, "battery": {}, "control": {}}
+    for key, raw in tune.items():
+        if key not in TUNABLES or raw is None or raw == "":
+            continue
+        comp, fld, k, lo, hi = TUNABLES[key]
+        val = float(raw)
+        if not (lo <= val <= hi):
+            raise ValueError(f"Araç ayarı aralık dışında: {key} = {val:g} (izin verilen {lo:g}–{hi:g})")
+        if key == "battery_kwh":
+            # same cells in the same arrangement, each one bigger or smaller
+            parts["battery"]["cell_capacity_ah"] = (veh.battery.cell_capacity_ah
+                                                   * val / veh.battery.nominal_energy_kwh)
+        else:
+            parts[comp][fld] = val * k
+    if not any(parts.values()):
+        return veh
+    return replace(veh, variant=f"{veh.variant} · sürüş ayarlı".strip(" ·"),
+                   chassis=replace(veh.chassis, **parts["chassis"]),
+                   motor=replace(veh.motor, **parts["motor"]),
+                   battery=replace(veh.battery, **parts["battery"]),
+                   control=replace(veh.control, **parts["control"]))
+
+
+def _kpi(result) -> dict:
+    t = result.totals
+    return {"kwh_per_km": round(result.energy_per_km_kwh, 3),
+            "range_km": round(result.range_km, 1),
+            "distance_km": round(t["distance_km"], 2),
+            "duration_min": round(t["duration_s"] / 60, 1),
+            "hvac_share": round(t["hvac_share"], 3),
+            "regen_kwh": round(t["regen_recovered_kwh"], 2),
+            "regen_lost_kwh": round(t["regen_lost_kwh"], 2),
+            "soc_end": round(float(result.series["soc"][-1]), 3)}
+
+
+# Road surfaces for the free-drive road editor: rolling-resistance multiplier
+# relative to the good dry asphalt the chassis coefficients describe. Typical
+# literature values for heavy-vehicle tyres, not measurements -- the UI says so.
+SURFACES = [
+    ("yeni_asfalt", "Yeni asfalt", 0.95, "pürüzsüz, yeni serilmiş"),
+    ("asfalt", "İyi asfalt", 1.00, "şasi katsayılarının tanımlandığı yüzey"),
+    ("beton", "Beton", 0.97, "derzli beton kaplama"),
+    ("eski_asfalt", "Eskimiş asfalt", 1.15, "yamalı, çatlaklı"),
+    ("parke", "Parke taşı", 1.40, "kilitli beton parke"),
+    ("arnavut", "Arnavut kaldırımı", 1.80, "doğal taş, çok pürüzlü"),
+    ("stabilize", "Stabilize yol", 2.30, "sıkıştırılmış çakıl ve toprak"),
+]
 
 
 def _cycle_tr(c) -> str:

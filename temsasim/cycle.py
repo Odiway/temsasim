@@ -67,6 +67,12 @@ class DriveCycle:
     red-light wait and jam). Empty for standard cycles, whose speed trace
     already contains whatever traffic was present when it was recorded."""
 
+    surface_factor: np.ndarray | None = None
+    """Rolling-resistance multiplier for the road surface under the tyres, per
+    sample. 1.0 is the surface the chassis coefficients describe (good dry
+    asphalt); worn asphalt, setts and gravel are higher. Defaults to all ones,
+    so cycles that do not set it are unaffected."""
+
     # ----------------------------------------------------------------------
     def __post_init__(self) -> None:
         self.time_s = np.asarray(self.time_s, dtype=float)
@@ -83,6 +89,11 @@ class DriveCycle:
         self.grade_rad = np.asarray(self.grade_rad, dtype=float)
         self.passengers = np.asarray(self.passengers, dtype=float)
         self.doors_open = np.asarray(self.doors_open, dtype=bool)
+        if self.surface_factor is None:
+            self.surface_factor = np.ones(n)
+        self.surface_factor = np.asarray(self.surface_factor, dtype=float)
+        if self.surface_factor.size != n:
+            raise ValueError(f"cycle {self.name!r}: surface_factor length differs")
 
     def _infer_door_state(self, stop_speed_mps: float = 0.2,
                           min_dwell_s: float = 6.0) -> np.ndarray:
@@ -169,6 +180,7 @@ class DriveCycle:
             name=self.name,
             source=self.source,
             meta=self.meta,
+            surface_factor=np.interp(t_new, self.time_s, self.surface_factor),
         )
 
     def with_occupancy(self, passengers, *, seats: int | None = None) -> "DriveCycle":
@@ -191,14 +203,15 @@ class DriveCycle:
         if seats is not None:
             pax = np.clip(pax, 0.0, float(seats))
         return DriveCycle(self.time_s, self.speed_mps, self.grade_rad, pax,
-                          self.doors_open, self.name, self.source, self.meta)
+                          self.doors_open, self.name, self.source, self.meta,
+                          surface_factor=self.surface_factor)
 
     def repeat(self, n: int) -> "DriveCycle":
         """Concatenate the cycle n times, for range-to-empty runs."""
         if n < 1:
             raise ValueError("n must be >= 1")
         dt = float(np.median(np.diff(self.time_s)))
-        times, speeds, grades, pax, doors = [], [], [], [], []
+        times, speeds, grades, pax, doors, surf = [], [], [], [], [], []
         for k in range(n):
             offset = k * (self.duration_s + dt)
             times.append(self.time_s + offset)
@@ -206,10 +219,12 @@ class DriveCycle:
             grades.append(self.grade_rad)
             pax.append(self.passengers)
             doors.append(self.doors_open)
+            surf.append(self.surface_factor)
         return DriveCycle(
             np.concatenate(times), np.concatenate(speeds), np.concatenate(grades),
             np.concatenate(pax), np.concatenate(doors),
-            name=f"{self.name} x{n}", source=self.source)
+            name=f"{self.name} x{n}", source=self.source,
+            surface_factor=np.concatenate(surf))
 
     # ----------------------------------------------------------------------
     @classmethod

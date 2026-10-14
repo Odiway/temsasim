@@ -444,9 +444,9 @@ function pageHead(eyebrow, title, lede, actions) {
 /* ================================================================ router */
 const PAGES = {
   kutuphane: pageLibrary, yukle: pageUpload, bilesen: pageComponent,
-  arac: pageVehicle, simulasyon: pageSim, dogrulama: pageValidate,
+  arac: pageVehicle, simulasyon: pageSim, surus: pageDrive, dogrulama: pageValidate,
 };
-const PAGE_SIGN = { kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bileşen", arac: "Araç kur", simulasyon: "Simülasyon", dogrulama: "Doğrulama" };
+const PAGE_SIGN = { kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bileşen", arac: "Araç kur", simulasyon: "Simülasyon", surus: "Serbest sürüş", dogrulama: "Doğrulama" };
 
 async function route() {
   const parts = (location.hash || "#/kutuphane").replace(/^#\/?/, "").split("/").map(decodeURIComponent);
@@ -455,7 +455,7 @@ async function route() {
   Sign.set(vehicleCode(store.get("vehicle")), PAGE_SIGN[page]);
   if (pageCleanup) { try { pageCleanup(); } catch (e) { console.error(e); } pageCleanup = null; }
   const main = $("#main");
-  main.classList.toggle("fullbleed", page === "simulasyon");
+  main.classList.toggle("fullbleed", page === "simulasyon" || page === "surus");
   main.replaceChildren(h("div", { class: "muted" }, "Yükleniyor…"));
   try {
     await overview();
@@ -995,6 +995,14 @@ const EV_ICON = {
 };
 const SPEEDS = [1, 5, 10, 30, 60];
 
+/* Free drive lives in its own module (drive.js); it gets the page helpers here. */
+async function pageDrive() {
+  const ov = await overview(true);
+  const mod = await import("/static/drive.js");
+  return mod.pageDrive({ h, api, store, fmt, parseNum, seg, select, field, numInput, toast, busy, notice, ov,
+                         raster: Sign.raster, setCleanup: f => { pageCleanup = f; } });
+}
+
 async function pageSim() {
   const ov = await overview(true);
   const root = h("div", { class: "simx" });
@@ -1089,7 +1097,12 @@ async function pageSim() {
   const camBar = h("div", { class: "hud simx-cams" },
     seg([["chase", "Takip"], ["side", "Yan"], ["free", "Serbest"], ["top", "Kuşbakışı"]], "chase", m => { if (stage) stage.setCameraMode(m); camHint.hidden = m !== "free"; }));
   const camHint = h("span", { class: "small muted", hidden: true }, "sürükle: döndür · tekerlek: yakınlaş");
+  // X-ray: see through the shell into the cabin or the powertrain (key X cycles)
+  const XRAY = ["off", "cabin", "powertrain"];
+  let xrayMode = "off";
+  const xraySeg = seg([["off", "Kapalı"], ["cabin", "Kabin"], ["powertrain", "Güç aktarma"]], "off", m => { xrayMode = m; if (stage) stage.setXray(m); });
   camBar.append(camHint);
+  const xrayBar = h("div", { class: "hud simx-cams simx-xray", title: "Röntgen görünümü (X tuşu)" }, h("span", { class: "simx-xray-lab" }, "Röntgen"), xraySeg);
 
   /* ---------------- telemetry (right) ---------------- */
   const tele = h("aside", { class: "hud simx-tele", "aria-label": "Canlı veriler" });
@@ -1110,7 +1123,7 @@ async function pageSim() {
 
   const canvasHost = h("div", { class: "simx-canvas" });
   const loading = h("div", { class: "simx-loading", hidden: true }, h("div", { class: "simx-spinner" }), h("span", {}, "Simülasyon hesaplanıyor…"));
-  const stageEl = h("div", { class: "simx-stage" }, canvasHost, camBar, setup, setupPill, tele, timeline, loading);
+  const stageEl = h("div", { class: "simx-stage" }, canvasHost, camBar, xrayBar, setup, setupPill, tele, timeline, loading);
   root.append(stageEl);
 
   /* ---------------- controller state ---------------- */
@@ -1142,6 +1155,7 @@ async function pageSim() {
       S.profile = prof;
       stage.setProfile(prof, { sign: prof.name.replace(/_/g, " ") });
       stage.setTraffic(null);
+      stage.setPeople(null);
       drawTimeline();
     } catch (e) { toast(e.message, "err"); }
   }
@@ -1191,6 +1205,11 @@ async function pageSim() {
     if (e.code === "Space") { e.preventDefault(); setPlaying(!S.playing); }
     else if (e.key === "ArrowRight") seekT(S.t + 10);
     else if (e.key === "ArrowLeft") seekT(S.t - 10);
+    else if ((e.key === "x" || e.key === "X") && stage) {
+      xrayMode = XRAY[(XRAY.indexOf(xrayMode) + 1) % XRAY.length];
+      stage.setXray(xrayMode);
+      $$("button", xraySeg).forEach((b, k) => b.setAttribute("aria-pressed", String(XRAY[k] === xrayMode)));
+    }
     else if ("1234".includes(e.key) && stage) {
       const m = ["chase", "side", "free", "top"][+e.key - 1];
       stage.setCameraMode(m);
@@ -1213,6 +1232,7 @@ async function pageSim() {
         stage.setEnv({ ambient: p.ambient, solar: p.solar, night: p.night });
         stage.setProfile(r.play.profile, { sign: r.play.profile.name.replace(/_/g, " ") });
         stage.setTraffic(r.play.traffic);
+        stage.setPeople(r.play.timeline);
       }
       Sign.set(vehicleCode(p.vehicle), "Simülasyon");
       buildTele(r, p);

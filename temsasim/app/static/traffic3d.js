@@ -99,6 +99,11 @@ export function createTraffic(scene, { at, rightOf, mats }) {
       for (let k = -3.4; k < 3.5; k += 1.0) marks.push([g.d + 1.6, g.d + 6.4, k, k + 0.5]);   // zebra
     }
     furniture.add(quads(marks, 0.04));
+    // where the pavements cross the side street: pedestrians walk over these on the bus's green
+    const walk = [];
+    for (const g of signals) for (let u = g.d + 0.6; u < g.d + 7.8; u += 1.0)
+      for (const [l0, l1] of [[4.2, 7.4], [-7.4, -4.2]]) walk.push([u, u + 0.5, l0, l1]);
+    furniture.add(quads(walk, 0.175));
     const crossGeo = new THREE.PlaneGeometry(170, 8.2);
     const poleGeo = new THREE.CylinderGeometry(0.07, 0.09, 3.4, 8); poleGeo.translate(0, 1.7, 0);
     const boxGeo = new THREE.BoxGeometry(0.34, 1.02, 0.36);

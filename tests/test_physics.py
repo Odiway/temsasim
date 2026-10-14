@@ -519,3 +519,24 @@ def test_rate_coefficients_do_not_get_speed_unit_aliases(tmp_path):
         "kind: chassis\nname: c\ncoastdown_b_n_per_kmh: 10\n", encoding="utf-8")
     with pytest.raises(LibraryError, match="unknown field"):
         Library(root).load_component("chassis/c.yaml", "chassis")
+
+
+def test_surface_factor_scales_rolling_energy_only(bus, cycle):
+    """A rougher road multiplies the rolling term and nothing else; the energy
+    balance still closes."""
+    smooth = simulate(bus, cycle, Environment(ambient_c=20.0))
+    rough_cycle = DriveCycle(cycle.time_s, cycle.speed_mps, cycle.grade_rad, cycle.passengers,
+                             cycle.doors_open, name="rough",
+                             surface_factor=np.full(cycle.time_s.size, 1.5))
+    rough = simulate(bus, rough_cycle, Environment(ambient_c=20.0))
+    a, b = smooth.totals, rough.totals
+    assert b["rolling_kwh"] == pytest.approx(1.5 * a["rolling_kwh"], rel=0.02)
+    assert b["aero_kwh"] == pytest.approx(a["aero_kwh"], rel=1e-6)
+    assert b["battery_energy_kwh"] > a["battery_energy_kwh"]
+    assert abs(rough.energy_balance()["residual (should be ~0)"]) < 0.01
+
+
+def test_cycles_without_a_surface_are_unchanged(cycle):
+    assert np.all(cycle.surface_factor == 1.0)
+    assert np.all(cycle.resample(0.5).surface_factor == 1.0)
+    assert cycle.repeat(2).surface_factor.size == 2 * cycle.time_s.size

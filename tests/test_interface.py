@@ -216,3 +216,41 @@ def test_simulation_returns_a_consistent_playback_timeline(client):
 def test_preview_and_errors_keep_their_status_codes(client):
     assert client.get("/api/preview?cycle=cbdbus").status_code == 200
     assert client.get("/api/does-not-exist").status_code == 404
+
+
+def test_free_drive_setup_and_replay(client):
+    s = client.post("/api/drive/setup", json={"vehicle": "citybus_12m_be", "ambient": 5,
+                                              "passengers": 30}).get_json()
+    assert s["mass_kg"] > 5000 and s["motor"]["peak_power_w"] > 0 and s["battery"]["usable_kwh"] > 0
+    assert s["hvac_w"] > 0                                   # 5 degC: the cabin needs heat
+    assert any(x["key"] == "parke" for x in s["surfaces"])
+    n = 120
+    t = list(range(n))
+    v = [min(10.0, 0.8 * k) if k < 100 else max(0.0, 10.0 - 0.8 * (k - 100)) for k in t]
+    body = {"vehicle": "citybus_12m_be", "ambient": 5, "passengers": 30, "t": t, "v": v,
+            "grade_pct": [2.0] * n, "doors": [0] * n}
+    smooth = client.post("/api/drive/simulate", json={**body, "surface": [1.0] * n}).get_json()
+    rough = client.post("/api/drive/simulate", json={**body, "surface": [1.8] * n}).get_json()
+    assert smooth["kpi"]["distance_km"] > 0.5
+    assert rough["kwh"]["rolling_kwh"] > 1.7 * smooth["kwh"]["rolling_kwh"]
+    assert rough["report_id"]
+
+
+def test_free_drive_vehicle_settings_apply_to_a_copy(client, lib_copy):
+    base = client.post("/api/drive/setup", json={"vehicle": "citybus_12m_be"}).get_json()
+    heavy = client.post("/api/drive/setup", json={"vehicle": "citybus_12m_be", "tune": {
+        "kerb_mass_kg": base["mass_kg"] + 2000, "motor_peak_kw": 160, "battery_kwh": 500}}).get_json()
+    assert heavy["mass_kg"] == base["mass_kg"] + 2000
+    assert heavy["motor"]["peak_power_w"] == 160_000
+    assert abs(heavy["battery"]["nominal_kwh"] - 500) < 0.01
+    assert heavy["tune"]["base"]["kerb_mass_kg"] == base["mass_kg"]       # the library vehicle is unchanged
+    again = client.post("/api/drive/setup", json={"vehicle": "citybus_12m_be"}).get_json()
+    assert again["mass_kg"] == base["mass_kg"]
+    bad = client.post("/api/drive/setup", json={"vehicle": "citybus_12m_be", "tune": {"drag_cd": 3}})
+    assert bad.status_code >= 400
+    n = 90
+    body = {"vehicle": "citybus_12m_be", "t": list(range(n)), "v": [min(10.0, 0.7 * k) for k in range(n)],
+            "grade_pct": [0.0] * n}
+    light = client.post("/api/drive/simulate", json=body).get_json()
+    heavier = client.post("/api/drive/simulate", json={**body, "tune": {"kerb_mass_kg": base["mass_kg"] + 4000}}).get_json()
+    assert heavier["kwh"]["traction_kwh"] > light["kwh"]["traction_kwh"]

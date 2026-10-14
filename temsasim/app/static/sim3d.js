@@ -7,7 +7,8 @@
    Design: a pale architectural-model city (buildings, trees and stops in quiet
    off-whites) so that the only saturated things on screen are the bus and its
    energy -- blue while the pack discharges, green while regen charges it -- and
-   the amber dot-matrix destination sign it shares with the page header.
+   the amber dot-matrix destination sign it shares with the page header. The bus
+   itself is modelled on a TEMSA Avenue Neo (see buildBus).
 
    The road's elevation is the route's real elevation. Its plan-view curves are
    illustrative: the route files carry distance and height, not map coordinates. */
@@ -15,6 +16,10 @@
 import * as THREE from "three";
 import { OrbitControls } from "/static/vendor/three/OrbitControls.js";
 import { createTraffic } from "/static/traffic3d.js";
+import { createPedestrians } from "/static/pedestrians3d.js";
+import { createXray } from "/static/xray3d.js";
+import { addFacadeWindows, buildStreetLife } from "/static/streets3d.js";
+import { createDoorAir } from "/static/doorair3d.js";
 
 const STEP = 10;             // metres between path samples
 const LANE = 1.9;            // bus lane centre, right of the road centreline
@@ -104,7 +109,7 @@ function dashes(p, halfW, y, dash, gap, material) {
 }
 
 /* ------------------------------------------------------------ dot-matrix texture */
-function dotTexture(raster, text, { minCols = 0, pitch = 10 } = {}) {
+export function dotTexture(raster, text, { minCols = 0, pitch = 10 } = {}) {
   const ROWS = 12;
   const cols = raster ? raster(text.toLocaleUpperCase("tr-TR")) : [];
   const n = Math.max(minCols, cols.length + 4);
@@ -124,87 +129,191 @@ function dotTexture(raster, text, { minCols = 0, pitch = 10 } = {}) {
   return tex;
 }
 
+/* ------------------------------------------------------------ bus trim */
+/* Plates that run along a flank stop short of the doors: the gaps between the
+   runs are what make a door read as a door. Returns the remaining [lo, hi]. */
+function runs(lo, hi, cuts, min = 0.2) {
+  const out = [];
+  let x = lo;
+  for (const [a, b] of [...cuts].sort((p, q) => p[0] - q[0])) {
+    if (b <= x || a >= hi) continue;
+    if (a > x) out.push([x, Math.min(a, hi)]);
+    x = Math.max(x, b);
+  }
+  if (x < hi) out.push([x, hi]);
+  return out.filter(([a, b]) => b - a >= min);
+}
+
+/* The flank glazing as one dark strip, the way an Avenue Neo reads from the
+   kerb: tinted panes with the pillars between them only a shade darker, plus
+   the dark rails that close the band top and bottom. One tile per 1.85 m bay. */
+function glassBandTexture(repeat = 1) {
+  const c = document.createElement("canvas");
+  c.width = 128; c.height = 64;
+  const ctx = c.getContext("2d");
+  const grd = ctx.createLinearGradient(0, 0, 0, 64);
+  grd.addColorStop(0, "#5a7688"); grd.addColorStop(0.34, "#354c5c"); grd.addColorStop(1, "#293b48");
+  ctx.fillStyle = grd; ctx.fillRect(0, 0, 128, 64);
+  ctx.fillStyle = "#1f2c36"; ctx.fillRect(0, 0, 10, 64);          // pillar between panes
+  ctx.fillStyle = "#161f27"; ctx.fillRect(0, 0, 128, 4);          // top rail
+  ctx.fillRect(0, 57, 128, 7);                                    // bottom rail
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.repeat.set(repeat, 1);
+  t.anisotropy = 4;
+  return t;
+}
+
 /* ------------------------------------------------------------ the bus */
-function buildBus(raster, doorsWanted = 3) {
+/* A 12 m low-floor city bus in the shape of a TEMSA Avenue Neo: upright front
+   with one big forward-raked windscreen, a thin dark band under it and the
+   dot-matrix destination sign in a wide dark band above it; an uninterrupted
+   dark glazing band down each flank over a white body and an anthracite skirt;
+   plug-and-slide double-leaf doors set back in dark surrounds; pronounced
+   wheel arches with dark rims and a twin-tyre rear axle; a flat rear with the
+   HVAC box running fore-and-aft on the roof. Procedural and low-poly: no
+   textures beyond the two canvases, and no badging. */
+export function buildBus(raster, doorsWanted = 3) {
   const g = new THREE.Group();
   const M = (o) => new THREE.MeshStandardMaterial(o);
   const paint = M({ color: 0xffffff, roughness: 0.3, metalness: 0.08 });
-  const dark = M({ color: 0x2a3037, roughness: 0.7 });
-  const skirtMat = M({ color: 0x80888f, roughness: 0.6 });
+  const dark = M({ color: 0x1d2328, roughness: 0.72 });
+  const skirtMat = M({ color: 0x3b434b, roughness: 0.6 });
+  const accentMat = M({ color: 0x1a63b8, roughness: 0.4, metalness: 0.2 });
   // tinted glazing, not black: without an environment map, metalness only darkens
-  const glass = M({ color: 0x3f5a6c, roughness: 0.14, metalness: 0.15 });
-  const doorGlass = M({ color: 0x55738a, roughness: 0.14, metalness: 0.15 });
+  const glass = M({ color: 0x33495a, roughness: 0.14, metalness: 0.18 });
+  const doorGlass = M({ color: 0x44606f, roughness: 0.14, metalness: 0.18 });
   const rubber = M({ color: 0x141414, roughness: 0.92 });
-  const rim = M({ color: 0xbfc4c9, roughness: 0.3, metalness: 0.65 });
+  const rim = M({ color: 0x343b42, roughness: 0.45, metalness: 0.5 });
+  const trimMat = M({ color: 0x8b9298, roughness: 0.4, metalness: 0.45 });
   const packMat = M({ color: 0x3a424b, roughness: 0.5, metalness: 0.3 });
   const hvacMat = M({ color: 0xd9dcdf, roughness: 0.55 });
   const glowMat = M({ color: 0x0d1116, emissive: BLUE.clone(), emissiveIntensity: 0 });
   const headMat = M({ color: 0xffffff, emissive: 0xfff4d6, emissiveIntensity: 0.6 });
   const tailMat = M({ color: 0x5a0d0d, emissive: 0xff2a1a, emissiveIntensity: 0.5 });
   const add = (geo, mat, x, y, z, cast = true) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = cast; m.receiveShadow = true; g.add(m); return m; };
+  // flank trim is drawn as single-sided plates; the sign of z picks the side
+  const plate = (w, h, mat, x, y, z) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    m.position.set(x, y, z);
+    if (z < 0) m.rotation.y = Math.PI;
+    g.add(m); return m;
+  };
 
-  // body: a side profile extruded across the width, rounded at the roof
+  // body: a side profile extruded across the width. The front is upright with
+  // the windscreen raked forward over a tucked-in sill; the rear is flat.
   const s = new THREE.Shape();
-  const L2 = 6, H0 = 0.3, H1 = 3.12, r = 0.5;
-  s.moveTo(-L2, H0); s.lineTo(L2 - 0.18, H0); s.lineTo(L2, H0 + 0.28);
-  s.lineTo(L2, H1 - r); s.quadraticCurveTo(L2, H1, L2 - r, H1);
-  s.lineTo(-L2 + 0.3, H1); s.quadraticCurveTo(-L2, H1, -L2, H1 - 0.3); s.lineTo(-L2, H0);
-  const body = new THREE.ExtrudeGeometry(s, { depth: 2.46, bevelEnabled: true, bevelThickness: 0.045, bevelSize: 0.045, bevelSegments: 2, curveSegments: 10 });
+  const L2 = 6.0, H0 = 0.30, H1 = 3.12;
+  s.moveTo(-L2, H0);
+  s.lineTo(L2 - 0.34, H0);                                   // front overhang underside
+  s.lineTo(L2 - 0.02, H0 + 0.30);                            // approach chamfer
+  s.lineTo(L2, 1.06);                                        // bumper face
+  s.lineTo(L2 - 0.12, 1.24);                                 // windscreen sill, tucked under
+  s.lineTo(L2 + 0.06, 2.66);                                 // windscreen, raked forward
+  s.lineTo(L2 + 0.04, 3.00);                                 // destination-sign band
+  s.quadraticCurveTo(L2 + 0.02, H1, L2 - 0.42, H1);
+  s.lineTo(-L2 + 0.34, H1);
+  s.quadraticCurveTo(-L2, H1, -L2, H1 - 0.30);
+  s.lineTo(-L2, H0);
+  const body = new THREE.ExtrudeGeometry(s, { depth: 2.46, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 2, curveSegments: 8 });
   body.translate(0, 0, -1.23);
   add(body, paint, 0, 0, 0);
 
-  add(new THREE.BoxGeometry(12.06, 0.4, 2.58), skirtMat, 0, 0.52, 0);             // skirt
-  for (const z of [-1.285, 1.285]) {                                               // window band
-    add(new THREE.BoxGeometry(10.2, 1.08, 0.02), glass, -0.35, 2.06, z, false);
-    for (let x = -5.2; x <= 4.8; x += 1.62) add(new THREE.BoxGeometry(0.12, 1.08, 0.03), paint, x, 2.06, z * 1.001, false);
-  }
-  add(new THREE.BoxGeometry(0.02, 1.72, 2.3), glass, 6.05, 1.92, 0, false);        // windscreen
-  add(new THREE.BoxGeometry(0.02, 0.85, 2.0), glass, -6.05, 2.3, 0, false);        // rear window
-
-  // destination signs: front and near-side, amber dot matrix
-  const signMat = new THREE.MeshBasicMaterial({ map: null, toneMapped: false });
-  const front = new THREE.Mesh(new THREE.PlaneGeometry(2.05, 0.28), signMat);
-  front.position.set(6.065, 2.83, 0); front.rotation.y = Math.PI / 2; g.add(front);
-  const side = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.22), signMat);
-  side.position.set(3.95, 2.45, 1.3); g.add(side);
-
-  // doors on the kerb (right) side: two plug-and-slide leaves each
+  // doors on the kerb (right) side; their footprints cut every flank plate
   const doorX = [4.95, 0.55, -4.35].slice(0, Math.max(1, Math.min(3, doorsWanted)));
-  const leaves = [];
-  for (const cx of doorX) {
-    add(new THREE.BoxGeometry(1.3, 2.26, 0.02), dark, cx, 1.43, 1.279, false);     // door aperture
-    for (const side of [-1, 1]) {
-      const leaf = add(new THREE.BoxGeometry(0.6, 2.18, 0.05), doorGlass, cx + side * 0.31, 1.42, 1.3, false);
-      leaves.push({ mesh: leaf, cx, side });
+  const DOOR_W = 1.48;
+  const cuts = doorX.map(cx => [cx - DOOR_W / 2 - 0.08, cx + DOOR_W / 2 + 0.08]);
+
+  // Trim sits just clear of the shell. ExtrudeGeometry's bevel pushes the main
+  // extrusion out by bevelSize all round and ends it bevelThickness past the
+  // depth, so the shell's surfaces are 0.04 outside the profile and the flanks
+  // are at 1.27 -- every plate below is placed against those, not the profile.
+  const FLANK = 1.286;
+  for (const sgn of [-1, 1]) {
+    const z = sgn * FLANK, cut = sgn > 0 ? cuts : [];
+    for (const [a, b] of runs(-5.94, 5.90, cut)) plate(b - a, 0.69, skirtMat, (a + b) / 2, 0.605, z);
+    for (const [a, b] of runs(-5.80, 5.82, cut)) plate(b - a, 0.05, accentMat, (a + b) / 2, 1.54, z);
+    for (const [a, b] of runs(-5.80, 5.82, cut)) {
+      const w = b - a;
+      plate(w, 1.08, M({ map: glassBandTexture(Math.max(1, Math.round(w / 1.85))), roughness: 0.14, metalness: 0.2 }), (a + b) / 2, 2.20, z);
     }
   }
 
-  // wheels (rear shown single, as seen from outside)
+  // windscreen: one pane, raked forward, with the thin bumper band beneath it
+  const screen = add(new THREE.BoxGeometry(0.05, 1.42, 2.40), glass, 6.044, 1.941, 0, false);
+  screen.rotation.z = -Math.atan2(0.18, 1.42);
+  add(new THREE.BoxGeometry(0.17, 0.17, 2.50), dark, 6.005, 1.165, 0, false);
+  add(new THREE.BoxGeometry(0.05, 1.08, 2.22), glass, -6.08, 2.30, 0, false);      // rear window
+
+  // dark lower panels front and rear, wrapping the skirt around the ends
+  add(new THREE.BoxGeometry(0.05, 0.56, 2.48), skirtMat, 6.075, 0.78, 0, false);
+  add(new THREE.BoxGeometry(0.05, 0.72, 2.48), skirtMat, -6.075, 0.62, 0, false);
+  for (const z of [-0.84, 0.84]) add(new THREE.BoxGeometry(0.03, 0.20, 0.70), headMat, 6.115, 0.80, z, false);
+  for (const z of [-0.86, 0.86]) add(new THREE.BoxGeometry(0.04, 0.36, 0.52), tailMat, -6.115, 1.44, z, false);
+
+  // destination signs: a wide dark band across the front, and one on the near side
+  add(new THREE.BoxGeometry(0.08, 0.36, 2.52), dark, 6.105, 2.84, 0, false);
+  const signMat = new THREE.MeshBasicMaterial({ map: null, toneMapped: false });
+  const front = new THREE.Mesh(new THREE.PlaneGeometry(2.02, 0.26), signMat);
+  front.position.set(6.152, 2.84, 0); front.rotation.y = Math.PI / 2; g.add(front);
+  const sideSign = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.22), signMat);
+  sideSign.position.set(3.05, 2.42, FLANK + 0.012); g.add(sideSign);
+
+  // doors: double-leaf plug-and-slide glass, set back inside a dark surround
+  const leaves = [];
+  for (const cx of doorX) {
+    add(new THREE.BoxGeometry(DOOR_W + 0.14, 2.48, 0.03), dark, cx, 1.51, FLANK + 0.0085, false);
+    for (const side of [-1, 1]) {
+      const z0 = FLANK - 0.0035;
+      const leaf = add(new THREE.BoxGeometry(0.68, 2.34, 0.03), doorGlass, cx + side * 0.355, 1.50, z0, false);
+      leaves.push({ mesh: leaf, cx, side, z0 });
+    }
+  }
+
+  // wheels: steer axle single, drive axle twin-tyred, dark rims throughout
   const wheels = [];
-  const tire = new THREE.CylinderGeometry(0.5, 0.5, 0.34, 28); tire.rotateX(Math.PI / 2);
-  const hub = new THREE.CylinderGeometry(0.3, 0.3, 0.36, 18); hub.rotateX(Math.PI / 2);
-  const spoke = new THREE.BoxGeometry(0.5, 0.07, 0.37);
-  for (const x of [3.55, -2.45]) for (const z of [-1.12, 1.12]) {
-    const w = new THREE.Group(); w.position.set(x, 0.5, z);
-    const t = new THREE.Mesh(tire, rubber); t.castShadow = true; w.add(t);
-    w.add(new THREE.Mesh(hub, rim));
-    const sp = new THREE.Mesh(spoke, dark); w.add(sp);
-    const sp2 = sp.clone(); sp2.rotation.z = Math.PI / 2; w.add(sp2);
+  const tireF = new THREE.CylinderGeometry(0.5, 0.5, 0.32, 24); tireF.rotateX(Math.PI / 2);
+  const tireR = new THREE.CylinderGeometry(0.5, 0.5, 0.26, 24); tireR.rotateX(Math.PI / 2);
+  const hubF = new THREE.CylinderGeometry(0.29, 0.29, 0.34, 16); hubF.rotateX(Math.PI / 2);
+  const hubR = new THREE.CylinderGeometry(0.27, 0.27, 0.30, 16); hubR.rotateX(Math.PI / 2);
+  const spoke = new THREE.BoxGeometry(0.46, 0.06, 0.36);
+  const axles = [{ x: 3.55, z: 1.09, dual: false }, { x: -2.45, z: 0.96, dual: true }];
+  for (const ax of axles) for (const sgn of [-1, 1]) {
+    const w = new THREE.Group(); w.position.set(ax.x, 0.5, sgn * ax.z);
+    if (ax.dual) {
+      for (const dz of [-0.155, 0.155]) { const t = new THREE.Mesh(tireR, rubber); t.position.z = dz; t.castShadow = true; w.add(t); }
+      const h = new THREE.Mesh(hubR, rim); h.position.z = sgn * 0.145; w.add(h);
+    } else {
+      const t = new THREE.Mesh(tireF, rubber); t.castShadow = true; w.add(t);
+      w.add(new THREE.Mesh(hubF, rim));
+      const sp = new THREE.Mesh(spoke, trimMat); w.add(sp);
+      const sp2 = sp.clone(); sp2.rotation.z = Math.PI / 2; w.add(sp2);
+    }
     g.add(w); wheels.push(w);
   }
 
-  // roof: traction pack with its glow strip, and the HVAC unit
+  // wheel arches: the tyres tuck under the shell, so the arch is drawn on the
+  // flank -- a dark well (semicircle over a sill) inside a body-colour flare.
+  const archWell = new THREE.CircleGeometry(0.71, 18, 0, Math.PI);
+  const archLip = new THREE.TorusGeometry(0.75, 0.06, 5, 16, Math.PI);
+  for (const ax of axles) for (const sgn of [-1, 1]) {
+    plate(1.42, 0.22, dark, ax.x, 0.39, sgn * 1.284);
+    const wl = add(archWell, dark, ax.x, 0.50, sgn * 1.284, false);
+    if (sgn < 0) wl.rotation.y = Math.PI;
+    add(archLip, paint, ax.x, 0.50, sgn * 1.315, false);
+  }
+
+  // roof: traction pack with its glow strip, and the HVAC unit running aft
   for (const x of [3.3, 1.25, -0.8]) {
     add(new THREE.BoxGeometry(1.9, 0.3, 2.0), packMat, x, 3.28, 0);
     add(new THREE.BoxGeometry(1.92, 0.045, 2.02), glowMat, x, 3.45, 0, false);
   }
-  add(new THREE.BoxGeometry(2.8, 0.36, 2.1), hvacMat, -3.75, 3.31, 0);
-  for (const x of [-4.45, -3.05]) {
+  add(new THREE.BoxGeometry(4.3, 0.34, 2.04), hvacMat, -3.80, 3.30, 0);
+  for (const x of [-4.85, -2.80]) {
     const fan = new THREE.CylinderGeometry(0.4, 0.4, 0.05, 20);
-    add(fan, dark, x, 3.51, 0, false);
+    add(fan, dark, x, 3.49, 0, false);
   }
-  for (const z of [-0.85, 0.85]) add(new THREE.BoxGeometry(0.03, 0.16, 0.42), headMat, 6.06, 0.8, z, false);
-  for (const z of [-1.0, 1.0]) add(new THREE.BoxGeometry(0.03, 0.34, 0.18), tailMat, -6.06, 1.05, z, false);
 
   // energy particles: roof pack -> along the roof -> down the rear face -> axle
   const flowCurve = new THREE.CatmullRomCurve3([
@@ -223,9 +332,43 @@ function buildBus(raster, doorsWanted = 3) {
   headlight.position.set(6.2, 1.0, 0); headlight.target.position.set(40, -1.5, 0);
   g.add(headlight, headlight.target);
 
-  return { group: g, signMat, leaves, wheels, glowMat, tailMat, headMat, flow, flowCurve, flowMat,
+  return { group: g, signMat, leaves, doorX, wheels, glowMat, tailMat, headMat, flow, flowCurve, flowMat,
            hvacFlow, hvacCurve, headlight, doorOpen: 0, phase: 0, hvacPhase: 0,
            setSign(tex) { signMat.map = tex; signMat.needsUpdate = true; } };
+}
+
+/* Doors, pack glow, energy particles and brake lights from one state sample.
+   Shared by the playback stage and the free-drive stage. */
+export function animateBus(bus, st, dt, snap = false) {
+  // doors ease open and shut over about half a second
+  const target = st.doors > 0.5 ? 1 : 0;
+  bus.doorOpen += (target - bus.doorOpen) * (snap ? 1 : Math.min(1, dt * 5));
+  for (const lf of bus.leaves) {
+    lf.mesh.position.x = lf.cx + lf.side * (0.355 + 0.46 * bus.doorOpen);
+    lf.mesh.position.z = lf.z0 + 0.16 * bus.doorOpen;
+  }
+
+  // pack glow and energy particles follow the battery and motor power
+  const pb = st.p_batt || 0, pm = st.p_motor || 0;
+  const regen = pm < -2;
+  const col = regen ? GREEN : BLUE;
+  bus.glowMat.emissive.copy(col);
+  bus.glowMat.emissiveIntensity = Math.min(2.2, Math.abs(pb) / 70);
+  bus.flowMat.color.copy(col);
+  const flowOn = Math.abs(pm) > 3;
+  const rate = (regen ? -1 : 1) * (0.12 + Math.min(1.1, Math.abs(pm) / 160));
+  bus.phase = (bus.phase + dt * rate + 10) % 1;
+  bus.flow.forEach((m, i) => {
+    m.visible = flowOn;
+    if (flowOn) m.position.copy(bus.flowCurve.getPointAt(((i / bus.flow.length) + bus.phase) % 1));
+  });
+  const hvOn = (st.p_hvac || 0) > 1;
+  bus.hvacPhase = (bus.hvacPhase + dt * (0.2 + Math.min(0.8, (st.p_hvac || 0) / 20))) % 1;
+  bus.hvacFlow.forEach((m, i) => {
+    m.visible = hvOn;
+    if (hvOn) m.position.copy(bus.hvacCurve.getPointAt(((i / bus.hvacFlow.length) + bus.hvacPhase) % 1));
+  });
+  bus.tailMat.emissiveIntensity = (regen || (st.accel || 0) < -0.3) ? 3 : 0.5;
 }
 
 /* ------------------------------------------------------------ the stage */
@@ -254,7 +397,9 @@ export function createStage(host, { raster } = {}) {
 
   const bus = buildBus(raster);
   scene.add(bus.group);
-  let traffic = null;
+  const xray = createXray(bus, host);
+  const doorAir = createDoorAir(bus, bus.doorX, host);
+  let traffic = null, people = null;
   let world = null, path = null, env = { ambient: 20, solar: 0, night: false };
   let camMode = "chase", lastBusPos = new THREE.Vector3(), snow = null, lamps = null;
 
@@ -271,7 +416,15 @@ export function createStage(host, { raster } = {}) {
     shelterGlass: new THREE.MeshStandardMaterial({ color: 0xa8c2d6, roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.45 }),
     pole: new THREE.MeshStandardMaterial({ color: 0x8c9196, roughness: 0.5, metalness: 0.4 }),
     lamp: new THREE.MeshStandardMaterial({ color: 0xfff1c8, emissive: 0xffd88a, emissiveIntensity: 0 }),
+    paving: new THREE.MeshStandardMaterial({ color: 0xd8d4cb, roughness: 0.95 }),
+    shopGlass: new THREE.MeshStandardMaterial({ color: 0x3a4a56, roughness: 0.15, metalness: 0.3, emissive: 0xffd59a, emissiveIntensity: 0 }),
+    shopFrame: new THREE.MeshStandardMaterial({ color: 0x3b4148, roughness: 0.6 }),
+    awning: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, side: THREE.DoubleSide }),
+    furniture: new THREE.MeshStandardMaterial({ color: 0x6b6258, roughness: 0.8 }),
+    bin: new THREE.MeshStandardMaterial({ color: 0x4d5a52, roughness: 0.6, metalness: 0.2 }),
   };
+  const nightU = { value: 0 };
+  addFacadeWindows(mats.building, nightU);
 
   function clearWorld() {
     if (!world) return;
@@ -287,6 +440,8 @@ export function createStage(host, { raster } = {}) {
     path = buildPath(profile);
     if (!traffic) traffic = createTraffic(scene, { at, rightOf, mats });
     traffic.setPath(path, profile.signals || []);
+    if (!people) { people = createPedestrians(scene, { at, rightOf }); people.setEnv(env); }
+    people.setPath(path, profile.signals || [], profile.stops || []);
     const nearJunction = (d, m) => traffic.nearSignal(d, m);
     world = new THREE.Group();
     const add = m => { if (m) world.add(m); return m; };
@@ -369,6 +524,9 @@ export function createStage(host, { raster } = {}) {
     });
     add(poles); add(lamps);
 
+    // shopfronts, forecourts, café tables, benches and bins
+    buildStreetLife(world, { path, at, rightOf, bPlaces, lPlaces, rand, mats });
+
     // bus stops: shelter, bench and an amber stop sign
     const shelterBack = new THREE.BoxGeometry(3.6, 2.3, 0.06);
     const shelterRoof = new THREE.BoxGeometry(3.9, 0.1, 1.7);
@@ -416,8 +574,11 @@ export function createStage(host, { raster } = {}) {
     mats.kerb.color.set(cold && !night ? "#e6eaec" : night ? "#5b6066" : "#c9cbc6");
     mats.building.color.set(night ? "#7b8189" : "#ffffff");
     mats.lamp.emissiveIntensity = night ? 3.2 : 0;
+    mats.shopGlass.emissiveIntensity = night ? 0.5 : 0;
+    nightU.value = night ? 1 : 0;
     bus.headlight.intensity = night ? 90 : 0;
     if (traffic) traffic.setNight(night);
+    if (people) people.setEnv(env);
     bus.headMat.emissiveIntensity = night ? 3 : 0.6;
     renderer.toneMappingExposure = night ? 1.25 : 1.02;
     if (cold && !snow) snow = makeSnow();
@@ -447,35 +608,10 @@ export function createStage(host, { raster } = {}) {
     bus.group.rotation.set(0, -p.th, Math.atan(Math.max(-0.12, Math.min(0.12, p.slope))), "YZX");
     for (const w of bus.wheels) w.rotation.z = -(st.d || 0) / 0.5;
 
-    // doors ease open and shut over about half a second
-    const target = st.doors > 0.5 ? 1 : 0;
-    bus.doorOpen += (target - bus.doorOpen) * (snap ? 1 : Math.min(1, dt * 5));
-    for (const lf of bus.leaves) {
-      lf.mesh.position.x = lf.cx + lf.side * (0.31 + 0.5 * bus.doorOpen);
-      lf.mesh.position.z = 1.3 + 0.2 * bus.doorOpen;
-    }
-
-    // pack glow and energy particles follow the battery and motor power
-    const pb = st.p_batt || 0, pm = st.p_motor || 0;
-    const regen = pm < -2;
-    const col = regen ? GREEN : BLUE;
-    bus.glowMat.emissive.copy(col);
-    bus.glowMat.emissiveIntensity = Math.min(2.2, Math.abs(pb) / 70);
-    bus.flowMat.color.copy(col);
-    const flowOn = Math.abs(pm) > 3;
-    const rate = (regen ? -1 : 1) * (0.12 + Math.min(1.1, Math.abs(pm) / 160));
-    bus.phase = (bus.phase + dt * rate + 10) % 1;
-    bus.flow.forEach((m, i) => {
-      m.visible = flowOn;
-      if (flowOn) m.position.copy(bus.flowCurve.getPointAt(((i / bus.flow.length) + bus.phase) % 1));
-    });
-    const hvOn = (st.p_hvac || 0) > 1;
-    bus.hvacPhase = (bus.hvacPhase + dt * (0.2 + Math.min(0.8, (st.p_hvac || 0) / 20))) % 1;
-    bus.hvacFlow.forEach((m, i) => {
-      m.visible = hvOn;
-      if (hvOn) m.position.copy(bus.hvacCurve.getPointAt(((i / bus.hvacFlow.length) + bus.hvacPhase) % 1));
-    });
-    bus.tailMat.emissiveIntensity = (regen || (st.accel || 0) < -0.3) ? 3 : 0.5;
+    animateBus(bus, st, dt, snap);
+    // outside air in low, cabin air out high, while the doors stand open
+    const pxScale = renderer.domElement.height / (2 * Math.tan(camera.fov * Math.PI / 360));
+    doorAir.update(dt, bus.doorOpen, env.ambient, st.cabin ?? env.ambient, pxScale, camera);
 
     // sun and its shadow camera travel with the bus
     sun.position.set(pos.x + 45, pos.y + 70, pos.z + 30);
@@ -494,6 +630,7 @@ export function createStage(host, { raster } = {}) {
 
     moveCamera(pos, p.th, dt, snap || firstCam);
     firstCam = false;
+    xray.update(st, env, camera);
   }
 
   function moveCamera(pos, th, dt, snap) {
@@ -552,18 +689,25 @@ export function createStage(host, { raster } = {}) {
   function frame(state, dt) {
     update(state, dt);
     if (traffic) traffic.update(state);
+    if (people) people.update(state);
     renderer.render(scene, camera);
   }
-  function setTraffic(data) { if (traffic) traffic.setData(data); }
+  function setTraffic(data) {
+    if (traffic) traffic.setData(data);
+    if (people) people.setSignalsActive(!data || data.signals_active !== false);
+  }
+  // the model's record of door openings and headcount drives the stop scenes
+  function setPeople(timeline) { if (people) people.setVisits(timeline); }
 
   function dispose() {
-    ro.disconnect(); controls.dispose(); clearWorld();
+    ro.disconnect(); controls.dispose(); clearWorld(); xray.dispose(); doorAir.dispose();
     if (traffic) traffic.dispose();
+    if (people) people.dispose();
     scene.traverse(o => { if (o.geometry) o.geometry.dispose(); });
     renderer.dispose(); renderer.domElement.remove();
   }
 
-  return { setProfile, setEnv, setCameraMode, setViewShift, setTraffic, frame, dispose, get mode() { return camMode; } };
+  return { setProfile, setEnv, setCameraMode, setViewShift, setTraffic, setPeople, frame, setXray: m => xray.setMode(m), dispose, get mode() { return camMode; } };
 }
 
 export function webglAvailable() {

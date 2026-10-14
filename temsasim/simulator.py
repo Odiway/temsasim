@@ -216,7 +216,7 @@ def simulate(
 
         forces = ch.resistive_force(v, mass_kg=mass, grade_rad=theta,
                                     air_density=rho, headwind_mps=env.headwind_mps)
-        f_roll = float(forces["rolling"])
+        f_roll = float(forces["rolling"]) * float(cyc.surface_factor[i])
         f_aero = float(forces["aero"])
         f_grade = float(forces["grade"])
         f_inertia = (mass + m_eq) * a

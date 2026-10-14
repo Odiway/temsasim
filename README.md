@@ -45,9 +45,29 @@ enerji kaybedilir); soğukta ve sıcakta klima süresi nedeniyle belirgin artır
 **3B sahne hakkında:** Yolun rakımı güzergâhın gerçek rakımıdır; yoldaki
 virajlar ise temsilidir (güzergâh dosyaları harita koordinatı değil mesafe ve
 yükseklik içerir). Sahne yalnızca çözücünün ürettiğini oynatır, kendi başına
-hesap yapmaz. Klavye: Boşluk oynat/durdur, ←/→ 10 s ileri/geri, 1–4 kamera.
+hesap yapmaz. Duraklarda binen ve inen yolcular modelin kapı
+açılışlarını ve yolcu sayısını izler; kaldırımdaki yayalar yalnızca görseldir,
+tüketimi etkilemez. Mağazalar ve sokak eşyaları da yalnızca görseldir. Kapılar
+açıkken dış hava alttan girer, kabin havası üstten çıkar; renkleri modelin dış
+hava ve kabin sıcaklığından gelir, akışın şekli temsilidir. Klavye: Boşluk oynat/durdur, ←/→ 10 s ileri/geri, 1–4 kamera,
+X röntgen (kabin / güç aktarma / kapalı). Kabin röntgeni modelin kabin sıcaklığını
+ve yolcu sayısını gösterir; model kabini tek bölge hesapladığı için kapı
+ağızlarındaki dış hava yayılımı temsilidir.
 three.js (MIT lisansı) `app/static/vendor/three/` içinde gelir, internet gerekmez.
 WebGL olmayan bilgisayarda canlı veriler ve zaman çizelgesi yine çalışır.
+
+**Serbest sürüş:** Ayrı bir sayfada, güzergâhlardan bağımsız altı şeritli geniş
+bir test yolunda otobüs klavyeyle sürülür (W/↑ gaz, S/↓ fren, A/D/←/→ direksiyon,
+G ileri/geri vites, E kapılar, R başa dön, 1–5 kamera, X röntgen). Geri vites
+yalnızca dururken seçilir ve hız 10 km/h ile sınırlıdır. "Araç ayarları"
+bölümünde boş ağırlık, motor gücü ve torku, rejen sınırı, batarya kapasitesi,
+başlangıç şarjı, lastik ve hava direnci katsayıları değiştirilebilir; bu ayarlar
+aracın bir kopyasına uygulanır, kütüphanedeki araç değişmez. Yol bölümlerden oluşur; her
+bölümün uzunluğu, eğimi ve yüzeyi (yeni asfalttan stabilize yola kadar)
+düzenlenir. Yüzey, yuvarlanma direncini bir çarpanla ölçekler; çarpanlar ağır
+taşıt lastikleri için tipik değerlerdir, ölçülmedi. Sürüş sırasındaki rakamlar
+tarayıcıdaki basit bir modelden gelen tahminlerdir; "Sürüşü modelde hesapla"
+kaydedilen hız, eğim, yüzey ve kapı izini asıl çözücüye verir ve tam rapor üretir.
 
 Formdaki sayılar Türkçe yazılabilir (`95,5`). Birimler mühendislik birimidir
 (kW, rpm, km/h, %); dosyaya dönüştürülerek yazılır. Silinen bileşenler
