@@ -187,3 +187,20 @@ main.fullbleed { padding: 0; max-width: none; }
 .drv-tune-row.tuned > span { font-weight: 600; }
 .drv-tune-row.tuned input { border-color: var(--amber); box-shadow: 0 0 0 2px color-mix(in srgb, var(--amber) 30%, transparent); }
 .drv-tune-box summary .small { font-weight: 400; margin-left: 4px; }
+
+/* City-bus mission panel */
+.drv-mission { display: grid; gap: 7px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid color-mix(in srgb, var(--rule) 55%, transparent); }
+.drv-mission[hidden], .drv-mission [hidden] { display: none; }
+.drv-mhead { display: flex; align-items: center; gap: 8px; }
+.drv-mhead b { font: 600 15px var(--display); }
+.drv-line { font: 700 12px var(--mono); background: #121110; color: #ffb000; padding: 3px 7px; border-radius: 5px; letter-spacing: .04em; }
+.drv-guide { font: 600 14px var(--body); padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, #3987e5 14%, transparent); }
+.drv-phase { font-size: 12.5px; padding: 6px 10px; border-radius: 7px; background: color-mix(in srgb, var(--amber) 20%, transparent); }
+.drv-pbar { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--rule) 70%, transparent); overflow: hidden; }
+.drv-pbar i { display: block; height: 100%; width: 0; background: #2fbf71; transition: width .2s linear; }
+.drv-mstats { display: flex; gap: 18px; font-size: 12.5px; color: var(--ink-2); }
+.drv-mstats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.drv-map { width: 100%; height: auto; border-radius: 8px; display: block; }
+.drv-msg.bad { background: color-mix(in srgb, #d03b3b 22%, transparent); font-weight: 600; }
+.drv-done { display: grid; gap: 4px; padding: 10px 12px; border-radius: 9px; background: color-mix(in srgb, #2fbf71 12%, transparent); margin-bottom: 10px; }
+.drv-setup .seg { flex-wrap: wrap; }

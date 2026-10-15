@@ -169,21 +169,34 @@ export function createDriveStage(host, { raster } = {}) {
   const surfMats = {};
   const surfMat = key => surfMats[key] || (surfMats[key] = new THREE.MeshStandardMaterial({ map: surfaceTexture(key), roughness: 0.92 }));
 
-  let world = null, road = null, env = { ambient: 20, night: false };
+  let group = null, road = null, world = null, city3d = null, env = { ambient: 20, night: false };
   let camMode = "chase", firstCam = true;
 
   function clearWorld() {
-    if (!world) return;
-    scene.remove(world);
-    world.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map && !Object.values(surfMats).includes(o.material)) o.material.map.dispose(); });
-    world = null;
+    if (!group) return;
+    scene.remove(group);
+    group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map && !Object.values(surfMats).includes(o.material)) o.material.map.dispose(); });
+    group = null; city3d = null;
   }
 
-  function setRoad(r) {
+  /* the city mission: built by city3d.js with this stage's materials */
+  async function setCity(city, w) {
     clearWorld();
-    road = r;
-    world = new THREE.Group();
-    const add = m => { world.add(m); return m; };
+    road = null; world = w;
+    const { buildCity3d } = await import("/static/city3d.js");
+    city3d = buildCity3d(city, { mats, surfMat, raster });
+    group = city3d.group;
+    scene.add(group);
+    applyEnv();
+    firstCam = true;
+  }
+
+  function setRoad(r, w) {
+    clearWorld();
+    road = r; world = w;
+    group = new THREE.Group();
+    const world_ = group;
+    const add = m => { world_.add(m); return m; };
     const L = road.L;
 
     // carriageway, one strip per section in its own surface
@@ -279,7 +292,7 @@ export function createDriveStage(host, { raster } = {}) {
       poles.setMatrixAt(k, dummy.matrix); lamps.setMatrixAt(k, dummy.matrix);
     });
     add(poles); add(lamps);
-    buildStreetLife(world, { path: road, at, rightOf, bPlaces, lPlaces, rand, mats, edge: EDGE });
+    buildStreetLife(group, { path: road, at, rightOf, bPlaces, lPlaces, rand, mats, edge: EDGE });
 
     // a board at every change of grade or surface, on both sides
     road.segs.forEach((s, k) => {
@@ -298,7 +311,7 @@ export function createDriveStage(host, { raster } = {}) {
       }
     });
 
-    scene.add(world);
+    scene.add(group);
     applyEnv();
     firstCam = true;
   }
@@ -328,13 +341,14 @@ export function createDriveStage(host, { raster } = {}) {
   /* ---------------------------------------------------------- per frame */
   const look = new THREE.Vector3(), camTarget = new THREE.Vector3(), lastBus = new THREE.Vector3(), tmp = new THREE.Vector3();
   let spin = 0;
-  function frame(D, live, dt) {
-    if (!road) return;
-    const e = road.elev(D.s), slope = road.grade(D.s) / 100 * Math.cos(D.psi);
+  function frame(D, live, dt, extra) {
+    if (!world) return;
+    if (city3d && extra) city3d.update(extra, dt, camera);
+    const e = world.height(D.s, D.lat), slope = world.gradePct(D.s, D.lat, D.psi) / 100;
     bus.group.position.set(D.s, e + 0.02, D.lat);
     bus.group.rotation.set(0, -D.psi, Math.atan(slope), "YZX");
     spin += D.v * dt / 0.5;
-    const steerAng = D.steer * 0.55 / (1 + D.v / 7);
+    const steerAng = D.delta || 0;
     bus.wheels.forEach((w, i) => w.rotation.set(0, i < 2 ? -steerAng : 0, -spin, "YZX"));
     animateBus(bus, live, dt);
     revMat.emissiveIntensity = D.dir < 0 ? 3 : 0;
@@ -362,7 +376,7 @@ export function createDriveStage(host, { raster } = {}) {
       camera.position.copy(want); camTarget.copy(look); camera.lookAt(camTarget); lastBus.copy(pos); return;
     }
     if (camMode === "side") { want = pos.clone().addScaledVector(right, 8.5).addScaledVector(fwd, 7); want.y += 3.6; look.copy(pos); look.y += 1.4; }   // inside the tree line
-    else if (camMode === "top") { want = pos.clone().addScaledVector(fwd, -30); want.y += 160; look.copy(pos).addScaledVector(fwd, 25); }
+    else if (camMode === "top") { want = pos.clone().addScaledVector(fwd, -30); want.y += city3d ? 210 : 160; look.copy(pos).addScaledVector(fwd, 25); }
     else { want = pos.clone().addScaledVector(fwd, -22); want.y += 8; look.copy(pos).addScaledVector(fwd, 10); look.y += 1.4; }
     k = firstCam ? 1 : 1 - Math.exp(-dt * 3.5);
     camera.position.lerp(want, k); camTarget.lerp(look, k);
@@ -396,6 +410,6 @@ export function createDriveStage(host, { raster } = {}) {
     renderer.dispose(); renderer.domElement.remove();
   }
 
-  return { setRoad, setEnv, frame, setCameraMode, setXray: m => xray.setMode(m), setSign: tex => bus.setSign(tex), dispose,
+  return { setRoad, setCity, setEnv, frame, setSignText: t => bus.setSign(dotTexture(raster, t, { minCols: 40, pitch: 8 })), setCameraMode, setXray: m => xray.setMode(m), setSign: tex => bus.setSign(tex), dispose,
            get mode() { return camMode; } };
 }

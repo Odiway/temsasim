@@ -77,10 +77,35 @@ export function buildRoad(segs, surfaces) {
   };
 }
 
+/* The straight test road as a "world" for the driver: a 2D plane where x runs
+   along the road and z across it. The city (citymap.js) is another world. */
+export function roadWorld(road) {
+  return {
+    start: { x: 25, z: 1.9 + LANE_W, psi: 0 }, steerLock: 0.6,
+    height: x => road.elev(x),
+    gradePct: (x, z, psi) => road.grade(x) * Math.cos(psi),
+    factor: x => road.factor(x),
+    constrain(st, prev, vNew, dt) {
+      // kerbs and the end barriers
+      const lim = ROAD_HALF - BUS_HALF_W - 0.1;
+      st.scrape = false; st.atEnd = false; st.kerb = false; st.blocked = false;
+      if (Math.abs(st.lat) > lim) {
+        st.lat = Math.sign(st.lat) * lim; st.psi *= 0.6; vNew *= 1 - 1.2 * dt; st.scrape = Math.abs(vNew) > 0.3;
+      }
+      if (st.s > road.L - 8) { st.s = road.L - 8; vNew = 0; st.atEnd = true; }
+      if (st.s < 8) { st.s = 8; vNew = 0; st.atEnd = true; }
+      return vNew;
+    },
+  };
+}
+
 /* ---------------------------------------------------------------- vehicle */
-export function createDriver(P, road, { passengers = 0 } = {}) {
-  const mass = P.mass_kg + passengers * P.passenger_mass_kg;
-  const mTot = mass + (P.m_eq_kg || 0);
+/* st.s and st.lat are the bus centre's world x and z (on the test road, the
+   distance along it and the offset across it). */
+export function createDriver(P, world, { passengers = 0 } = {}) {
+  let mass = P.mass_kg + passengers * P.passenger_mass_kg;
+  let mTot = mass + (P.m_eq_kg || 0);
+  let pax = passengers;
   const etaDl = P.driveline_eff, etaM = Math.max(0.6, P.motor.eff * 0.96);
   const r = P.wheel_r_m;
   const mot = P.motor;
@@ -99,12 +124,12 @@ export function createDriver(P, road, { passengers = 0 } = {}) {
   const st = {};
   function reset() {
     Object.assign(st, {
-      t: 0, s: 25, lat: 1.9 + LANE_W, psi: 0, v: 0, a: 0, gear: 0,
+      t: 0, s: world.start.x, lat: world.start.z, psi: world.start.psi, v: 0, a: 0, gear: 0,
       thr: 0, brk: 0, steer: 0, doors: 0, dir: 1,
       soc: P.battery.soc_start, dist: 0,
       e_batt: 0, e_trac: 0, e_regen: 0, e_hvac: 0, e_aux: 0, e_thermal: 0, e_fric: 0,
-      p_batt: 0, p_motor: 0, p_aux: 0, p_fric: 0, scrape: false, atEnd: false,
-      trace: { t: [], v: [], grade_pct: [], surface: [], doors: [] }, nextRec: 0,
+      p_batt: 0, p_motor: 0, p_aux: 0, p_fric: 0, scrape: false, atEnd: false, kerb: false, blocked: false,
+      trace: { t: [], v: [], grade_pct: [], surface: [], doors: [], pax: [] }, nextRec: 0,
     });
   }
   reset();
@@ -134,10 +159,9 @@ export function createDriver(P, road, { passengers = 0 } = {}) {
     const ratio = R[st.gear];
     const w = sp / r * ratio;
 
-    const cosPsi = Math.cos(st.psi);
-    const gradePct = road.grade(st.s) * cosPsi;                  // along the bus's nose
+    const gradePct = world.gradePct(st.s, st.lat, st.psi);       // along the bus's nose
     const th = Math.atan(gradePct / 100);
-    const kSurf = road.factor(st.s);
+    const kSurf = world.factor(st.s, st.lat);
     let fRoll = 0;
     if (sp > 0.01) {
       if (P.coastdown) {
@@ -177,19 +201,14 @@ export function createDriver(P, road, { passengers = 0 } = {}) {
     a = (vNew - v) / dt;
 
     // steering: kinematic bicycle, lock reduced with speed (reversing swings the nose the other way)
-    const delta = st.steer * 0.55 / (1 + Math.abs(vNew) / 7);
+    const delta = st.steer * world.steerLock / (1 + Math.abs(vNew) / 8);
+    st.delta = delta;
+    const prev = { s: st.s, lat: st.lat, psi: st.psi };
     st.psi += vNew / WHEELBASE * Math.tan(delta) * dt;
     st.s += vNew * Math.cos(st.psi) * dt;
     st.lat += vNew * Math.sin(st.psi) * dt;
-    // kerbs and the end barriers
-    const lim = ROAD_HALF - BUS_HALF_W - 0.1;
-    st.scrape = false;
-    if (Math.abs(st.lat) > lim) {
-      st.lat = Math.sign(st.lat) * lim; st.psi *= 0.6; vNew *= 1 - 1.2 * dt; st.scrape = Math.abs(vNew) > 0.3;
-    }
-    st.atEnd = false;
-    if (st.s > road.L - 8) { st.s = road.L - 8; vNew = 0; st.atEnd = true; }
-    if (st.s < 8) { st.s = 8; vNew = 0; st.atEnd = true; }
+    // kerbs, buildings, barriers: the world decides
+    vNew = world.constrain(st, prev, vNew, dt);
 
     const pMotor = fDrive * sp / (etaDl * etaM) - fRegen * sp * etaDl * etaM;
     const pBatt = pMotor + pAux + pHvac + pTherm;
@@ -208,7 +227,7 @@ export function createDriver(P, road, { passengers = 0 } = {}) {
     if (st.t >= st.nextRec) {
       const T = st.trace, md = vNew < -0.01 ? -1 : 1;
       T.t.push(+st.t.toFixed(2)); T.v.push(+Math.abs(st.v).toFixed(3)); T.grade_pct.push(+(gradePct * md).toFixed(3));
-      T.surface.push(kSurf); T.doors.push(st.doors ? 1 : 0);
+      T.surface.push(kSurf); T.doors.push(st.doors ? 1 : 0); T.pax.push(pax);
       st.nextRec += 0.5;
     }
   }
@@ -217,5 +236,8 @@ export function createDriver(P, road, { passengers = 0 } = {}) {
   /* D <-> R, only at a standstill, as on the bus's push-button selector */
   function toggleReverse() { if (Math.abs(st.v) > 0.3) return null; st.dir = -st.dir; st.thr = 0; return st.dir; }
 
-  return { st, step, reset, toggleDoors, toggleReverse, mass };
+  /* people get on and off at stops: the mass the motor moves changes with them */
+  function setPassengers(n) { pax = Math.max(0, n); mass = P.mass_kg + pax * P.passenger_mass_kg; mTot = mass + (P.m_eq_kg || 0); }
+
+  return { st, step, reset, toggleDoors, toggleReverse, setPassengers, get mass() { return mass; }, get pax() { return pax; } };
 }

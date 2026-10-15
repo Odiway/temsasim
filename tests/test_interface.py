@@ -254,3 +254,12 @@ def test_free_drive_vehicle_settings_apply_to_a_copy(client, lib_copy):
     light = client.post("/api/drive/simulate", json=body).get_json()
     heavier = client.post("/api/drive/simulate", json={**body, "tune": {"kerb_mass_kg": base["mass_kg"] + 4000}}).get_json()
     assert heavier["kwh"]["traction_kwh"] > light["kwh"]["traction_kwh"]
+
+
+def test_free_drive_replay_follows_the_recorded_headcount(client):
+    n = 120
+    body = {"vehicle": "citybus_12m_be", "t": list(range(n)), "v": [min(9.0, 0.7 * k) for k in range(n)],
+            "grade_pct": [3.0] * n, "passengers": 0}
+    empty = client.post("/api/drive/simulate", json=body).get_json()
+    full = client.post("/api/drive/simulate", json={**body, "pax": [80] * n}).get_json()
+    assert full["kwh"]["grade_kwh"] > empty["kwh"]["grade_kwh"] * 1.2

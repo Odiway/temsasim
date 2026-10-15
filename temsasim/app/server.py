@@ -400,7 +400,9 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
         pax = float(b.get("passengers") or 0)
         cyc = DriveCycle(t - t[0], np.clip(np.asarray(b["v"], dtype=float), 0, None),
                          grade_rad=np.arctan(np.asarray(b["grade_pct"], dtype=float) / 100.0),
-                         passengers=np.full(n, pax),
+                         # a city-bus mission records the headcount as people get on and off
+                         passengers=(np.asarray(b["pax"], dtype=float) if b.get("pax") and len(b["pax"]) == n
+                                     else np.full(n, pax)),
                          doors_open=np.asarray(b.get("doors") or np.zeros(n), dtype=float) > 0.5,
                          name=b.get("name") or "Serbest sürüş", source="interactive drive",
                          surface_factor=np.asarray(b.get("surface") or np.ones(n), dtype=float))

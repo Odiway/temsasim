@@ -69,6 +69,16 @@ taşıt lastikleri için tipik değerlerdir, ölçülmedi. Sürüş sırasındak
 tarayıcıdaki basit bir modelden gelen tahminlerdir; "Sürüşü modelde hesapla"
 kaydedilen hız, eğim, yüzey ve kapı izini asıl çözücüye verir ve tam rapor üretir.
 
+**Halk otobüsü görevi:** Serbest sürüş sayfasında ikinci mod. Tepeli, ızgara
+planlı bir şehirde bir hat (19K ya da 42) sürülür: dört şeritli caddeler,
+her kavşakta trafik ışığı, sağdan giden, ışıkta duran ve kavşakta dönen
+araçlar var. Duraklara sırayla uğranır: kaldırıma yanaşıp durulur, kapılar
+açılır (E), yolcular iner ve biner, kapılar kapatılır. Yön tarifi ve mini
+harita bir sonraki durağı gösterir; rotadan çıkılırsa yol yeniden bulunur.
+Kırmızı ışık, çarpışma, kaçırılan durak, durakta bırakılan yolcu ve kaldırıma
+çıkmak puan düşürür. Yolcu sayısı durakta değişir; hem canlı modeldeki kütle
+hem de "Sürüşü modelde hesapla" ile asıl modele giden kayıt bunu izler.
+
 Formdaki sayılar Türkçe yazılabilir (`95,5`). Birimler mühendislik birimidir
 (kW, rpm, km/h, %); dosyaya dönüştürülerek yazılır. Silinen bileşenler
 `library/.cop_kutusu/` klasörüne taşınır, geri alınabilir.
