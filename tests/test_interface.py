@@ -263,3 +263,24 @@ def test_free_drive_replay_follows_the_recorded_headcount(client):
     empty = client.post("/api/drive/simulate", json=body).get_json()
     full = client.post("/api/drive/simulate", json={**body, "pax": [80] * n}).get_json()
     assert full["kwh"]["grade_kwh"] > empty["kwh"]["grade_kwh"] * 1.2
+
+
+def test_calculation_map_is_served_offline(client):
+    r = client.get("/static/hesap-haritasi.html")
+    assert r.status_code == 200
+    html = r.get_data(as_text=True)
+    assert "Çözücünün bir zaman adımı" in html
+    assert "googleapis" not in html and "http://" not in html.replace("http://www.w3.org", "")
+
+
+def test_line_endpoints_list_and_simulate_a_day(client):
+    ls = client.get("/api/network/lines").get_json()["lines"]
+    assert any(l.get("stem") == "adana_ornek" and l.get("example") for l in ls)
+    base = client.post("/api/network/simulate", json={"line": "adana_ornek", "vehicle": "citybus_12m_be", "ambient": 20}).get_json()
+    r = base["result"]
+    assert r["fleet"] >= 1 and r["trips_per_day"] > 0 and r["kwh_per_day"] > 0
+    scn = client.post("/api/network/simulate", json={"line": "adana_ornek", "vehicle": "citybus_12m_be", "ambient": 20,
+                                                     "headways": {"1": 5, "5": 5}}).get_json()["result"]
+    assert scn["fleet"] > r["fleet"] and scn["mean_wait_min"] < r["mean_wait_min"]
+    bad = client.post("/api/network/simulate", json={"line": "adana_ornek", "vehicle": "citybus_12m_be", "headways": {"1": 0.2}})
+    assert bad.status_code == 400

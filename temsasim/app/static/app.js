@@ -444,9 +444,9 @@ function pageHead(eyebrow, title, lede, actions) {
 /* ================================================================ router */
 const PAGES = {
   kutuphane: pageLibrary, yukle: pageUpload, bilesen: pageComponent,
-  arac: pageVehicle, simulasyon: pageSim, surus: pageDrive, dogrulama: pageValidate,
+  arac: pageVehicle, simulasyon: pageSim, surus: pageDrive, hat: pageNetwork, dogrulama: pageValidate,
 };
-const PAGE_SIGN = { kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bileşen", arac: "Araç kur", simulasyon: "Simülasyon", surus: "Serbest sürüş", dogrulama: "Doğrulama" };
+const PAGE_SIGN = { kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bileşen", arac: "Araç kur", simulasyon: "Simülasyon", surus: "Serbest sürüş", hat: "Hat ve sefer", dogrulama: "Doğrulama" };
 
 async function route() {
   const parts = (location.hash || "#/kutuphane").replace(/^#\/?/, "").split("/").map(decodeURIComponent);
@@ -994,6 +994,14 @@ const EV_ICON = {
   jam: "M2 15h8v3H2zM14 15h8v3h-8zM3 15l1.5-3h4L10 15M15 15l1.5-3h4L22 15",
 };
 const SPEEDS = [1, 5, 10, 30, 60];
+
+/* Line and timetable simulation lives in network.js. */
+async function pageNetwork() {
+  const ov = await overview(true);
+  const mod = await import("/static/network.js");
+  return mod.pageNetwork({ h, api, store, fmt, parseNum, seg, select, field, numInput, toast, busy, notice, ov,
+                           pageHead, setCleanup: f => { pageCleanup = f; } });
+}
 
 /* Free drive lives in its own module (drive.js); it gets the page helpers here. */
 async function pageDrive() {

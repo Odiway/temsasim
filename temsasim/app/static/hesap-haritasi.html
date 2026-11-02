@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>temsasim Hesap Haritası</title>
+<style>
+/* Layout: an engineering drawing set — one long sheet, numbered sections, wide figures that scroll inside their own frame. */
+:root {
+  --bg: #f5f6f4;          /* drafting paper, faintly green-grey */
+  --panel: #ffffff;
+  --ink: #1d2328;
+  --ink-2: #47515a;
+  --muted: #6c7680;
+  --rule: #d5dad6;
+  --amber: #c98a00;       /* the destination-sign amber, darkened for paper */
+  --amber-soft: #fff1cc;
+  --mech: #6b5a3e;        /* mechanical: bronze */
+  --mech-bg: #f3eee4;
+  --elec: #2f6fc7;        /* electrical: the app's discharge blue */
+  --elec-bg: #e8f0fb;
+  --heat: #c4572a;        /* thermal: the app's HVAC orange */
+  --heat-bg: #fbece4;
+  --data: #4f5d6b;        /* data / state */
+  --data-bg: #eceff2;
+  --ok: #23905a;
+  --bad: #b8402f;
+  --display: "Barlow Semi Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+  --body: "Barlow", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15191d; --panel: #1d2228; --ink: #e7eaec; --ink-2: #b9c1c8; --muted: #8b959f; --rule: #333b43;
+  --amber: #ffb000; --amber-soft: #3a2f12;
+  --mech: #c9b38a; --mech-bg: #2a2620; --elec: #6aa7f2; --elec-bg: #1b2735; --heat: #f08a5d; --heat-bg: #33231c;
+  --data: #a7b3bf; --data-bg: #232a31; --ok: #46c486; --bad: #ef7c6a; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #15191d; --panel: #1d2228; --ink: #e7eaec; --ink-2: #b9c1c8; --muted: #8b959f; --rule: #333b43;
+  --amber: #ffb000; --amber-soft: #3a2f12;
+  --mech: #c9b38a; --mech-bg: #2a2620; --elec: #6aa7f2; --elec-bg: #1b2735; --heat: #f08a5d; --heat-bg: #33231c;
+  --data: #a7b3bf; --data-bg: #232a31; --ok: #46c486; --bad: #ef7c6a; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body); margin: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(30px, 4.2vw, 46px); font-weight: 700; letter-spacing: -.005em; }
+h2 { font-size: 27px; font-weight: 600; }
+h3 { font-size: 19px; font-weight: 600; }
+p { margin: 0; max-width: 72ch; }
+code, .m { font-family: var(--mono); font-size: .86em; }
+a { color: var(--elec); }
+
+header.top { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 2px solid var(--ink); }
+.eyebrow { font: 600 12px var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 18px; color: var(--ink-2); max-width: 78ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13.5px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 18px; height: 12px; border-radius: 2px; border: 1.5px solid; display: inline-block; }
+.sw.mech { background: var(--mech-bg); border-color: var(--mech); }
+.sw.elec { background: var(--elec-bg); border-color: var(--elec); }
+.sw.heat { background: var(--heat-bg); border-color: var(--heat); }
+.sw.data { background: var(--data-bg); border-color: var(--data); }
+.sw.dash { background: none; border: 0; border-top: 2px dashed var(--ink-2); height: 0; width: 22px; }
+
+nav.toc { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; border-bottom: 1px solid var(--rule); display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+nav.toc a { flex: none; font: 600 13px var(--display); letter-spacing: .03em; color: var(--ink-2); text-decoration: none; padding: 5px 10px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--ink); border-color: var(--ink-2); outline: none; }
+nav.toc a b { color: var(--amber); font-weight: 700; margin-right: 4px; font-variant-numeric: tabular-nums; }
+
+section { display: grid; gap: 16px; padding-top: 40px; scroll-margin-top: 64px; }
+.shead { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: baseline; }
+.num { font: 700 40px/1 var(--display); color: var(--amber); font-variant-numeric: tabular-nums; grid-row: span 2; }
+.shead p { color: var(--ink-2); }
+
+figure { margin: 0; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
+.scroll { overflow-x: auto; }
+figure svg { display: block; width: 100%; height: auto; color: var(--ink); }
+.w-xl svg { min-width: 1080px; }
+.w-l svg { min-width: 860px; }
+.w-m svg { min-width: 640px; }
+figcaption { font-size: 14px; color: var(--ink-2); max-width: 90ch; }
+figcaption b { color: var(--ink); }
+
+/* diagram vocabulary */
+svg text { font-family: var(--mono); font-size: 11.5px; fill: currentColor; }
+svg .t { font: 600 13.5px var(--display); letter-spacing: .01em; }
+svg .tl { font: 700 12px var(--display); letter-spacing: .12em; text-transform: uppercase; }
+svg .lb { font: 500 11px var(--body); fill: var(--ink-2); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+svg .note { font: italic 500 11px var(--body); fill: var(--muted); }
+svg .bx { fill: var(--panel); stroke: var(--ink-2); stroke-width: 1.2; }
+svg .mech { fill: var(--mech-bg); stroke: var(--mech); stroke-width: 1.5; }
+svg .elec { fill: var(--elec-bg); stroke: var(--elec); stroke-width: 1.5; }
+svg .heat { fill: var(--heat-bg); stroke: var(--heat); stroke-width: 1.5; }
+svg .data { fill: var(--data-bg); stroke: var(--data); stroke-width: 1.5; }
+svg .hot { fill: var(--amber-soft); stroke: var(--amber); stroke-width: 2; }
+svg .lane { fill: none; stroke: var(--rule); stroke-width: 1; stroke-dasharray: 2 4; }
+svg .ar { fill: none; stroke: currentColor; stroke-width: 1.3; }
+svg .ar.dash { stroke-dasharray: 5 4; }
+svg .ar.e { stroke: var(--elec); } svg .ar.h { stroke: var(--heat); } svg .ar.m { stroke: var(--mech); } svg .ar.a { stroke: var(--amber); stroke-width: 1.8; }
+svg .ah { fill: currentColor; }
+svg .ah.e { fill: var(--elec); } svg .ah.h { fill: var(--heat); } svg .ah.m { fill: var(--mech); } svg .ah.a { fill: var(--amber); }
+svg .c-mech { fill: var(--mech); } svg .c-elec { fill: var(--elec); } svg .c-heat { fill: var(--heat); } svg .c-amber { fill: var(--amber); } svg .c-muted { fill: var(--muted); }
+svg .ok { fill: var(--ok); } svg .badt { fill: var(--bad); }
+
+/* equation cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px; display: grid; gap: 9px; align-content: start; min-width: 0; }
+.card h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.tag { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; border: 1px solid; }
+.tag.mech { color: var(--mech); border-color: var(--mech); } .tag.elec { color: var(--elec); border-color: var(--elec); }
+.tag.heat { color: var(--heat); border-color: var(--heat); } .tag.data { color: var(--data); border-color: var(--data); }
+.eq { font: 13px/1.75 var(--mono); background: var(--bg); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 10px; overflow-x: auto; white-space: pre; }
+.card p, .card li { font-size: 14.5px; color: var(--ink-2); }
+.card ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
+.src { font: 12px var(--mono); color: var(--muted); }
+.defs { font-size: 13px; color: var(--muted); }
+.defs b { color: var(--ink-2); font-weight: 600; }
+
+table.t { border-collapse: collapse; width: 100%; font-size: 14px; }
+.tw { overflow-x: auto; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; }
+table.t th, table.t td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.t th { font: 600 12.5px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+table.t td.n { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+table.t tr:last-child td { border-bottom: 0; }
+
+.stack2 { display: grid; gap: 16px; }
+.stack2 svg { max-width: 820px; }
+.limits { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; }
+.lim { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 11px 14px; display: grid; gap: 4px; }
+.lim b { font: 600 15px var(--display); }
+.lim p { font-size: 14px; color: var(--ink-2); }
+.lim .src { margin-top: 2px; }
+.callout { border: 1.5px solid var(--amber); background: var(--amber-soft); border-radius: 6px; padding: 12px 16px; font-size: 15px; max-width: 90ch; }
+
+footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); display: grid; gap: 6px; }
+@media (max-width: 640px) { .num { font-size: 32px; } .cards, .limits { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+
+/* print and PDF: A4 landscape, light paper, every figure whole on one page */
+.printbtn { justify-self: start; font: 600 14px var(--display); letter-spacing: .03em; padding: 7px 14px; border: 1.5px solid var(--ink); border-radius: 4px; background: var(--panel); color: var(--ink); cursor: pointer; }
+.printbtn:hover, .printbtn:focus-visible { background: var(--amber-soft); outline: none; }
+@page { size: A4 landscape; margin: 11mm 12mm; }
+@page tall { size: A4 portrait; margin: 10mm; }
+@media print {
+  :root { --bg: #ffffff; --panel: #ffffff; --ink: #1d2328; --ink-2: #47515a; --muted: #6c7680; --rule: #d5dad6;
+    --amber: #c98a00; --amber-soft: #fff1cc; --mech: #6b5a3e; --mech-bg: #f3eee4; --elec: #2f6fc7; --elec-bg: #e8f0fb;
+    --heat: #c4572a; --heat-bg: #fbece4; --data: #4f5d6b; --data-bg: #eceff2; color-scheme: light; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-size: 12.5px; }
+  nav.toc, .printbtn, body::before { display: none !important; }
+  .wrap { max-width: none; padding: 0; }
+  section { padding-top: 10px; gap: 10px; }
+  header.top { break-after: avoid; }
+  .shead, h2 { break-after: avoid; break-inside: avoid; }
+  /* the time-step diagram is tall: it gets a portrait page of its own */
+  #adim figure.w-xl { page: tall; break-before: page; break-after: page; }
+  /* the document is laid out at landscape width, so the portrait page needs the figure narrowed to fit */
+  #adim figure.w-xl { width: 188mm; max-width: 188mm; justify-self: start; }
+  #adim figure.w-xl svg { width: 100%; max-height: none; }
+  figure, .card, .lim, .tw, .callout { break-inside: avoid; }
+  .scroll { overflow: visible; }
+  .w-xl svg, .w-l svg, .w-m svg { min-width: 0; }
+  figure svg { max-height: 138mm; width: auto; max-width: 100%; margin: 0 auto; }
+  figure { padding: 8px; gap: 6px; }
+  figcaption { font-size: 11.5px; }
+  .cards { grid-template-columns: repeat(3, 1fr); }
+  .limits { grid-template-columns: repeat(3, 1fr); }
+  .eq { white-space: pre-wrap; font-size: 11px; }
+  a { color: inherit; text-decoration: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div class="eyebrow">temsasim · TEMSA AR-GE · elektrikli şehir otobüsü enerji simülatörü</div>
+  <h1>Hesap Haritası</h1>
+  <p class="lede">Bu sayfa, uygulamanın her hesabını girdiden sonuca kadar gösterir: araç dosyası nasıl okunur, görev nasıl üretilir, çözücü her saniye neyi hangi sırayla hesaplar, enerji hangi kaleme yazılır, arayüz ve serbest sürüş bu zincire nereden bağlanır. Formüller ve varsayılan değerler doğrudan koddan alındı; her kutunun yanında dosya ve satır numarası var.</p>
+  <button type="button" class="printbtn" onclick="window.print()">PDF olarak kaydet / yazdır</button>
+  <div class="legend" aria-label="Renk anlamları">
+    <span><i class="sw mech"></i>Mekanik: kuvvet, tork, hız</span>
+    <span><i class="sw elec"></i>Elektrik: güç, akım, gerilim, SOC</span>
+    <span><i class="sw heat"></i>Isıl: kabin, paket, yardımcı yükler</span>
+    <span><i class="sw data"></i>Veri ve durum</span>
+    <span><i class="sw dash"></i>Kesik ok: geri besleme ya da gecikmeli değer</span>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Bölümler">
+  <a href="#genel"><b>1</b>Genel akış</a>
+  <a href="#girdi"><b>2</b>Girdiler</a>
+  <a href="#gorev"><b>3</b>Görev üretimi</a>
+  <a href="#adim"><b>4</b>Çözücü adımı</a>
+  <a href="#alt"><b>5</b>Alt modeller</a>
+  <a href="#tamlik"><b>6</b>Veri tamlığı</a>
+  <a href="#uygulama"><b>7</b>Uygulama</a>
+  <a href="#surus"><b>8</b>Serbest sürüş</a>
+  <a href="#sinir"><b>9</b>Basitleştirmeler</a>
+</nav>
+
+<!-- =============================================================== 1 -->
+<section id="genel">
+  <div class="shead"><span class="num">1</span><h2>Genel akış</h2><p>Her hesap aynı boru hattından geçer: araç ve görev tek bir zaman serisine (DriveCycle) dönüşür, çözücü bu seriyi saniye saniye yürür, sonuçlar rapora, oynatmaya ve karşılaştırmalara dağılır.</p></div>
+  <figure class="w-xl"><div class="scroll">
+  <svg viewBox="0 0 1180 640" role="img" aria-label="Girdiler araç kurulumu ve görev üretiminden geçerek DriveCycle'a dönüşür; çözücü bunu işler; çıktılar rapor, oynatma, tarama, trafik karşılaştırması ve doğrulamadır. Maraton modeli çözücüyü kullanmaz.">
+    <defs>
+      <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="a1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah a" d="M0,0 L10,5 L0,10 z"/></marker>
+    </defs>
+    <text class="tl c-muted" x="20" y="22">Girdiler</text>
+    <text class="tl c-muted" x="320" y="22">Hazırlık</text>
+    <text class="tl c-muted" x="610" y="22">Çözücü</text>
+    <text class="tl c-muted" x="900" y="22">Çıktılar</text>
+
+    <!-- inputs -->
+    <rect class="data" x="20" y="36" width="250" height="168" rx="5"/>
+    <text class="t" x="34" y="58">Kütüphane (YAML dosyaları)</text>
+    <text x="34" y="80">şasi · aktarma organı</text>
+    <text x="34" y="98">motor + verim haritası (CSV)</text>
+    <text x="34" y="116">batarya + OCV eğrisi</text>
+    <text x="34" y="134">kabin HVAC · yardımcı sistemler</text>
+    <text x="34" y="152">yaşlanma · kontrol stratejisi</text>
+    <text class="note" x="34" y="176">her bileşende validated: true/false</text>
+    <text class="note" x="34" y="192">library/&lt;tür&gt;/&lt;ad&gt;.yaml</text>
+
+    <rect class="data" x="20" y="222" width="250" height="168" rx="5"/>
+    <text class="t" x="34" y="244">Görev kaynakları</text>
+    <text x="34" y="266">standart çevrim (11 ADVISOR CSV)</text>
+    <text x="34" y="284">güzergâh CSV / GPX / tablo</text>
+    <text x="34" y="302">  mesafe, rakım, hız sınırı, durak</text>
+    <text x="34" y="320">ölçülmüş araç kaydı (doğrulama)</text>
+    <text x="34" y="338">serbest sürüş kaydı (0,5 s)</text>
+    <text class="note" x="34" y="364">yolcu: profil 4f(1−f) ya da sabit</text>
+    <text class="note" x="34" y="380">trafik: yok / akıcı / orta / yoğun / sıkışık</text>
+
+    <rect class="data" x="20" y="408" width="250" height="96" rx="5"/>
+    <text class="t" x="34" y="430">Koşullar (Environment)</text>
+    <text x="34" y="452">dış sıcaklık · güneş ışınımı</text>
+    <text x="34" y="470">gece · basınç · rüzgâr · gölge</text>
+    <text class="note" x="34" y="492">koşu boyunca sabit</text>
+
+    <!-- preparation -->
+    <rect class="bx" x="320" y="36" width="240" height="120" rx="5"/>
+    <text class="t" x="334" y="58">Araç kurulumu</text>
+    <text x="334" y="80">dosya yolunu çöz (5 aday)</text>
+    <text x="334" y="98">birim takma adları: _kw, _rpm…</text>
+    <text x="334" y="116">eğri ve haritaları oku</text>
+    <text x="334" y="134">bilinmeyen alan → hata</text>
+    <text class="src" x="334" y="150">library.py L162–290</text>
+
+    <rect class="bx" x="320" y="222" width="240" height="168" rx="5"/>
+    <text class="t" x="334" y="244">Görev üretimi</text>
+    <text x="334" y="266">güzergâh → sürücü modeli</text>
+    <text x="334" y="284">  + trafik, ışık, kuyruk, sıkışma</text>
+    <text x="334" y="302">  + güce bağlı hızlanma sınırı</text>
+    <text x="334" y="320">yolcu profili uygulanır</text>
+    <text x="334" y="338">kapı yoksa: ≥ 6 s duruş = açık</text>
+    <text x="334" y="356">1 s ızgaraya yeniden örnekle</text>
+    <text class="src" x="334" y="380">cycle.py · traffic.py · Bölüm 3</text>
+
+    <rect class="hot" x="320" y="420" width="240" height="96" rx="5"/>
+    <text class="t" x="334" y="442">DriveCycle</text>
+    <text x="334" y="464">t · v · eğim θ · yolcu n</text>
+    <text x="334" y="482">kapı · yüzey çarpanı k</text>
+    <text class="note" x="334" y="504">çözücünün tek girdisi</text>
+
+    <rect class="data" x="320" y="548" width="240" height="72" rx="5"/>
+    <text class="t" x="334" y="570">Tarayıcı canlı model</text>
+    <text x="334" y="590">serbest sürüş, 120 Hz</text>
+    <text class="note" x="334" y="608">tahmin; kayıt asıl modele gider</text>
+
+    <!-- solver -->
+    <rect class="hot" x="610" y="36" width="240" height="480" rx="5"/>
+    <text class="t" x="624" y="58">simulate() — her 1 s</text>
+    <text x="624" y="84">1  kütle, dönen kütle</text>
+    <text x="624" y="104">2  yol yükü kuvvetleri</text>
+    <text x="624" y="124">3  tekerlek tork ve gücü</text>
+    <text x="624" y="144">4  fren paylaştırma</text>
+    <text x="624" y="164">5  aktarma organı</text>
+    <text x="624" y="184">6  motor tork zarfı</text>
+    <text x="624" y="204">7  motor elektrik gücü</text>
+    <text x="624" y="224">8  yardımcı sistemler</text>
+    <text x="624" y="244">9  kabin içi termal yönetim</text>
+    <text x="624" y="264">10 batarya güç talebi</text>
+    <text x="624" y="284">11 batarya akımı, SOC</text>
+    <text x="624" y="304">12 limit ve sürtünme</text>
+    <text x="624" y="324">13 yüksek voltaj ısıtma</text>
+    <text x="624" y="344">14 kayıt, sonraki adım</text>
+    <line class="lane" x1="624" y1="364" x2="836" y2="364"/>
+    <text class="t" x="624" y="388">Döngü sonrası</text>
+    <text x="624" y="410">toplamlar (kWh)</text>
+    <text x="624" y="430">enerji dengesi + kontrol</text>
+    <text x="624" y="450">uyarılar (5 kural)</text>
+    <text x="624" y="470">kWh/km, menzil</text>
+    <text class="src" x="624" y="500">simulator.py L128–451</text>
+
+    <!-- outputs -->
+    <rect class="bx" x="900" y="36" width="260" height="76" rx="5"/>
+    <text class="t" x="914" y="58">HTML rapor</text>
+    <text x="914" y="78">grafikler, enerji dengesi</text>
+    <text x="914" y="96">SOH (State of Health) projeksiyonu</text>
+    <rect class="bx" x="900" y="124" width="260" height="76" rx="5"/>
+    <text class="t" x="914" y="146">Oynatma</text>
+    <text x="914" y="166">zaman çizelgesi + olaylar</text>
+    <text x="914" y="184">→ 3B sahne (yalnız gösterir)</text>
+    <rect class="bx" x="900" y="212" width="260" height="58" rx="5"/>
+    <text class="t" x="914" y="234">Sıcaklık taraması</text>
+    <text x="914" y="254">−15…+40 °C, aynı iz</text>
+    <rect class="bx" x="900" y="282" width="260" height="58" rx="5"/>
+    <text class="t" x="914" y="304">Trafik karşılaştırması</text>
+    <text x="914" y="324">5 seviye, aynı güzergâh</text>
+    <rect class="bx" x="900" y="352" width="260" height="76" rx="5"/>
+    <text class="t" x="914" y="374">Doğrulama</text>
+    <text x="914" y="394">ölçüm ↔ model: enerji hatası</text>
+    <text x="914" y="412">güç RMSE, SOC RMSE, evreler</text>
+    <rect class="data" x="900" y="456" width="260" height="76" rx="5"/>
+    <text class="t" x="914" y="478">Maraton yakıt ve balata</text>
+    <text x="914" y="498">istatistik modeli, hız dağılımı</text>
+    <text class="note" x="914" y="518">enerji çözücüsünü kullanmaz</text>
+
+    <!-- arrows -->
+    <path class="ar" d="M270,96 H320" marker-end="url(#a1)"/>
+    <text class="lb" x="295" y="90" text-anchor="middle">bileşenler</text>
+    <path class="ar" d="M270,306 H320" marker-end="url(#a1)"/>
+    <path class="ar dash" d="M440,156 V222" marker-end="url(#a1)"/>
+    <text class="lb" x="446" y="194">araç sınırları</text>
+    <path class="ar" d="M440,390 V420" marker-end="url(#a1)"/>
+    <path class="ar dash" d="M320,584 H296 V350 H270" marker-end="url(#a1)"/>
+    <text class="lb" x="300" y="470" transform="rotate(-90 300 470)" text-anchor="middle">kayıt</text>
+    <path class="ar" d="M560,96 H610" marker-end="url(#a1)"/>
+    <text class="lb" x="585" y="90" text-anchor="middle">Vehicle</text>
+    <path class="ar a" d="M560,468 H610" marker-end="url(#a1a)"/>
+    <path class="ar" d="M270,456 H290 V528 H590 V490 H610" marker-end="url(#a1)"/>
+    <text class="lb" x="445" y="532" text-anchor="middle">ortam</text>
+    <path class="ar" d="M850,74 H900" marker-end="url(#a1)"/>
+    <path class="ar" d="M850,162 H900" marker-end="url(#a1)"/>
+    <path class="ar" d="M850,241 H900" marker-end="url(#a1)"/>
+    <path class="ar" d="M850,311 H900" marker-end="url(#a1)"/>
+    <path class="ar" d="M850,390 H900" marker-end="url(#a1)"/>
+    <path class="ar dash" d="M560,496 H580 V628 H880 V494 H900" marker-end="url(#a1)"/>
+    <text class="lb" x="730" y="622" text-anchor="middle">hız izi — çözücüsüz</text>
+  </svg></div>
+  <figcaption><b>Tek girdi, çok çıktı.</b> Çözücü yalnızca DriveCycle'ı ve aracı görür. Tarama ve trafik karşılaştırması aynı çözücüyü farklı girdilerle tekrar çağırır. Doğrulama ölçülmüş kaydı DriveCycle'a çevirip modeli aynı izde yürütür. Maraton modeli enerji çözücüsünü kullanmaz; yalnız hız dağılımından yakıt ve balata aşınması hesaplar. 3B sahne hiçbir şey hesaplamaz, zaman çizelgesini oynatır.</figcaption>
+  </figure>
+</section>
+
+<!-- =============================================================== 2 -->
+<section id="girdi">
+  <div class="shead"><span class="num">2</span><h2>Girdiler: araç dosyadan nasıl kurulur</h2><p>Araç, yedi bileşen dosyasına referans veren tek bir YAML'dır. Okuyucu her alanı dataclass alanıyla eşleştirir; tanımadığı alanı sessizce atlamaz, hata verir.</p></div>
+  <div class="cards">
+    <div class="card"><h3>Dosya çözümleme <span class="tag data">veri</span></h3>
+      <p>Bir referans şu sırayla aranır; ilk bulunan kullanılır:</p>
+      <div class="eq">1  library/ref
+2  library/ref.yaml
+3  ref (mutlak ya da çalışma klasörü)
+4  library/&lt;tür&gt;/ref
+5  library/&lt;tür&gt;/ref.yaml</div>
+      <p>Referans üç biçimde olabilir: dosya yolu, <code>{ref, overrides}</code> ya da satır içi tanım. Eğri ve harita yolları bileşen dosyasının kendi klasörüne göre çözülür.</p>
+      <div class="src">library.py L224–290</div></div>
+    <div class="card"><h3>Birim takma adları <span class="tag data">veri</span></h3>
+      <p>Dosyada okunaklı birim yazılabilir; okuyucu SI'ya çevirir. Aynı alan hem takma adla hem asıl adla yazılırsa hata verir.</p>
+      <div class="eq">_kw ×1e3 → _w        _rpm ×2π/60 → _rads
+_kmh ×1/3,6 → _mps   _t ×1e3 → _kg
+_kwh ×3,6e6 → _j     _mohm ×1e-3 → _ohm</div>
+      <p><code>_per</code> ile biten alanlar (ör. <code>coastdown_b_n_per_mps</code>) dönüştürülmez.</p>
+      <div class="src">library.py L49–103, L162–211</div></div>
+    <div class="card"><h3>Motor verim haritası <span class="tag elec">elektrik</span></h3>
+      <p>Ölçülmüş harita varsa doğrudan kullanılır: ilk satır mil hızı (rad/s), ilk sütun tork (Nm), içi DC'den mile verim. Yoksa tepe verim noktasından sentetik bir kayıp modeli kurulur (Bölüm 5). İçe aktarıcı Excel/CSV'yi, yönü, birimi (rpm/rad/s) ve değer türünü (oran, yüzde, kayıp) kendisi bulur.</p>
+      <div class="src">importers.py L279–429 · maps.py L129–191</div></div>
+    <div class="card"><h3>Kontrol stratejisi <span class="tag data">veri</span></h3>
+      <div class="eq">regen_enabled          true
+max_regen_decel_mps2   1,2
+regen_blend_fraction   0,95
+min_regen_speed_mps    1,4
+soc_start              0,95
+cabin_preconditioned   true
+pack_preconditioned    false</div>
+      <p><code>coast_regen_fraction</code> ve <code>soc_target_min</code> dosyada var ama çözücü kullanmıyor.</p>
+      <div class="src">vehicle.py L27–63</div></div>
+  </div>
+</section>
+
+<!-- =============================================================== 3 -->
+<section id="gorev">
+  <div class="shead"><span class="num">3</span><h2>Görev üretimi: güzergâhtan hız izine</h2><p>Güzergâh dosyası mesafeye göre rakım, hız sınırı ve durak verir. Zamana göre hız izini sürücü modeli üretir. Trafik, ışıklar ve sıkışma bu sürücünün kararlarına girer; karar kayıtları <code>meta</code> içinde saklanır ve oynatmada aynen gösterilir.</p></div>
+  <figure class="w-xl"><div class="scroll">
+  <svg viewBox="0 0 1180 560" role="img" aria-label="Sürücü modeli her saniye serbest hızı, en yakın hedefi ve hızlanma sınırını hesaplar; durak, sıkışma ve ışıkta bekleme durumlarına girer; sonuçta zaman, hız, konum ve kapı dizileri ile meta çıkar.">
+    <defs>
+      <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+    </defs>
+    <rect class="data" x="20" y="30" width="230" height="130" rx="5"/>
+    <text class="t" x="34" y="52">Güzergâh</text>
+    <text x="34" y="74">rakım(s) → 40 m ortalama</text>
+    <text x="34" y="92">θ(s) = atan(d rakım / ds)</text>
+    <text x="34" y="110">hız sınırı(s), duraklar</text>
+    <text x="34" y="128">ışık: dosyadan ya da</text>
+    <text x="34" y="146">  her 380–720 m'de bir</text>
+
+    <rect class="data" x="20" y="186" width="230" height="150" rx="5"/>
+    <text class="t" x="34" y="208">Trafik seviyesi</text>
+    <text x="34" y="230">hız katsayısı 1,0 … 0,40</text>
+    <text x="34" y="248">dalgalanma 0 … 0,25</text>
+    <text x="34" y="266">sıkışma 0 … 2,2 /km</text>
+    <text x="34" y="284">kuyruk 0 … 10 araç</text>
+    <text x="34" y="302">ışık: 90 s, yeşil 42, sarı 3</text>
+    <text class="note" x="34" y="324">"yok": ışık da yok</text>
+
+    <rect class="data" x="20" y="362" width="230" height="110" rx="5"/>
+    <text class="t" x="34" y="384">Araç (varsa)</text>
+    <text x="34" y="406">P_tepe·0,9·η, T_tepe·0,9</text>
+    <text x="34" y="424">kütle(yolcu), c0, Cd·A</text>
+    <text class="note" x="34" y="446">hızlanma sınırı için</text>
+    <text class="note" x="34" y="462">Maraton bunu vermez</text>
+
+    <!-- loop -->
+    <rect class="bx" x="300" y="30" width="270" height="96" rx="5"/>
+    <text class="t" x="314" y="52">a · Serbest hız</text>
+    <text x="314" y="74">v_serbest = sınır · min(1,</text>
+    <text x="314" y="92">  k_hız·(1 + dalga·gürültü(t)))</text>
+    <text x="314" y="112">sıkışmada en fazla 4,5 m/s</text>
+
+    <rect class="bx" x="300" y="146" width="270" height="130" rx="5"/>
+    <text class="t" x="314" y="168">b · En yakın hedef</text>
+    <text x="314" y="190">durak · sıkışma duruşu · yol sonu</text>
+    <text x="314" y="208">ışık: kırmızıysa kuyruk planla</text>
+    <text x="314" y="226">  kuyruk = kuyruk_max·min(1,</text>
+    <text x="314" y="244">    0,3 + geçen_kırmızı/kırmızı)</text>
+    <text x="314" y="262">  çizgi = ışık − 1 − kuyruk·7,5 m</text>
+
+    <rect class="bx" x="300" y="296" width="270" height="112" rx="5"/>
+    <text class="t" x="314" y="318">c · Hedef hız</text>
+    <text x="314" y="340">v_hedef = min(v_serbest,</text>
+    <text x="314" y="358">               √(2·frenleme·d))</text>
+    <text x="314" y="376">frenleme 1,2 m/s² (ışıkta 3,0)</text>
+    <text x="314" y="396">sarıda durulamıyorsa: geç</text>
+
+    <rect class="bx" x="300" y="428" width="270" height="112" rx="5"/>
+    <text class="t" x="314" y="450">d · Hızlanma sınırı</text>
+    <text x="314" y="472">F = min(P/ max(v,0,5), F_tork)</text>
+    <text x="314" y="490">a = (F − m·g(sinθ + c0·cosθ)</text>
+    <text x="314" y="508">     − ½·1,25·CdA·v²)/(1,05·m)</text>
+    <text x="314" y="528">a = min(1,0 m/s², a_sınır)</text>
+
+    <rect class="hot" x="620" y="190" width="250" height="150" rx="5"/>
+    <text class="t" x="634" y="212">e · Bir adım ilerle (1 s)</text>
+    <text x="634" y="234">v = min(v + a·dt, v_hedef)</text>
+    <text x="634" y="252">  ya da max(v − D·dt, v_hedef)</text>
+    <text x="634" y="270">hedefe son adım: v = d/dt</text>
+    <text x="634" y="288">kaydet (t, v, s, kapı)</text>
+    <text x="634" y="306">s += v·dt,  t += dt</text>
+    <text class="note" x="634" y="328">bitiş: s ≥ uzunluk·tur</text>
+
+    <rect class="bx" x="620" y="372" width="250" height="168" rx="5"/>
+    <text class="t" x="634" y="394">f · Bekleme durumları (v = 0)</text>
+    <text x="634" y="416">durak: kapı açık, 18 s</text>
+    <text x="634" y="434">sıkışma: 3–9 s duruş,</text>
+    <text x="634" y="452">  her 12–32 m'de bir</text>
+    <text x="634" y="470">ışık: yeşil yandıktan sonra</text>
+    <text x="634" y="488">  1,0 + 1,9 s × önündeki araç</text>
+    <text x="634" y="506">sıkışma yerleşimi Poisson,</text>
+    <text x="634" y="524">  ortalama aralık 1000/oran m</text>
+
+    <rect class="hot" x="920" y="30" width="240" height="190" rx="5"/>
+    <text class="t" x="934" y="52">Çıkan DriveCycle</text>
+    <text x="934" y="74">t, v, s, kapı (sürücüden)</text>
+    <text x="934" y="92">θ = θ(s mod tur uzunluğu)</text>
+    <text x="934" y="110">yolcu = f(s / uzunluk)</text>
+    <text x="934" y="128">  profil: n_tepe·4f(1−f)</text>
+    <text x="934" y="146">  sabit: n</text>
+    <text x="934" y="164">yüzey k = 1</text>
+    <text class="note" x="934" y="188">turlar sürülür, kopyalanmaz:</text>
+    <text class="note" x="934" y="204">ışık zamanlaması devam eder</text>
+
+    <rect class="data" x="920" y="250" width="240" height="160" rx="5"/>
+    <text class="t" x="934" y="272">meta (karar kaydı)</text>
+    <text x="934" y="294">her ışık duruşu: t0, yeşil,</text>
+    <text x="934" y="312">  kalkış, kuyruk, çizgi</text>
+    <text x="934" y="330">her sıkışma: başlangıç, bitiş,</text>
+    <text x="934" y="348">  duruşlar</text>
+    <text x="934" y="366">ışık listesi, seviye</text>
+    <text class="note" x="934" y="392">3B sahne kuyruğu buradan kurar</text>
+
+    <rect class="data" x="920" y="440" width="240" height="100" rx="5"/>
+    <text class="t" x="934" y="462">Standart çevrim yolu</text>
+    <text x="934" y="484">hız izi hazır, eğim 0</text>
+    <text x="934" y="502">kapı: ≥ 6 s, v &lt; 0,2 m/s</text>
+    <text x="934" y="520">yolcu profili uygulanır</text>
+
+    <path class="ar" d="M250,96 H300" marker-end="url(#a3)"/>
+    <path class="ar" d="M250,260 H275 V211 H300" marker-end="url(#a3)"/>
+    <path class="ar" d="M250,416 H275 V484 H300" marker-end="url(#a3)"/>
+    <path class="ar" d="M435,126 V146" marker-end="url(#a3)"/>
+    <path class="ar" d="M435,276 V296" marker-end="url(#a3)"/>
+    <path class="ar" d="M570,352 H595 V250 H620" marker-end="url(#a3)"/>
+    <text class="lb" x="598" y="372">v_hedef</text>
+    <path class="ar" d="M570,484 H595 V290 H620" marker-end="url(#a3)"/>
+    <text class="lb" x="598" y="502">a</text>
+    <path class="ar" d="M745,340 V372" marker-end="url(#a3)"/>
+    <text class="lb" x="752" y="361">hedefe varıldı</text>
+    <path class="ar dash" d="M620,500 H590 V556 H285 V20 H435 V30" marker-end="url(#a3)"/>
+    <text class="lb" x="440" y="552" text-anchor="middle">sonraki saniye</text>
+    <path class="ar" d="M870,230 H895 V125 H920" marker-end="url(#a3)"/>
+    <path class="ar" d="M870,300 H895 V330 H920" marker-end="url(#a3)"/>
+  </svg></div>
+  <figcaption><b>Sürücü hiçbir zaman kırmızıdan geçmez.</b> Işığa yaklaşırken gereken frenleme 3 m/s²'yi aşacaksa daha sert frenler; sarıda duramayacak kadar yakınsa geçer. Kuyruktaki araç sayısı, kırmızının ne kadar süredir yandığına göre büyür; yeşil yanınca her araç için 1,9 s boşalma süresi beklenir. Bu kararlar sabit tohumla üretilir, aynı girdiyle aynı iz çıkar. <span class="src">traffic.py L120–301 · cycle.py L326–391</span></figcaption>
+  </figure>
+</section>
+
+<!-- =============================================================== 4 -->
+<section id="adim">
+  <div class="shead"><span class="num">4</span><h2>Çözücünün bir zaman adımı</h2><p>Çözücü görevi 1 saniyelik ızgaraya çevirir ve her saniye aşağıdaki zinciri yürür. Mekanik kol tekerlekten motora iner, elektrik kolu motordan bataryaya, ısıl kol kabin ve paket sıcaklığını ilerletir. Dört değer bir sonraki saniyeye taşınır: SOC, paket sıcaklığı, kabin sıcaklığı ve vites.</p></div>
+  <figure class="w-xl"><div class="scroll">
+  <svg viewBox="0 0 1180 1340" role="img" aria-label="Bir zaman adımı: kütle, yol yükü, tekerlek talebi, fren paylaştırma ve aktarma organı mekanik kolda; motor tork zarfı, motor elektrik gücü, batarya talebi ve çözümü elektrik kolunda; yardımcılar, kabin içi termal yönetim ve paket termal yönetimi ısıl kolda. SOC, paket ve kabin sıcaklığı ile vites sonraki adıma taşınır.">
+    <defs>
+      <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="a4e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah e" d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="a4h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah h" d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="a4m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah m" d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="a4a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah a" d="M0,0 L10,5 L0,10 z"/></marker>
+    </defs>
+    <!-- lanes -->
+    <text class="tl c-mech" x="44" y="22">Mekanik kol</text>
+    <text class="tl c-elec" x="424" y="22">Elektrik kolu</text>
+    <text class="tl c-heat" x="814" y="22">Isıl kol ve yardımcılar</text>
+    <rect class="lane" x="36" y="128" width="358" height="1082" rx="6"/>
+    <rect class="lane" x="408" y="128" width="374" height="1082" rx="6"/>
+    <rect class="lane" x="796" y="128" width="370" height="1082" rx="6"/>
+
+    <!-- input -->
+    <rect class="hot" x="44" y="40" width="1114" height="60" rx="5"/>
+    <text class="t" x="58" y="62">DriveCycle örneği i  (dt = 1 s)</text>
+    <text x="58" y="86">v · a = dv/dt (önceden, merkezî fark) · eğim θ · yolcu n · kapı açık mı · yüzey çarpanı k · ortam: T_dış, güneş, gece, ρ_hava (koşu başında bir kez)</text>
+
+    <!-- mechanical -->
+    <rect class="mech" x="44" y="150" width="342" height="80" rx="5"/>
+    <text class="t" x="58" y="172">1 · Kütle ve dönen kütle</text>
+    <text x="58" y="194">m = m_boş + n · 68 kg</text>
+    <text x="58" y="214">m_eq = (J_tek + J_motor·i²) / r²</text>
+
+    <rect class="mech" x="44" y="268" width="342" height="118" rx="5"/>
+    <text class="t" x="58" y="290">2 · Yol yükü kuvvetleri</text>
+    <text x="58" y="312">F_yuv  = m·g·cosθ·(c0 + c1·v) · k</text>
+    <text x="58" y="332">F_hava = ½·ρ·Cd·A·(v + v_rüzgâr)²</text>
+    <text x="58" y="352">F_eğim = m·g·sinθ</text>
+    <text x="58" y="372">F_atl  = (m + m_eq)·a</text>
+
+    <rect class="mech" x="44" y="424" width="342" height="80" rx="5"/>
+    <text class="t" x="58" y="446">3 · Tekerlek talebi</text>
+    <text x="58" y="468">F = ΣF   T = F·r   ω = v / r</text>
+    <text x="58" y="488">P_tekerlek = F·v</text>
+
+    <rect class="mech" x="44" y="542" width="342" height="118" rx="5"/>
+    <text class="t" x="58" y="564">4 · Fren paylaştırma  (T &lt; 0)</text>
+    <text x="58" y="586">v &lt; 1,4 m/s → tamamı sürtünme</text>
+    <text x="58" y="606">F_mak = min(0,95·F_fren,</text>
+    <text x="58" y="626">            (m + m_eq)·1,2 m/s²)</text>
+    <text x="58" y="646">kalan pay → sürtünmeli fren</text>
+
+    <rect class="mech" x="44" y="698" width="342" height="118" rx="5"/>
+    <text class="t" x="58" y="720">5 · Aktarma organı</text>
+    <text x="58" y="742">vites: v &gt; 13,9 yukarı, &lt; 11,1 aşağı</text>
+    <text x="58" y="762">ω_m = ω · i     (i = vites · 6,2)</text>
+    <text x="58" y="782">çekiş T_m = T/(i·η)  rejen T·η/i</text>
+    <text x="58" y="802">η = 0,97 · 0,96 (harita yoksa)</text>
+
+    <!-- electrical -->
+    <rect class="elec" x="416" y="698" width="358" height="118" rx="5"/>
+    <text class="t" x="430" y="720">6 · Motor tork zarfı</text>
+    <text x="430" y="742">ω ≤ ω_b = P/T :  T_max = T_tepe</text>
+    <text x="430" y="762">ω &gt; ω_b :  T_tepe·(ω_b/ω)^n</text>
+    <text x="430" y="782">rejen: min(T_max, P_rejen/ω)</text>
+    <text x="430" y="802">aşılırsa: T_m kırpılır, ileri hesap</text>
+
+    <rect class="elec" x="416" y="854" width="358" height="100" rx="5"/>
+    <text class="t" x="430" y="876">7 · Motor elektrik gücü</text>
+    <text x="430" y="898">η = harita(|ω_m|, |T_m|) ∈ [0,30; 0,995]</text>
+    <text x="430" y="918">çekiş: P_el = ω·T / η</text>
+    <text x="430" y="938">rejen: P_el = ω·T · (η − ceza)</text>
+
+    <rect class="elec" x="416" y="992" width="358" height="62" rx="5"/>
+    <text class="t" x="430" y="1014">10 · Batarya güç talebi</text>
+    <text x="430" y="1036">P = P_motor + P_yard + P_HVAC + P_paket(i−1)</text>
+
+    <rect class="elec" x="416" y="1090" width="358" height="112" rx="5"/>
+    <text class="t" x="430" y="1110">11 · Batarya çözümü (Bölüm 5.4)</text>
+    <text x="430" y="1130">P sınırlara kırpılır (C, V, SOC, T)</text>
+    <text x="430" y="1150">I = (V_oc − √(V_oc² − 4RP)) / 2R</text>
+    <text x="430" y="1170">ısı = I²R    V = V_oc − I·R</text>
+    <text x="430" y="1190">SOC −= I·η_c·dt / (3600·Q·SOH)</text>
+
+    <rect class="mech" x="44" y="1090" width="342" height="112" rx="5"/>
+    <text class="t" x="58" y="1110">12 · Limit ve sürtünme</text>
+    <text x="58" y="1130">şarj kırpıldı → kabul edilmeyen</text>
+    <text x="58" y="1150">  rejen sürtünmeli frene yazılır</text>
+    <text x="58" y="1170">deşarj kırpıldı → karşılanamayan</text>
+    <text x="58" y="1190">  talep (koşu "yapılamaz")</text>
+
+    <!-- thermal -->
+    <rect class="heat" x="804" y="150" width="312" height="100" rx="5"/>
+    <text class="t" x="818" y="172">8 · Yardımcı sistemler</text>
+    <text x="818" y="194">(1200 + aydınlatma) / 0,94</text>
+    <text x="818" y="214">+ direksiyon pompası(v)</text>
+    <text x="818" y="234">+ kompresör(durak/saat)</text>
+
+    <rect class="heat" x="804" y="288" width="354" height="172" rx="5"/>
+    <text class="t" x="818" y="310">9 · Kabin içi termal yönetim</text>
+    <text x="818" y="332">Q = UA·ΔT + Q_taze + Q_kapı</text>
+    <text x="818" y="352">    + n·80 W + Q_güneş</text>
+    <text x="818" y="372">18 °C altı ısıt, 24 °C üstü soğut</text>
+    <text x="818" y="392">Q_H = −Q + C·(T_hedef − T)/420 s</text>
+    <text x="818" y="412">T_kabin += (Q + Q_H)·dt / C</text>
+    <text x="818" y="432">P = |Q_H|/COP(T_dış) + fanlar</text>
+    <text class="note" x="818" y="450">ayrıntı: Şekil 4.3</text>
+
+    <rect class="heat" x="804" y="1090" width="312" height="112" rx="5"/>
+    <text class="t" x="818" y="1110">13 · Yüksek voltaj ısıtma/soğutma</text>
+    <text x="818" y="1130">T_p &gt; 32 °C: soğut, COP 2,2</text>
+    <text x="818" y="1150">T_p &lt; 10 °C: ısıt, COP 1,0</text>
+    <text x="818" y="1170">T_p += (I²R + UA·ΔT ± Q)·dt/C</text>
+    <text x="818" y="1190">P → bir sonraki adımın talebi</text>
+
+    <!-- state carried -->
+    <rect class="data" x="44" y="1250" width="1114" height="60" rx="5"/>
+    <text class="t" x="58" y="1272">14 · Kayıt ve sonraki adıma taşınan durum</text>
+    <text x="58" y="1294">SOC · T_paket · T_kabin · vites · P_paket   —   seriler[i]: 50'den fazla kanal (kuvvetler, güçler, kayıplar, sıcaklıklar, ısı akışları)</text>
+
+    <!-- arrows: mechanical chain -->
+    <path class="ar m" d="M215,100 V150" marker-end="url(#a4m)"/>
+    <text class="lb" x="222" y="132">v, a, θ, n, k</text>
+    <path class="ar m" d="M215,230 V268" marker-end="url(#a4m)"/>
+    <text class="lb" x="222" y="254">m, m_eq</text>
+    <path class="ar m" d="M215,386 V424" marker-end="url(#a4m)"/>
+    <text class="lb" x="222" y="410">F_toplam</text>
+    <path class="ar m" d="M215,504 V542" marker-end="url(#a4m)"/>
+    <text class="lb" x="222" y="528">T_tekerlek</text>
+    <path class="ar m" d="M215,660 V698" marker-end="url(#a4m)"/>
+    <text class="lb" x="222" y="684">T_makine</text>
+    <path class="ar m" d="M386,757 H416" marker-end="url(#a4m)"/>
+    <text class="lb" x="400" y="749" text-anchor="middle">ω_m, T_m</text>
+    <!-- electrical chain -->
+    <path class="ar e" d="M595,816 V854" marker-end="url(#a4e)"/>
+    <text class="lb" x="602" y="840">T_m (sınırlı)</text>
+    <path class="ar e" d="M595,954 V992" marker-end="url(#a4e)"/>
+    <text class="lb" x="602" y="978">P_motor</text>
+    <path class="ar e" d="M595,1054 V1090" marker-end="url(#a4e)"/>
+    <text class="lb" x="602" y="1076">P_talep</text>
+    <path class="ar e" d="M416,1146 H386" marker-end="url(#a4e)"/>
+    <text class="lb" x="401" y="1138" text-anchor="middle">kırpıldıysa</text>
+    <path class="ar e" d="M774,1146 H804" marker-end="url(#a4e)"/>
+    <text class="lb" x="789" y="1138" text-anchor="middle">I²R</text>
+    <path class="ar e" d="M595,1202 V1250" marker-end="url(#a4e)"/>
+    <text class="lb" x="602" y="1230">SOC</text>
+    <!-- motor limit overflow: unmet / friction -->
+    <path class="ar dash m" d="M430,816 V834 H300 V1090" marker-end="url(#a4m)"/>
+    <text class="lb" x="306" y="960">zarf aşımı</text>
+    <!-- thermal into battery demand -->
+    <path class="ar h" d="M804,200 H790 V1012 H774" marker-end="url(#a4h)"/>
+    <text class="lb" x="786" y="580" transform="rotate(-90 786 580)" text-anchor="middle">P_yard</text>
+    <path class="ar h" d="M804,440 H798 V1036 H774" marker-end="url(#a4h)"/>
+    <text class="lb" x="806" y="700" transform="rotate(-90 806 700)" text-anchor="middle">P_HVAC</text>
+    <path class="ar dash h" d="M960,1090 V1070 H850 V1046 H774" marker-end="url(#a4h)"/>
+    <text class="lb" x="900" y="1064" text-anchor="middle">P_paket (1 adım gecikmeli)</text>
+    <!-- inputs to thermal -->
+    <path class="ar h" d="M960,100 V150" marker-end="url(#a4h)"/>
+    <text class="lb" x="967" y="132">v, gece, durak/saat</text>
+    <path class="ar h" d="M1138,100 V288" marker-end="url(#a4h)"/>
+    <text class="lb" x="1131" y="272" text-anchor="end">n, kapı, T_dış, güneş</text>
+    <!-- state out -->
+    <path class="ar h" d="M960,1202 V1250" marker-end="url(#a4h)"/>
+    <text class="lb" x="967" y="1230">T_paket, P_paket</text>
+    <path class="ar h" d="M1138,460 V1250" marker-end="url(#a4h)"/>
+    <text class="lb" x="1131" y="720" text-anchor="end">T_kabin</text>
+    <!-- feedback loop -->
+    <path class="ar dash a" d="M44,1280 H20 V70 H44" marker-end="url(#a4a)"/>
+    <text class="lb" x="16" y="690" transform="rotate(-90 16 690)" text-anchor="middle">sonraki saniye: i + 1</text>
+  </svg></div>
+  <figcaption><b>Adımların sırası koddaki sıradır.</b> Vites, dönen kütleden önce seçilir; batarya, adım başındaki SOC ve paket sıcaklığıyla çözülür. Paket termal gücü bilinçli olarak bir adım gecikmelidir: adım i'de hesaplanan güç adım i+1'in talebine eklenir, son adımın değeri hiç sayılmaz. Motor zarfı aşılırsa ya da batarya talebi kırparsa fark kaybolmaz: çekişte "karşılanamayan talep", frende "sürtünmeli fren" kalemine yazılır. <span class="src">simulator.py L206–353</span></figcaption>
+  </figure>
+
+  <div class="stack2">
+    <figure class="w-m"><div class="scroll">
+    <svg viewBox="0 0 660 470" role="img" aria-label="Fren paylaştırma: tekerlek torku negatifse, hız 1,4 m/s altında tamamı sürtünmeli frene gider; üstünde makineye düşen pay konfor sınırıyla, sonra motor rejen torku ve gücüyle, sonra batarya şarj kabulüyle sınırlanır; her sınırda kalan pay sürtünmeli frene yazılır.">
+      <defs><marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <rect class="mech" x="20" y="20" width="250" height="56" rx="5"/>
+      <text class="t" x="34" y="42">Frenleme talebi F_fren</text>
+      <text x="34" y="64">T_tekerlek &lt; 0</text>
+      <rect class="mech" x="20" y="110" width="250" height="56" rx="5"/>
+      <text class="t" x="34" y="132">v ≥ 1,4 m/s ve rejen açık?</text>
+      <text x="34" y="154">değilse makine payı = 0</text>
+      <rect class="mech" x="20" y="200" width="250" height="56" rx="5"/>
+      <text class="t" x="34" y="222">Konfor sınırı</text>
+      <text x="34" y="244">min(0,95·F, (m+m_eq)·1,2)</text>
+      <rect class="elec" x="20" y="290" width="250" height="56" rx="5"/>
+      <text class="t" x="34" y="312">Motor rejen sınırı</text>
+      <text x="34" y="334">min(T_max(ω), 220 kW / ω)</text>
+      <rect class="elec" x="20" y="380" width="250" height="70" rx="5"/>
+      <text class="t" x="34" y="402">Batarya şarj kabulü</text>
+      <text x="34" y="422">2C · kabul(T_paket) ve</text>
+      <text x="34" y="440">V_max, SOC_max</text>
+      <rect class="heat" x="400" y="160" width="240" height="140" rx="5"/>
+      <text class="t" x="414" y="182">Sürtünmeli fren</text>
+      <text x="414" y="204">her basamakta kalan pay</text>
+      <text x="414" y="224">ısıya döner, geri gelmez</text>
+      <text x="414" y="250">kabul eğrisi: −10 °C %5,</text>
+      <text x="414" y="268">0 °C %15, 10 °C %70,</text>
+      <text x="414" y="286">25–45 °C %100</text>
+      <rect class="elec" x="400" y="380" width="240" height="70" rx="5"/>
+      <text class="t" x="414" y="402">Bataryaya dönen enerji</text>
+      <text x="414" y="424">rejen kazancı</text>
+      <path class="ar" d="M145,76 V110" marker-end="url(#a5)"/>
+      <path class="ar" d="M145,166 V200" marker-end="url(#a5)"/>
+      <path class="ar" d="M145,256 V290" marker-end="url(#a5)"/>
+      <path class="ar" d="M145,346 V380" marker-end="url(#a5)"/>
+      <path class="ar" d="M270,415 H400" marker-end="url(#a5)"/>
+      <path class="ar dash" d="M270,138 H340 V190 H400" marker-end="url(#a5)"/>
+      <path class="ar dash" d="M270,228 H340 V215" />
+      <path class="ar dash" d="M270,318 H340 V250 H400" marker-end="url(#a5)"/>
+      <path class="ar dash" d="M270,395 H360 V285 H400" marker-end="url(#a5)"/>
+      <text class="lb" x="335" y="132" text-anchor="middle">hayır</text>
+      <text class="lb" x="335" y="410" text-anchor="middle">kabul edilen</text>
+    </svg></div>
+    <figcaption><b>Şekil 4.1 · Fren paylaştırma.</b> Rejen dört sınırdan geçer; her sınırda kalan pay sürtünmeli frene yazılır. Soğuk pakette kabul düştüğü için kış koşusunda rejen kaybı burada görünür. <span class="src">simulator.py L230–299 · battery.py L127–208</span></figcaption></figure>
+
+    <figure class="w-m"><div class="scroll">
+    <svg viewBox="0 0 660 470" role="img" aria-label="Batarya çözümü: SOC'den açık devre gerilimi, SOC, sıcaklık ve SOH'tan iç direnç bulunur; güç sınırları akım ve gerilim pencerelerinden çıkar; kırpılmış güç için ikinci dereceden denklem akımı verir; akımdan gerilim, ısı ve yeni SOC çıkar.">
+      <defs><marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah e" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <rect class="data" x="20" y="20" width="190" height="88" rx="5"/>
+      <text class="t" x="34" y="42">Adım başı durum</text>
+      <text x="34" y="64">SOC, T_paket</text>
+      <text x="34" y="84">SOH (koşu boyunca sabit)</text>
+      <rect class="elec" x="250" y="20" width="390" height="56" rx="5"/>
+      <text class="t" x="264" y="42">Açık devre gerilimi</text>
+      <text x="264" y="64">V_oc = OCV_hücre(SOC) · 180 seri</text>
+      <rect class="elec" x="250" y="96" width="390" height="76" rx="5"/>
+      <text class="t" x="264" y="118">İç direnç</text>
+      <text x="264" y="140">R = 1,5 mΩ · f(SOC) · e^{Ea/R·(1/T − 1/T₂₅)}</text>
+      <text x="264" y="160">    · (1/SOH)² · 180 / 3</text>
+      <rect class="elec" x="250" y="192" width="390" height="96" rx="5"/>
+      <text class="t" x="264" y="214">Güç sınırları</text>
+      <text x="264" y="236">I_deşarj = min(4C·Q·SOH, (V_oc − V_min)/R)</text>
+      <text x="264" y="256">I_şarj = min(2C·Q·SOH·kabul(T), (V_max−V_oc)/R)</text>
+      <text x="264" y="276">SOC ≤ 0,05 deşarj yok · SOC ≥ 1 şarj yok</text>
+      <rect class="hot" x="250" y="308" width="390" height="66" rx="5"/>
+      <text class="t" x="264" y="330">Akım: R·I² − V_oc·I + P = 0</text>
+      <text x="264" y="352">I = (V_oc − √(V_oc² − 4RP)) / 2R</text>
+      <rect class="elec" x="250" y="394" width="390" height="66" rx="5"/>
+      <text class="t" x="264" y="416">Sonuç</text>
+      <text x="264" y="438">V = V_oc − IR · ısı I²R · SOC −= I·η_c·dt/3600Q</text>
+      <rect class="elec" x="20" y="200" width="190" height="80" rx="5"/>
+      <text class="t" x="34" y="222">P_talep</text>
+      <text x="34" y="244">motor + yardımcı</text>
+      <text x="34" y="264">+ HVAC + paket(i−1)</text>
+      <path class="ar e" d="M210,48 H250" marker-end="url(#a6)"/>
+      <path class="ar e" d="M210,90 H230 V134 H250" marker-end="url(#a6)"/>
+      <path class="ar e" d="M445,76 V96" marker-end="url(#a6)"/>
+      <path class="ar e" d="M445,172 V192" marker-end="url(#a6)"/>
+      <path class="ar e" d="M445,288 V308" marker-end="url(#a6)"/>
+      <path class="ar e" d="M210,240 H230 V340 H250" marker-end="url(#a6)"/>
+      <text class="lb" x="235" y="300" text-anchor="middle">kırp</text>
+      <path class="ar e" d="M445,374 V394" marker-end="url(#a6)"/>
+    </svg></div>
+    <figcaption><b>Şekil 4.2 · Batarya elektrik çözümü.</b> Paket tek bir gerilim kaynağı ve seri direnç olarak modellenir. Coulomb verimi (0,995) yalnız şarjda uygulanır. Varsayılan paket 180s3p, 60 Ah hücre: 180 Ah, 657 V, 118,3 kWh. <span class="src">battery.py L135–259</span></figcaption></figure>
+  </div>
+
+  <figure class="w-l"><div class="scroll">
+  <svg viewBox="0 0 900 470" role="img" aria-label="Kabin ısı dengesi: zarf, taze hava, kapı, yolcu ve güneş ısı akışları kabin düğümüne girer; kontrolcü hedef sıcaklığa göre ısıtma ya da soğutma gücünü hesaplar, kapasiteye kırpar; elektrik gücü COP ile bulunur.">
+    <defs><marker id="a7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah h" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+    <rect class="heat" x="340" y="170" width="220" height="120" rx="60"/>
+    <text class="t" x="450" y="210" text-anchor="middle">Kabin düğümü</text>
+    <text x="450" y="234" text-anchor="middle">C = 62 m³·ρ·c_p + 350 kJ/K</text>
+    <text x="450" y="256" text-anchor="middle">dT/dt = (ΣQ + Q_H) / C</text>
+    <text class="note" x="450" y="276" text-anchor="middle">tek bölge, tek sıcaklık</text>
+
+    <rect class="bx" x="20" y="20" width="260" height="62" rx="5"/>
+    <text class="t" x="34" y="42">Zarf</text>
+    <text x="34" y="64">UA·(T_dış − T), UA ≈ 278 W/K</text>
+    <rect class="bx" x="20" y="102" width="260" height="62" rx="5"/>
+    <text class="t" x="34" y="124">Taze hava</text>
+    <text x="34" y="146">max(12·n, 300) m³/h · ρ·c_p·ΔT</text>
+    <rect class="bx" x="20" y="184" width="260" height="82" rx="5"/>
+    <text class="t" x="34" y="206">Kapılar (açıkken)</text>
+    <text x="34" y="228">V̇ = ⅓·0,6·W·H·√(g·H·|ΔT|/T̄)</text>
+    <text x="34" y="248">  × 3 kapı · ρ·c_p·ΔT</text>
+    <rect class="bx" x="20" y="286" width="260" height="62" rx="5"/>
+    <text class="t" x="34" y="308">Yolcular</text>
+    <text x="34" y="330">n · 80 W (duyulur ısı)</text>
+    <rect class="bx" x="20" y="368" width="260" height="62" rx="5"/>
+    <text class="t" x="34" y="390">Güneş</text>
+    <text x="34" y="412">26 m² cam · 0,45 · I · gölge</text>
+
+    <rect class="heat" x="620" y="20" width="260" height="130" rx="5"/>
+    <text class="t" x="634" y="42">Kontrolcü</text>
+    <text x="634" y="64">T &lt; 18 → hedef 18 (ısıt)</text>
+    <text x="634" y="84">T &gt; 24 → hedef 24 (soğut)</text>
+    <text x="634" y="104">arada: kapalı, fan da kapalı</text>
+    <text x="634" y="124">Q_H = −ΣQ + C·(hedef−T)/420 s</text>
+    <text x="634" y="142">kırp: −32 kW … +30 kW</text>
+    <rect class="heat" x="620" y="310" width="260" height="140" rx="5"/>
+    <text class="t" x="634" y="332">Elektrik gücü</text>
+    <text x="634" y="354">soğutma: |Q|/COP_s + 1,4 + 0,9 kW</text>
+    <text x="634" y="374">ısı pompası: Q/COP_ı + fanlar</text>
+    <text x="634" y="394">  COP_ı: −10 °C 1,7 · 0 °C 2,45</text>
+    <text x="634" y="414">  · 10 °C 3,4 (yalnız T_dış'a bağlı)</text>
+    <text x="634" y="434">−12 °C altı: dirençli, η 0,98</text>
+
+    <path class="ar h" d="M280,51 H310 V190 H340" marker-end="url(#a7)"/>
+    <path class="ar h" d="M280,133 H300 V205 H340" marker-end="url(#a7)"/>
+    <path class="ar h" d="M280,225 H340" marker-end="url(#a7)"/>
+    <path class="ar h" d="M280,317 H300 V250 H340" marker-end="url(#a7)"/>
+    <path class="ar h" d="M280,399 H310 V270 H340" marker-end="url(#a7)"/>
+    <path class="ar h" d="M560,200 H590 V85 H620" marker-end="url(#a7)"/>
+    <text class="lb" x="563" y="192">T, ΣQ</text>
+    <path class="ar h" d="M620,130 H600 V245 H560" marker-end="url(#a7)"/>
+    <text class="lb" x="606" y="236">Q_H</text>
+    <path class="ar h" d="M750,150 V310" marker-end="url(#a7)"/>
+    <text class="lb" x="757" y="236">Q_H</text>
+  </svg></div>
+  <figcaption><b>Şekil 4.3 · Kabin içi termal yönetim.</b> Kabin tek bir sıcaklık düğümüdür. 18–24 °C arasında sistem kapalıdır ve kabin serbest dolaşır. Kapı ısı kaybı yalnız kapıların açık kaldığı süre boyunca oluşur; durak sayısı ayrıca bir terim eklemez. Bataryayı şartlandıran enerji bu sistemden geçmez: modelde <b>yüksek voltaj ısıtma/soğutma</b> ayrı bir sistemdir (adım 13), iki kalem ayrı sayılır ve aynı enerji iki kez yazılmaz. <span class="src">hvac.py L141–301</span></figcaption>
+  </figure>
+</section>
+
+<!-- =============================================================== 5 -->
+<section id="alt">
+  <div class="shead"><span class="num">5</span><h2>Alt modellerin denklemleri</h2><p>Her kart bir bileşenin tam hesabını ve varsayılan değerlerini verir. Varsayılanlar, kütüphanedeki dosya ilgili alanı vermezse geçerlidir.</p></div>
+  <div class="cards">
+    <div class="card"><h3>5.1 Şasi ve yol yükü <span class="tag mech">mekanik</span></h3>
+      <div class="eq">Fiziksel:
+F_yuv  = m·g·cosθ·(c0 + c1·v)
+F_hava = ½·ρ·Cd·A_ön·(v + v_rüzgâr)²
+Coast-down (ölçülmüş A, B, C varsa):
+F_yuv  = A·(m/m_test) + B·v
+F_hava = C·(ρ/ρ_test)·(v + v_rüzgâr)²
+F_eğim = m·g·sinθ   (her zaman)
+v ≤ 0,01 m/s → F_yuv = F_hava = 0
+ρ = p / (287,058·(T + 273,15))</div>
+      <p class="defs"><b>Varsayılan:</b> boş 12 000 kg · yolcu 68 kg · c0 0,007 · Cd 0,62 · A 7,5 m² · r 0,478 m</p>
+      <p>Yüzey çarpanı k yalnız F_yuv'u ölçekler. Coast-down yolunda eğim açısı A terimine uygulanmaz.</p>
+      <div class="src">chassis.py L104–157 · units.py L35–42</div></div>
+
+    <div class="card"><h3>5.2 Aktarma organı <span class="tag mech">mekanik</span></h3>
+      <div class="eq">i = vites_oranı · 6,20
+η = 0,97 · 0,96 = 0,9312   (harita yoksa)
+ω_m = ω_tek · i
+çekiş:  T_m = (T + kayıp_dönme) / (i·η)
+rejen:  T_m = (T + kayıp_dönme) · η / i
+J_yansıyan = 0,35 · i²</div>
+      <p>Vites yalnız hıza göre ve adım başına en fazla bir kademe değişir: 13,9 m/s üstü yukarı, 11,1 m/s altı aşağı. Tek oranlı kutuda hep 0. vitestir.</p>
+      <div class="src">driveline.py L66–111</div></div>
+
+    <div class="card"><h3>5.3 Motor <span class="tag elec">elektrik</span></h3>
+      <div class="eq">ω_b = P_tepe / T_tepe
+T_max = T_tepe              (ω ≤ ω_b)
+T_max = T_tepe·(ω_b/ω)^n   (ω > ω_b), n = 1
+ω > ω_max → 0
+T_rejen = min(T_max, P_rejen_max/ω)
+η = harita(|ω|, |T|), kırp [0,30; 0,995]
+çekiş: P_el = P_mek / η
+rejen: P_el = P_mek · max(η − ceza, 0,30)</div>
+      <p><b>Sentetik harita</b> (ölçüm yoksa): tepe verim noktasındaki kayıp dört parçaya bölünür ve her noktada yeniden toplanır.</p>
+      <div class="eq">kayıp = k_cu·T² + k_fe·ω^1,5 + k_w·ω³ + P_sabit
+paylar: bakır 0,45 · demir 0,35
+        rüzgâr 0,10 · sabit 0,10
+η = P_mek / (P_mek + kayıp)</div>
+      <p class="defs"><b>Varsayılan:</b> 250 kW tepe · 160 kW sürekli · 2500 Nm · 1200 Nm sürekli · 314 rad/s · tepe verim 0,95 @ 1200 rpm, 900 Nm</p>
+      <div class="src">motor.py L65–129 · maps.py L56–77, L129–191</div></div>
+
+    <div class="card"><h3>5.4 Batarya elektrik modeli <span class="tag elec">elektrik</span></h3>
+      <div class="eq">Q = 60 Ah · 3 paralel = 180 Ah
+V_nom = 3,65 · 180 seri = 657 V
+E_nom = 118,3 kWh   kullanılabilir: ·(1 − 0,05)
+OCV(SOC): NMC eğrisi, 3,00 → 4,18 V/hücre
+R_hücre = 1,5 mΩ · f(SOC) · e^{20000/8,314·(1/T − 1/298,15)}
+          · (1/max(SOH, 0,5))²
+f(SOC): %0 2,20 · %10 1,30 · %50 1,00 · %100 1,30
+R_paket = R_hücre · 180 / 3</div>
+      <p>OCV yalnız SOC'ye bağlıdır, sıcaklığa bağlı değildir. Direnç −10 °C'de 25 °C'nin yaklaşık 2,9 katıdır.</p>
+      <div class="src">battery.py L46–259, L297–320</div></div>
+
+    <div class="card"><h3>5.5 Paket termal yönetimi <span class="tag heat">ısıl</span></h3>
+      <div class="eq">C_paket = 1800 kg · 1000 J/kgK
+q_çevre = 45 W/K · (T_dış − T_p)
+T_p &gt; 32 °C: q_s = min(12 kW, (T_p − 25)·1,2 kW/K)
+              P = q_s / 2,2
+T_p &lt; 10 °C: q_ı = min(6 kW, (25 − T_p)·0,4 kW/K)
+              P = q_ı / 1,0
+T_p += (I²R + q_çevre − q_s + q_ı)·dt / C_paket</div>
+      <p>Bu enerji raporda <b>yüksek voltaj ısıtma/soğutma</b> kalemidir; kabin içi termal yönetimden ayrı sayılır. 10–32 °C arasında sistem kapalıdır; açma kapama aralığı (histerezis) yoktur.</p>
+      <div class="src">battery.py L261–287</div></div>
+
+    <div class="card"><h3>5.6 Kabin içi termal yönetim <span class="tag heat">ısıl</span></h3>
+      <div class="eq">UA = (26·5,4 + 78·1,3) · 1,15 ≈ 278 W/K
+C  = 62·ρ(T_dış)·1006 + 350 000 J/K
+Q_taze = max(12·n, 300)/3600 · ρ·1006·ΔT
+Q_kapı = ⅓·0,6·1,2·1,95·√(g·1,95·|ΔT|/T̄_K)
+         · 3 · ρ·1006·ΔT       (kapı açıkken)
+Q_yolcu = 80·n    Q_güneş = 26·0,45·I·gölge
+COP_ısıtma(T_dış): −20 °C 1,10 … 20 °C 4,20
+COP_soğutma(T_dış): 15 °C 4,20 … 45 °C 2,00</div>
+      <p class="defs"><b>Varsayılan:</b> ısıtma 30 kW · soğutma 32 kW · fan 1,4 kW · kondenser fanı 0,9 kW · tepki süresi 420 s</p>
+      <div class="src">hvac.py L59–301</div></div>
+
+    <div class="card"><h3>5.7 Yardımcı sistemler <span class="tag heat">yardımcı</span></h3>
+      <div class="eq">P_AG = (1200 + aydınlatma) / 0,94
+  aydınlatma: gündüz 700 W, gece 1400 W
+P_direksiyon: v &lt; 1 m/s → 450 W
+              v &lt; 8,33 m/s → 1800 W
+              üstünde → 990 W
+görev_k = 0,06 + durak/saat · 95 kJ / (3600·5,5 kW)
+P_kompresör = 5,5 kW · min(görev_k, 0,95)</div>
+      <p>Durak/saat koşu başında bir kez hesaplanır, kompresör gücü koşu boyunca sabittir. Gündüz yardımcı yük durağanken yaklaşık 3,5 kW'dır.</p>
+      <div class="src">auxiliary.py L24–87</div></div>
+
+    <div class="card"><h3>5.8 Yaşlanma ve SOH (State of Health) <span class="tag data">veri</span></h3>
+      <div class="eq">Takvim: Q_t = 0,001·e^{−55000/R·(1/T − 1/298)}
+           · (SOC/0,5)^1,4 · gün^0,5
+Çevrim:  Q_ç = 0,0175/100 · e^{−Ea'/R·(1/T − 1/298)}
+           · (Ah/hücre)^0,55
+         Ea' = 31700 − 370,3·C_ort
+SOH = 1 − (Q_t + Q_ç)       ömür sonu: SOH &lt; 0,80</div>
+      <p>Bu model çözücünün içinde çalışmaz. Rapor, koşunun Ah akışını <code>günlük_km / koşu_km</code> ile ölçekler, 12 yıllık aylık bir eğri çizer ve SOH'un 0,80'in altına düştüğü yılı verir. Varsayımlar: yılda 340 iş günü, depo SOC 0,70, yıllık ortalama 15 °C.</p>
+      <div class="src">aging.py L62–179 · report.py L49–120</div></div>
+  </div>
+</section>
+
+<!-- =============================================================== 6 -->
+<section id="tamlik">
+  <div class="shead"><span class="num">6</span><h2>Veri tamlığı: enerji nereye gitti</h2><p>Hücreden çıkan her kilovatsaat ayrı bir kaleme yazılır; "diğer" adında bir kutu yoktur. Kalemlerin toplamı hücre enerjisiyle karşılaştırılır ve fark raporda kontrol satırı olarak görünür. Fark büyükse hesap zincirinde bir kayıt eksik demektir ve sonuçlara güvenilmemelidir.</p></div>
+  <figure class="w-xl"><div class="scroll">
+  <svg viewBox="0 0 1180 470" role="img" aria-label="Hücre enerjisi batarya iç kaybı ve terminal enerjisine ayrılır; terminal enerjisi motor, kabin içi termal yönetim, yüksek voltaj ısıtma ve yardımcılara; motor enerjisi motor kaybı, aktarma kaybı ve tekerleğe; tekerlek yuvarlanma, hava, eğim, atalet ve sürtünmeli frene ayrılır.">
+    <defs><marker id="a8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+    <rect class="hot" x="20" y="190" width="170" height="80" rx="5"/>
+    <text class="t" x="34" y="214">Hücre enerjisi</text>
+    <text x="34" y="236">Σ(P_bat + I²R)·dt</text>
+    <text class="note" x="34" y="256">cell_energy_kwh</text>
+
+    <rect class="elec" x="250" y="60" width="200" height="60" rx="5"/>
+    <text class="t" x="264" y="82">Batarya iç kaybı</text>
+    <text x="264" y="104">Σ I²R·dt</text>
+    <rect class="elec" x="250" y="270" width="200" height="60" rx="5"/>
+    <text class="t" x="264" y="292">Batarya terminali</text>
+    <text x="264" y="314">battery_energy_kwh</text>
+
+    <rect class="heat" x="510" y="20" width="200" height="50" rx="5"/>
+    <text class="t" x="524" y="50">Kabin içi termal yönetim</text>
+    <rect class="heat" x="510" y="84" width="200" height="50" rx="5"/>
+    <text class="t" x="524" y="114">Yüksek voltaj ısıtma/soğutma</text>
+    <rect class="heat" x="510" y="148" width="200" height="50" rx="5"/>
+    <text class="t" x="524" y="178">Yardımcı sistemler</text>
+    <rect class="elec" x="510" y="270" width="200" height="60" rx="5"/>
+    <text class="t" x="524" y="292">Motor elektrik</text>
+    <text x="524" y="314">çekiş − rejen</text>
+    <rect class="data" x="510" y="390" width="200" height="60" rx="5"/>
+    <text class="t" x="524" y="412">Karşılanamayan talep</text>
+    <text x="524" y="434">eksi işaretle düşülür</text>
+
+    <rect class="elec" x="770" y="200" width="170" height="50" rx="5"/>
+    <text class="t" x="784" y="230">Motor + invertör kaybı</text>
+    <rect class="mech" x="770" y="264" width="170" height="50" rx="5"/>
+    <text class="t" x="784" y="294">Aktarma organı kaybı</text>
+    <rect class="mech" x="770" y="328" width="170" height="50" rx="5"/>
+    <text class="t" x="784" y="358">Tekerlek</text>
+
+    <rect class="mech" x="990" y="210" width="170" height="40" rx="5"/>
+    <text class="t" x="1004" y="235">Yuvarlanma (yüzey dahil)</text>
+    <rect class="mech" x="990" y="258" width="170" height="40" rx="5"/>
+    <text class="t" x="1004" y="283">Hava direnci</text>
+    <rect class="mech" x="990" y="306" width="170" height="40" rx="5"/>
+    <text class="t" x="1004" y="331">Eğim (net, işaretli)</text>
+    <rect class="mech" x="990" y="354" width="170" height="40" rx="5"/>
+    <text class="t" x="1004" y="379">Atalet (net, işaretli)</text>
+    <rect class="heat" x="990" y="402" width="170" height="54" rx="5"/>
+    <text class="t" x="1004" y="424">Sürtünmeli fren</text>
+    <text x="1004" y="444">+ kabul edilmeyen rejen</text>
+
+    <path class="ar" d="M190,220 H220 V90 H250" marker-end="url(#a8)"/>
+    <path class="ar" d="M190,250 H220 V300 H250" marker-end="url(#a8)"/>
+    <path class="ar" d="M450,300 H480 V45 H510" marker-end="url(#a8)"/>
+    <path class="ar" d="M480,109 H510" marker-end="url(#a8)"/>
+    <path class="ar" d="M480,173 H510" marker-end="url(#a8)"/>
+    <path class="ar" d="M480,300 H510" marker-end="url(#a8)"/>
+    <path class="ar dash" d="M480,300 V420 H510" marker-end="url(#a8)"/>
+    <path class="ar" d="M710,300 H740 V225 H770" marker-end="url(#a8)"/>
+    <path class="ar" d="M740,289 H770" marker-end="url(#a8)"/>
+    <path class="ar" d="M740,300 V353 H770" marker-end="url(#a8)"/>
+    <path class="ar" d="M940,353 H965 V230 H990" marker-end="url(#a8)"/>
+    <path class="ar" d="M965,278 H990" marker-end="url(#a8)"/>
+    <path class="ar" d="M965,326 H990" marker-end="url(#a8)"/>
+    <path class="ar" d="M965,374 H990" marker-end="url(#a8)"/>
+    <path class="ar" d="M965,353 V429 H990" marker-end="url(#a8)"/>
+    <text class="lb" x="590" y="240" text-anchor="middle">kontrol: hücre − Σ kalemler ≈ 0</text>
+  </svg></div>
+  <figcaption><b>Her kalem hesaplanır, hiçbiri tahminle doldurulmaz.</b> Tekerlekteki dört kuvvet kalemi, sürtünmeli fren, aktarma ve motor kayıpları birlikte motor elektrik gücüne eşitlenir; buna yardımcı yükler eklenip karşılanamayan talep düşülünce batarya terminali çıkar; batarya iç kaybı eklenince hücre enerjisi. Raporda her sayının yanında bileşen verisinin ölçülmüş mü (<code>validated: true</code>) yoksa kabul mü olduğu görünür; doğrulanmamış bileşen varsa koşu uyarı verir. <span class="src">simulator.py L101–125, L356–405</span></figcaption>
+  </figure>
+  <div class="tw"><table class="t">
+    <thead><tr><th>Uyarı</th><th>Koşul</th><th>Anlamı</th></tr></thead>
+    <tbody>
+      <tr><td>Kabin sistemi tam kapasitede</td><td class="n">doygun adım &gt; %2</td><td>Kabin ayar sıcaklığına ulaşamadı; daha büyük bir sistem daha çok enerji harcardı.</td></tr>
+      <tr><td>Motor sürekli torkun üstünde</td><td class="n">&gt; %10 adım</td><td>Isıl sınırlar tedarikçiyle kontrol edilmeli.</td></tr>
+      <tr><td>Rejen reddedildi</td><td class="n">kayıp &gt; %2 enerji</td><td>Soğuk paket ya da yüksek SOC; enerji sürtünmeli frende ısıya döndü.</td></tr>
+      <tr><td>Alt SOC sınırı</td><td class="n">son SOC ≤ 0,05</td><td>Batarya koşu içinde boşaldı.</td></tr>
+      <tr><td>Doğrulanmamış veri</td><td class="n">validated: false</td><td>Sonuç yol göstericidir, savunulabilir değildir.</td></tr>
+    </tbody></table></div>
+</section>
+
+<!-- =============================================================== 7 -->
+<section id="uygulama">
+  <div class="shead"><span class="num">7</span><h2>Uygulama katmanı</h2><p>Arayüz bir yerel Flask sunucusuyla konuşur. Her istek kütüphaneyi diskten yeniden okur; dosyada yapılan değişiklik bir sonraki istekte geçerlidir. Sunucu hesap yapmaz, çekirdek modülleri çağırır.</p></div>
+  <figure class="w-xl"><div class="scroll">
+  <svg viewBox="0 0 1180 520" role="img" aria-label="Tarayıcı sayfaları, Flask uç noktaları, çekirdek modüller ve kütüphane dosyaları dört katman olarak gösterilir; simülasyon isteği çevrim üretimi, çözücü, rapor ve oynatma adımlarından geçer.">
+    <defs><marker id="a9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+    <text class="tl c-muted" x="20" y="24">Tarayıcı</text>
+    <text class="tl c-muted" x="300" y="24">Sunucu (127.0.0.1:8765)</text>
+    <text class="tl c-muted" x="640" y="24">Çekirdek</text>
+    <text class="tl c-muted" x="950" y="24">Disk</text>
+
+    <rect class="bx" x="20" y="40" width="230" height="56" rx="5"/><text class="t" x="34" y="62">Kütüphane, bileşen, araç</text><text x="34" y="84">formlar, harita önizleme</text>
+    <rect class="bx" x="20" y="108" width="230" height="56" rx="5"/><text class="t" x="34" y="130">Veri yükle</text><text x="34" y="152">harita, eğri, güzergâh, log</text>
+    <rect class="hot" x="20" y="176" width="230" height="74" rx="5"/><text class="t" x="34" y="198">Simülasyon</text><text x="34" y="220">3B oynatma, canlı veriler</text><text x="34" y="238">tarama, trafik, Maraton</text>
+    <rect class="bx" x="20" y="262" width="230" height="74" rx="5"/><text class="t" x="34" y="284">Serbest sürüş</text><text x="34" y="306">test yolu · halk otobüsü</text><text x="34" y="324">canlı fizik tarayıcıda</text>
+    <rect class="bx" x="20" y="348" width="230" height="56" rx="5"/><text class="t" x="34" y="370">Doğrulama</text><text x="34" y="392">ölçüm ↔ model grafiği</text>
+
+    <rect class="bx" x="300" y="40" width="290" height="56" rx="5"/><text class="t" x="314" y="62">/api/overview · component · vehicle</text><text x="314" y="84">kaydetmeden önce yükleyip dener</text>
+    <rect class="bx" x="300" y="108" width="290" height="56" rx="5"/><text class="t" x="314" y="130">/api/import/*</text><text x="314" y="152">biçim tanıma, birim, yön</text>
+    <rect class="hot" x="300" y="176" width="290" height="74" rx="5"/><text class="t" x="314" y="198">/api/simulate</text><text x="314" y="220">çevrim → simulate → rapor</text><text x="314" y="238">+ timeline + olaylar + meta</text>
+    <rect class="bx" x="300" y="262" width="290" height="74" rx="5"/><text class="t" x="314" y="284">/api/drive/setup · simulate</text><text x="314" y="306">araç parametreleri, ısıl ısınma</text><text x="314" y="324">kayıttan asıl model</text>
+    <rect class="bx" x="300" y="348" width="290" height="56" rx="5"/><text class="t" x="314" y="370">/api/validate · sweep · maraton</text><text x="314" y="392">traffic_compare · /report/&lt;id&gt;</text>
+
+    <rect class="data" x="640" y="40" width="260" height="56" rx="5"/><text class="t" x="654" y="62">library.py · schema.py</text><text x="654" y="84">okuma, form ↔ YAML</text>
+    <rect class="data" x="640" y="108" width="260" height="56" rx="5"/><text class="t" x="654" y="130">importers.py</text><text x="654" y="152">Excel, CSV, GPX, log</text>
+    <rect class="hot" x="640" y="176" width="260" height="74" rx="5"/><text class="t" x="654" y="198">cycle.py · traffic.py</text><text x="654" y="220">simulator.py · components/</text><text x="654" y="238">report.py · playback.py</text>
+    <rect class="data" x="640" y="262" width="260" height="74" rx="5"/><text class="t" x="654" y="284">validate.py · maraton.py</text><text x="654" y="306">ölçüm karşılaştırması,</text><text x="654" y="324">istatistik modelleri</text>
+
+    <rect class="data" x="950" y="40" width="210" height="160" rx="5"/><text class="t" x="964" y="62">library/</text><text x="964" y="84">vehicle/ chassis/ motor/</text><text x="964" y="102">motor/maps/ battery/</text><text x="964" y="120">hvac/ auxiliary/ aging/</text><text x="964" y="138">driveline/ cycle/ route/</text><text x="964" y="160">.cop_kutusu/ (silinenler)</text><text class="note" x="964" y="184">kullanımdaki bileşen silinmez</text>
+    <rect class="data" x="950" y="220" width="210" height="80" rx="5"/><text class="t" x="964" y="242">Bellek önbelleği</text><text x="964" y="264">yüklemeler: 24</text><text x="964" y="282">raporlar: 12 (en eski düşer)</text>
+
+    <path class="ar" d="M250,68 H300" marker-end="url(#a9)"/><path class="ar" d="M250,136 H300" marker-end="url(#a9)"/>
+    <path class="ar" d="M250,213 H300" marker-end="url(#a9)"/><path class="ar" d="M250,299 H300" marker-end="url(#a9)"/><path class="ar" d="M250,376 H300" marker-end="url(#a9)"/>
+    <path class="ar" d="M590,68 H640" marker-end="url(#a9)"/><path class="ar" d="M590,136 H640" marker-end="url(#a9)"/>
+    <path class="ar" d="M590,213 H640" marker-end="url(#a9)"/><path class="ar" d="M590,299 H640" marker-end="url(#a9)"/>
+    <path class="ar" d="M590,376 H615 V320 H640" marker-end="url(#a9)"/>
+    <path class="ar" d="M900,68 H950" marker-end="url(#a9)"/>
+    <path class="ar" d="M900,213 H925 V260 H950" marker-end="url(#a9)"/>
+    <text class="lb" x="928" y="246">rapor</text>
+
+    <rect class="bx" x="20" y="430" width="1140" height="74" rx="5"/>
+    <text class="t" x="34" y="452">/api/simulate sırası</text>
+    <text x="34" y="474">1 aracı yükle → 2 görevi kur (güzergâh: güce bağlı sürücü + trafik; çevrim: yolcu + tekrar) → 3 ortam (sıcaklık, güneş, gece) → 4 simulate()</text>
+    <text x="34" y="494">→ 5 HTML raporu önbelleğe al → 6 timeline: 2400 noktaya seyrelt, kümülatif enerjiler, rakım = Σ sinθ·Δd → 7 olaylar: durak, yokuş &gt; %5, rejen reddi, ışık, sıkışma, SOC %5</text>
+  </svg></div>
+  <figcaption><b>3B sahne yalnız oynatır.</b> Zaman çizelgesi saniyelik değerleri taşır; sahne her karede iki örnek arasını doğrusal ara değerle doldurur. Otobüsün yolda çizdiği virajlar temsilidir; güzergâh dosyası harita koordinatı değil mesafe ve rakım içerir. Kırmızı ışık kuyruğundaki araç sayısı ve kalkış anı, modelin <code>meta</code> kaydından aynen alınır. <span class="src">server.py L299–334 · playback.py L56–177</span></figcaption>
+  </figure>
+</section>
+
+<!-- =============================================================== 8 -->
+<section id="surus">
+  <div class="shead"><span class="num">8</span><h2>Serbest sürüş: canlı tahmin ve asıl model</h2><p>Klavyeyle sürüşte otobüsü tarayıcıdaki basit bir model hareket ettirir; ekrandaki enerji sayıları tahmindir. Sürüş 0,5 saniyede bir kaydedilir ve "Sürüşü modelde hesapla" ile asıl çözücüye gönderilir. Kesin sonuç her zaman o çözücüden gelir.</p></div>
+  <figure class="w-xl"><div class="scroll">
+  <svg viewBox="0 0 1180 560" role="img" aria-label="Solda tarayıcıdaki canlı model, sağda sunucudaki asıl model; aralarında kayıt akar. Canlı model sabit verim ve sabit ısıl yük kullanır; asıl model harita, batarya akım çözümü ve ısıl modelleri kullanır.">
+    <defs><marker id="b1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah a" d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="b1d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+    <text class="tl c-muted" x="20" y="24">Tarayıcı — canlı, 120 adım/s</text>
+    <text class="tl c-muted" x="700" y="24">Sunucu — asıl model, 1 s</text>
+
+    <rect class="data" x="20" y="40" width="220" height="92" rx="5"/>
+    <text class="t" x="34" y="62">Girdi</text><text x="34" y="84">W/S pedallar, A/D direksiyon</text><text x="34" y="102">G ileri/geri, E kapılar</text><text class="note" x="34" y="122">pedallar yumuşak açılıp kapanır</text>
+    <rect class="mech" x="270" y="40" width="380" height="132" rx="5"/>
+    <text class="t" x="284" y="62">Kuvvet dengesi (tek boyut)</text>
+    <text x="284" y="84">F_çekiş = gaz · T_max(ω)·i·η / r  (paket sınırlı)</text>
+    <text x="284" y="104">F_fren = fren · m · 4,5 m/s²  (+ kapı freni)</text>
+    <text x="284" y="124">rejen = min(F_fren, motor, şarj sınırı)</text>
+    <text x="284" y="144">a = (F_çekiş − F_rej − F_sürt − F_yuv − F_hava − F_eğim)/m</text>
+    <text x="284" y="164">geri viteste en fazla 10 km/h</text>
+    <rect class="mech" x="270" y="190" width="380" height="76" rx="5"/>
+    <text class="t" x="284" y="212">Direksiyon (bisiklet modeli)</text>
+    <text x="284" y="234">δ = direksiyon · kilit / (1 + |v|/8)</text>
+    <text x="284" y="254">ψ += v/6 m · tanδ · dt  ;  x, z += v·(cosψ, sinψ)·dt</text>
+    <rect class="data" x="270" y="284" width="380" height="96" rx="5"/>
+    <text class="t" x="284" y="306">Dünya (test yolu ya da şehir)</text>
+    <text x="284" y="328">eğim(x, z, ψ) · yüzey k(x, z)</text>
+    <text x="284" y="348">tekerlek kaldırımda → yavaşla, ceza</text>
+    <text x="284" y="368">gövde binada → geri al, dur</text>
+    <rect class="elec" x="270" y="398" width="380" height="96" rx="5"/>
+    <text class="t" x="284" y="420">Tahmini güç</text>
+    <text x="284" y="442">η_motor = tepe verim · 0,96 (sabit)</text>
+    <text x="284" y="462">P_HVAC, P_paket: sunucudan, sabit</text>
+    <text x="284" y="482">SOC −= P·dt / E_nominal</text>
+
+    <rect class="hot" x="20" y="410" width="220" height="130" rx="5"/>
+    <text class="t" x="34" y="432">Kayıt (her 0,5 s)</text>
+    <text x="34" y="454">t · |v| · eğim · yüzey k</text>
+    <text x="34" y="472">kapı · yolcu sayısı</text>
+    <text class="note" x="34" y="496">geri hareket: hız pozitif,</text>
+    <text class="note" x="34" y="512">eğim hareket yönüne göre</text>
+    <text class="note" x="34" y="528">aynı kuvvet, aynı enerji</text>
+
+    <rect class="bx" x="700" y="40" width="460" height="132" rx="5"/>
+    <text class="t" x="714" y="62">/api/drive/setup (sürüşten önce)</text>
+    <text x="714" y="84">aracı yükle, oturum ayarlarını bir kopyaya uygula</text>
+    <text x="714" y="104">900 s sabit 30 km/h ısınma koşusu → son 300 s ortalaması:</text>
+    <text x="714" y="124">  P_HVAC, P_paket, T_kabin, T_paket</text>
+    <text x="714" y="144">yardımcı yük tablosu (8 hız), motor ve batarya sınırları</text>
+    <text x="714" y="164">yüzey çarpanları: 0,95 … 2,30</text>
+    <rect class="hot" x="700" y="300" width="460" height="132" rx="5"/>
+    <text class="t" x="714" y="322">/api/drive/simulate (sürüşten sonra)</text>
+    <text x="714" y="344">kayıt → DriveCycle (t, v, θ, kapı, yolcu, yüzey k)</text>
+    <text x="714" y="364">→ simulate(): Bölüm 4'ün tamamı</text>
+    <text x="714" y="384">  motor haritası, batarya akım çözümü, kabin ve paket ısısı</text>
+    <text x="714" y="404">→ kWh/km, kalem kalem enerji, uyarılar, tam rapor</text>
+    <text class="note" x="714" y="424">raporda araç adı "sürüş ayarlı" olarak görünür</text>
+
+    <path class="ar dash" d="M700,106 H675 V470 H650" marker-end="url(#b1d)"/>
+    <text class="lb" x="681" y="290" transform="rotate(-90 681 290)" text-anchor="middle">parametreler</text>
+    <path class="ar" d="M240,86 H270" marker-end="url(#b1d)"/>
+    <path class="ar" d="M460,172 V190" marker-end="url(#b1d)"/>
+    <path class="ar" d="M460,266 V284" marker-end="url(#b1d)"/>
+    <path class="ar" d="M460,380 V398" marker-end="url(#b1d)"/>
+    <path class="ar" d="M270,446 H240" marker-end="url(#b1d)"/>
+    <path class="ar a" d="M130,540 V552 H690 V366 H700" marker-end="url(#b1)"/>
+    <text class="lb" x="420" y="548" text-anchor="middle">Sürüşü modelde hesapla</text>
+  </svg></div>
+  <figcaption><b>Neden iki model.</b> Tarayıcı saniyede 120 kez hesap yapmak zorunda; harita okuması, batarya akım çözümü ve ısıl modeller bu hızda çalıştırılmaz. Bu yüzden canlı model sabit verim ve sabit ısıl yük kullanır. Kayıt aynı aracın aynı ayarlarıyla asıl modele gider; kısa bir deneme sürüşünde canlı tahmin 0,40 kWh, model 0,43 kWh buldu. <span class="src">drivephys.js · server.py L337–420</span></figcaption>
+  </figure>
+
+  <figure class="w-xl"><div class="scroll">
+  <svg viewBox="0 0 1180 390" role="img" aria-label="Halk otobüsü görevi durum makinesi: sürüş, durakta, yolcu alımı, kapı kapatma; terminalde görev biter. Cezalar her durumdan puan düşürür.">
+    <defs><marker id="b2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+    <rect class="bx" x="20" y="60" width="210" height="96" rx="48"/>
+    <text class="t" x="125" y="96" text-anchor="middle">Sürüş</text>
+    <text x="125" y="118" text-anchor="middle">yön tarifi: BFS,</text>
+    <text x="125" y="136" text-anchor="middle">geri dönüş yok</text>
+    <rect class="bx" x="300" y="60" width="210" height="96" rx="48"/>
+    <text class="t" x="405" y="96" text-anchor="middle">Durakta</text>
+    <text x="405" y="118" text-anchor="middle">kapı ±8 m, sağda</text>
+    <text x="405" y="136" text-anchor="middle">3,4–8,2 m, v &lt; 0,3</text>
+    <rect class="hot" x="580" y="60" width="230" height="96" rx="48"/>
+    <text class="t" x="695" y="96" text-anchor="middle">Yolcu alımı</text>
+    <text x="695" y="118" text-anchor="middle">inen 1 kişi / 1,1 s</text>
+    <text x="695" y="136" text-anchor="middle">binen 1 kişi / 2,0 s</text>
+    <rect class="bx" x="880" y="60" width="140" height="96" rx="48"/>
+    <text class="t" x="950" y="104" text-anchor="middle">Kapıyı kapat</text>
+    <text x="950" y="126" text-anchor="middle">(E)</text>
+    <rect class="hot" x="1050" y="60" width="110" height="96" rx="48"/>
+    <text class="t" x="1105" y="104" text-anchor="middle">Bitti</text>
+    <text x="1105" y="126" text-anchor="middle">terminal</text>
+    <path class="ar" d="M230,108 H300" marker-end="url(#b2)"/><text class="lb" x="265" y="100" text-anchor="middle">durdu</text>
+    <path class="ar" d="M510,108 H580" marker-end="url(#b2)"/><text class="lb" x="545" y="100" text-anchor="middle">kapı açık</text>
+    <path class="ar" d="M810,108 H880" marker-end="url(#b2)"/><text class="lb" x="845" y="100" text-anchor="middle">tamam</text>
+    <path class="ar" d="M950,60 V36 H125 V60" marker-end="url(#b2)"/><text class="lb" x="540" y="30" text-anchor="middle">kapandı → sonraki durak</text>
+    <path class="ar" d="M770,150 C840,226 1040,226 1100,158" marker-end="url(#b2)"/><text class="lb" x="935" y="222" text-anchor="middle">son durak: herkes iner</text>
+    <path class="ar dash" d="M695,156 V190 H125 V156" marker-end="url(#b2)"/><text class="lb" x="410" y="206" text-anchor="middle">erken kapandı: kalan yolcu durakta kalır (−5)</text>
+
+    <rect class="data" x="20" y="240" width="1140" height="130" rx="5"/>
+    <text class="t" x="34" y="262">Puan = 100 − cezalar</text>
+    <text x="34" y="286">kaçırılan durak −15 (kapı noktası durağı 22 m geçti) · çarpışma −20 (3 s'de bir sayılır) · kırmızı ışık −10 (ön uç dur çizgisini kırmızıda geçti, v &gt; 0,5)</text>
+    <text x="34" y="306">durak dışında kapı −5 · durakta yolcu bırakma −5 · kaldırıma çıkma −2 (tekerlek yol dışında, 4 s'de bir)</text>
+    <text x="34" y="330">Şehir: 6×6 kavşak, 130 m aralık, 4 şerit, köşe yarıçapı 9 m, arazi h(x,z) tepe · ışık 44 s: doğu-batı yeşil 0–18 s, kuzey-güney 22–40 s, 1 s tümü kırmızı</text>
+    <text x="34" y="350">Araçlar: 45 m ileri bakış, 3,5 m/s² frenleme, kırmızıda durur, düz ya da sağa döner · yolcu sayısı kütleye ve modele giden kayda yazılır</text>
+  </svg></div>
+  <figcaption><b>Görev mantığı enerji hesabını değiştirmez, girdisini değiştirir.</b> Duraklarda inen ve binen yolcu sayısı canlı modeldeki kütleyi anında günceller ve kayda yolcu dizisi olarak girer; asıl model de her saniyenin yolcu sayısıyla hesaplar. Işık zamanlaması (44 s) güzergâh simülasyonundaki ışıklardan (90 s) ayrıdır. <span class="src">citymap.js</span></figcaption>
+  </figure>
+</section>
+
+<!-- =============================================================== 9 -->
+<section id="sinir">
+  <div class="shead"><span class="num">9</span><h2>Kodda bulunan basitleştirmeler</h2><p>Kodu okurken görülen, sonucu etkileyebilecek noktalar. Bunlar hata olmak zorunda değil; çoğu bilinçli bir sadeleştirme. Ama sonucu yorumlarken bilinmeleri gerekir.</p></div>
+  <div class="limits">
+    <div class="lim"><b>SOH koşu boyunca sabit</b><p>Yaşlanma modeli çözücünün içinde çalışmaz; SOH bir girdidir (varsayılan 1,0). Rapordaki ömür projeksiyonu simülasyonun ortalama SOC'si yerine depo SOC'si 0,70 ve dış sıcaklık yerine yıllık 15 °C kullanır.</p><span class="src">simulator.py L137 · report.py L112–120</span></div>
+    <div class="lim"><b>Isı pompası COP'u yalnız dış sıcaklığa bağlı</b><p>Kabin sıcaklığı COP'a girmez. Isıtma kapasitesi her sıcaklıkta 30 kW'tır, soğukta düşmez. −12 °C altında ısı pompalı sistem sessizce dirençli ısıtıcı gibi hesaplanır.</p><span class="src">hvac.py L141–152, L289–301</span></div>
+    <div class="lim"><b>18–24 °C arasında fan da kapalı</b><p>Ölü bantta HVAC elektrik gücü sıfırdır; taze hava fanı dahil. Gerçek araçta havalandırma sürer.</p><span class="src">hvac.py L239–244, L278–283</span></div>
+    <div class="lim"><b>Kullanılmayan iki ayar</b><p><code>recirculation</code> (hava geri dolaşımı) ve <code>doors_open_fraction</code> kabin modelinde var, ama çözücü hiç vermez: hep 0 ve 1. Kapı açıkken üç kapı birden açık sayılır.</p><span class="src">hvac.py L216, L230 · simulator.py L276–280</span></div>
+    <div class="lim"><b>Kompresör durak anına bağlı değil</b><p>Hava kompresörü gücü koşunun ortalama durak/saat değerinden bir kez hesaplanır ve koşu boyunca sabittir.</p><span class="src">simulator.py L169 · auxiliary.py L74–79</span></div>
+    <div class="lim"><b>Kabin hava yoğunluğu basıncı görmez</b><p>Yol yükünde rakım/basınç hesaba girer, kabin ısı hesabında 101 325 Pa sabit kullanılır.</p><span class="src">hvac.py L162–175</span></div>
+    <div class="lim"><b>Paket termal gücü bir adım gecikmeli</b><p>Bilinçli bir seçim; son adımın paket termal gücü hiç sayılmaz. 1 s adımda etkisi küçüktür.</p><span class="src">simulator.py L285–303</span></div>
+    <div class="lim"><b>OCV sıcaklığa bağlı değil</b><p>Modül açıklaması sıcaklıktan söz etse de OCV yalnız SOC'ye bağlıdır. Açıklamadaki "−10 °C'de direnç ~2,5 kat" ifadesi hesapla 2,9 kat çıkar.</p><span class="src">battery.py L160–177</span></div>
+    <div class="lim"><b>Çevrim yaşlanmasında C oranı 25 °C'de etkisiz</b><p>Formül oranlı (Arrhenius oranı) yazıldığı için C oranı yalnız sıcaklık duyarlılığını değiştirir; 25 °C'de hiç etkisi yoktur.</p><span class="src">aging.py L115–125</span></div>
+    <div class="lim"><b>Sürekli tork kontrolü düz</b><p>"Sürekli torkun üstünde" uyarısı hıza bağlı sürekli zarfı değil, sabit 1200 Nm'yi karşılaştırır.</p><span class="src">simulator.py L263–264</span></div>
+    <div class="lim"><b>Arayüz rüzgâr ve basınç vermez</b><p>Arayüzden yapılan koşularda rüzgâr, basınç ve gölge varsayılandır. Rüzgârı yalnız komut satırı (<code>--headwind</code>) geçirir; arka rüzgârda hava direnci işaretini kaybeder.</p><span class="src">server.py _env_from · chassis.py L133</span></div>
+    <div class="lim"><b>Maraton güzergâhı güç sınırsız sürer</b><p>Maraton isteğinde güzergâh araç verilmeden sürülür; hızlanma 1,0 m/s² sabittir. Maraton ayrıca enerji çözücüsünü kullanmaz.</p><span class="src">server.py L497 · cli.py L163</span></div>
+    <div class="lim"><b>Tarama tek aracın izini kullanır</b><p>Sıcaklık taramasında güzergâh izi ilk araçla bir kez üretilir, diğer araçlar aynı izi sürer. Güneş yalnız 25 °C ve üstünde eklenir.</p><span class="src">server.py L431–454</span></div>
+    <div class="lim"><b>Canlı SOC nominal kapasiteyle</b><p>Serbest sürüşteki canlı SOC, kullanılabilir değil nominal kWh üzerinden düşer; kesin değer modelde hesaplanır.</p><span class="src">drivephys.js</span></div>
+    <div class="lim"><b>Tekrarda karar kaydı düşer</b><p><code>DriveCycle.repeat()</code> trafik kararlarını (<code>meta</code>) taşımaz. Standart çevrimlerde meta zaten boştur; güzergâhlar tekrar yerine tur olarak sürülür.</p><span class="src">cycle.py L223–227</span></div>
+  </div>
+</section>
+
+<footer>
+  <span>Kaynak: temsasim deposu, <code>main</code> dalı. Formüller ve varsayılan değerler doğrudan koddan alındı; satır numaraları ilgili dosyaya aittir.</span>
+  <span>Varsayılan değerler, kütüphanedeki bileşen dosyası o alanı vermediğinde geçerlidir; gerçek araç dosyası farklı değerler içerebilir.</span>
+</footer>
+</div>
+</body>
+</html>

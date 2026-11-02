@@ -1,0 +1,47 @@
+kind: line
+code: ADN-Ö1
+name: Otogar – Çukurova Üniversitesi (ÖRNEK)
+example: true
+route: route/adana_ornek_hat.csv
+layover_min: 8
+notes: >
+  ÖRNEK VERİ. Güzergâh, rakım, duraklar ve yolcu sayıları temsilidir; Adana ölçümü
+  değildir. Gerçek GTFS / AVL / bilet verisi geldiğinde bu dosya onunla değiştirilir.
+
+# stops in outbound order; board = peak-hour boardings per hour outbound, board_in = inbound
+stops:
+  - {name: "Otogar", board: 110, board_in: 15}
+  - {name: "Sanayi Sitesi", board: 25, board_in: 20}
+  - {name: "Hastane", board: 45, board_in: 60}
+  - {name: "Yeni Cami", board: 30, board_in: 35}
+  - {name: "Çarşı", board: 80, board_in: 120}
+  - {name: "Büyüksaat", board: 40, board_in: 60}
+  - {name: "5 Ocak Meydanı", board: 90, board_in: 130}
+  - {name: "Vali Konağı", board: 25, board_in: 30}
+  - {name: "Atatürk Parkı", board: 35, board_in: 45}
+  - {name: "Adliye", board: 20, board_in: 40}
+  - {name: "Stadyum", board: 30, board_in: 25}
+  - {name: "Gazipaşa", board: 35, board_in: 40}
+  - {name: "Belediye Evleri", board: 40, board_in: 35}
+  - {name: "Toros Mahallesi", board: 45, board_in: 30}
+  - {name: "Turgut Özal Bulvarı", board: 30, board_in: 25}
+  - {name: "Mahfesığmaz", board: 40, board_in: 30}
+  - {name: "Huzurevleri", board: 35, board_in: 25}
+  - {name: "Güzelyalı", board: 45, board_in: 30}
+  - {name: "Beyazevler", board: 25, board_in: 20}
+  - {name: "Yurtlar", board: 20, board_in: 60}
+  - {name: "Kampüs Kapısı", board: 15, board_in: 70}
+  - {name: "Balcalı Hastanesi", board: 10, board_in: 50}
+  - {name: "Fakülteler", board: 5, board_in: 45}
+  - {name: "Çukurova Üniversitesi", board: 0, board_in: 120}
+
+# hour bands: headway in minutes, traffic level, demand relative to the peak
+timetable:
+  - {from: 6, to: 7, headway_min: 20, traffic: akici, demand: 0.35}
+  - {from: 7, to: 9, headway_min: 8, traffic: yogun, demand: 1.0}
+  - {from: 9, to: 12, headway_min: 12, traffic: orta, demand: 0.6}
+  - {from: 12, to: 15, headway_min: 12, traffic: orta, demand: 0.65}
+  - {from: 15, to: 17, headway_min: 10, traffic: orta, demand: 0.75}
+  - {from: 17, to: 19, headway_min: 8, traffic: yogun, demand: 0.95}
+  - {from: 19, to: 21, headway_min: 15, traffic: akici, demand: 0.45}
+  - {from: 21, to: 23, headway_min: 30, traffic: akici, demand: 0.2}

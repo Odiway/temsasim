@@ -31,6 +31,7 @@ from ..importers import (LOG_ROLES_TR, build_log, detect_log_columns, import_cur
                          import_map, import_route, read_table)
 from ..library import Library, LibraryError
 from ..messages import localise
+from ..network import Line, line_summary, list_lines, simulate_line
 from .playback import events as play_events, profile_from_cycle, profile_from_route, timeline
 from ..report import render_report
 from ..schema import (COMPONENT_KINDS, KIND_LABELS_TR, VEHICLE_SLOTS, component_values,
@@ -418,6 +419,44 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                 "grade_kwh", "friction_brake_kwh", "motor_loss_kwh", "driveline_loss_kwh",
                 "battery_loss_kwh")},
             "achievable": result.achievable, "warnings": localise(result.warnings, "tr")})
+
+    # ------------------------------------------------------------ lines / timetables
+    @app.get("/api/network/lines")
+    def network_lines():
+        L = lib()
+        out = []
+        for p in list_lines(L.root):
+            try:
+                out.append({"stem": p.stem, **line_summary(Line.from_yaml(p, L.root))})
+            except Exception as e:                                  # a broken file must not hide the others
+                out.append({"stem": p.stem, "error": str(e)})
+        return jsonify({"lines": out})
+
+    @app.post("/api/network/simulate")
+    def network_simulate():
+        """One line for one day: representative trip per hour band and direction.
+
+        Body: line (stem), vehicle, ambient/solar/night, optional what-if:
+        headways {band index: minutes}, traffic {band index: level},
+        demand_scale, capacity."""
+        b = request.get_json(force=True)
+        L = lib()
+        line = Line.from_yaml(L.root / "line" / f"{b['line']}.yaml", L.root)
+        veh = _tuned(L.load_vehicle(b["vehicle"]), b.get("tune"))
+        env = _env_from(b)
+        headways = {int(k): float(v) for k, v in (b.get("headways") or {}).items() if v not in (None, "")}
+        traffic = {int(k): str(v) for k, v in (b.get("traffic") or {}).items() if v}
+        for k, v in headways.items():
+            if not (1.0 <= v <= 120.0):
+                raise ValueError(f"Sefer aralığı 1–120 dk arasında olmalı: {v}")
+        for v in traffic.values():
+            if v not in TRAFFIC_LEVELS:
+                raise ValueError(f"Bilinmeyen trafik seviyesi: {v}")
+        r = simulate_line(line, veh, env, headways=headways or None, traffic_override=traffic or None,
+                          demand_scale=float(b.get("demand_scale") or 1.0),
+                          capacity=(int(b["capacity"]) if b.get("capacity") else None))
+        return jsonify({"line": line_summary(line), "result": r.as_dict(),
+                        "env": {"ambient": env.ambient_c, "solar": env.solar_irradiance_w_per_m2, "night": env.night}})
 
     @app.get("/api/preview")
     def preview():

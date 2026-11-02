@@ -17,3 +17,7 @@ Thumbs.db
 
 # internal reports and source documents: kept local, not versioned
 *.pdf
+
+# VECTO release and source (944 MB, EUPL): kept local, not versioned; our analyses live in docs/
+2026_09_03-VECTO-5.1.4/
+image.png

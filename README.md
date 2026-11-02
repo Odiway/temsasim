@@ -79,6 +79,22 @@ Kırmızı ışık, çarpışma, kaçırılan durak, durakta bırakılan yolcu v
 çıkmak puan düşürür. Yolcu sayısı durakta değişir; hem canlı modeldeki kütle
 hem de "Sürüşü modelde hesapla" ile asıl modele giden kayıt bunu izler.
 
+**Hat ve sefer:** Bir hattın bir günü. Hat dosyası (`library/line/*.yaml`) durakları,
+durak başına zirve biniş sayısını ve saat bantlarına göre sefer aralığı / trafik /
+talep çarpanını verir. Her bant ve yön için bir temsilî sefer tam araç modeliyle
+sürülür ve sefer sayısıyla çarpılır: gereken otobüs, doluluk, bekleme, günlük
+enerji, otobüs başına enerji ve şarj ihtiyacı. Sefer aralığı değiştirilerek
+"deneme" aynı günde temelle yan yana hesaplanır. `adana_ornek` hattı ÖRNEK
+veridir (`tools/make_adana_example.py` üretir); gerçek GTFS / AVL / bilet verisi
+geldiğinde değiştirilir.
+
+**VECTO köprüsü:** `temsasim/vecto.py` yerel VECTO sürümünü (depoya dahil değil,
+`2026_09_03-VECTO-5.1.4/` klasöründe) başsız çalıştırır, `.vmod` / `.vsum`
+çıktısını okur, güzergâhı `.vdri` olarak yazar ve VECTO'nun sürdüğü izi bizim
+çözücüye verir. `tests/test_vecto.py` VECTO jenerik şehir otobüsünde yol yükü
+kalemlerini karşılaştırır (VECTO yoksa atlanır). `docs/` klasöründe VECTO sürücü
+ve vites mantığı analizi bulunur.
+
 Formdaki sayılar Türkçe yazılabilir (`95,5`). Birimler mühendislik birimidir
 (kW, rpm, km/h, %); dosyaya dönüştürülerek yazılır. Silinen bileşenler
 `library/.cop_kutusu/` klasörüne taşınır, geri alınabilir.

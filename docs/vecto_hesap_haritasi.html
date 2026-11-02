@@ -1,0 +1,1188 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>VECTO Hesap Haritası</title>
+<style>
+  @page { size: A4 landscape; margin: 11mm 12mm 13mm 12mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: #1f2328; font-size: 11.5px; line-height: 1.45; width: 1030px; }
+  .mono, .m, code, pre { font-family: Consolas, "Cascadia Mono", "Courier New", monospace; }
+  h1 { font-size: 30px; margin: 4px 0 10px; letter-spacing: -0.3px; }
+  .kicker { font-size: 9.5px; letter-spacing: 2px; color: #6b7280; text-transform: uppercase; font-weight: 600; }
+  .lead { font-size: 14px; max-width: 820px; color: #30363d; margin: 0 0 12px; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 10.5px; color: #30363d; margin: 6px 0 14px; align-items: center; }
+  .legend .sw { display: inline-block; width: 16px; height: 11px; border: 1px solid; border-radius: 2px; vertical-align: -1px; margin-right: 5px; }
+  .legend .dash { display: inline-block; width: 22px; border-top: 1.5px dashed #555; vertical-align: 3px; margin-right: 5px; }
+  hr.rule { border: 0; border-top: 1.5px solid #1f2328; margin: 10px 0 16px; }
+
+  .sec { page-break-before: always; }
+  .sec.first { page-break-before: auto; }
+  .sh { display: flex; align-items: baseline; gap: 12px; margin: 0 0 4px; }
+  .sh .n { font-size: 30px; font-weight: 700; color: #d9a520; line-height: 1; }
+  .sh h2 { font-size: 21px; margin: 0; letter-spacing: -0.2px; }
+  .sub { color: #4b5563; font-size: 11px; max-width: 640px; margin: 0 0 10px 44px; }
+
+  .fig { position: relative; border: 1px solid #d6d9de; border-radius: 10px; padding: 14px; page-break-inside: avoid; background: #fff; }
+  .fig .cv { position: relative; }
+  .fig svg.wires { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+  .cap { font-size: 11px; color: #30363d; margin: 10px 2px 0; max-width: 980px; }
+  .cap b { color: #1f2328; }
+  .ref { font-family: Consolas, monospace; font-size: 10px; color: #6b7280; }
+
+  .box { position: absolute; border: 1px solid #8a929c; background: #eef0f3; border-radius: 6px; padding: 6px 8px 7px; font-size: 10.5px; line-height: 1.35; }
+  .box h4 { margin: 0 0 3px; font-size: 11px; font-weight: 700; color: #1f2328; }
+  .box .m { font-size: 9.3px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.36; color: #24292f; }
+  .box .i { font-size: 9.3px; color: #6b7280; font-style: italic; margin-top: 3px; white-space: normal; }
+  .box .r { font-family: Consolas, monospace; font-size: 8.6px; color: #6b7280; margin-top: 4px; overflow-wrap: anywhere; }
+  .toc { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 40px; margin: 14px 0 0; max-width: 900px; }
+  .toc div { display: flex; gap: 10px; align-items: baseline; font-size: 13px; border-bottom: 1px dotted #d6d9de; padding: 4px 0; }
+  .toc .n { font-weight: 700; color: #d9a520; width: 22px; font-size: 15px; }
+  .toc .d { color: #6b7280; font-size: 10.5px; margin-left: auto; text-align: right; max-width: 230px; }
+  .box.drv { background: #fff6dd; border-color: #d9a520; }
+  .box.gbx { background: #eef3fb; border-color: #5b7fc4; }
+  .box.str { background: #edf7ee; border-color: #4a9a5b; }
+  .box.resp { background: #fdeeea; border-color: #d2694f; }
+  .box.data { background: #eef0f3; border-color: #8a929c; }
+  .box.hl { border-width: 2px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .box.dashed { border-style: dashed; background: transparent; }
+  .colhead { position: absolute; font-size: 9.5px; letter-spacing: 1.6px; color: #6b7280; font-weight: 600; text-transform: uppercase; }
+  .tag { display: inline-block; font-family: Consolas, monospace; font-size: 8.5px; letter-spacing: 1px; border: 1px solid; border-radius: 3px; padding: 0 4px; margin-left: 6px; vertical-align: 2px; }
+  .tag.drv { color: #9a6b00; border-color: #d9a520; } .tag.gbx { color: #2f5aa8; border-color: #5b7fc4; } .tag.str { color: #2f7a40; border-color: #4a9a5b; } .tag.resp { color: #b04a30; border-color: #d2694f; } .tag.data { color: #5b636d; border-color: #8a929c; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .cards.c2 { grid-template-columns: repeat(2, 1fr); }
+  .cards.c4 { grid-template-columns: repeat(4, 1fr); }
+  .card { border: 1px solid #d6d9de; border-radius: 10px; padding: 10px 13px; page-break-inside: avoid; background: #fff; }
+  .card h3 { font-size: 13px; margin: 0 0 5px; }
+  .card p { margin: 3px 0; font-size: 10.8px; }
+  .card pre { margin: 5px 0; font-size: 9.4px; line-height: 1.38; border: 1px solid #d6d9de; border-radius: 5px; padding: 6px 8px; background: #fafbfc; white-space: pre-wrap; }
+  .card .ref { display: block; margin-top: 4px; }
+
+  table.t { border-collapse: collapse; width: 100%; font-size: 10.3px; }
+  table.t th, table.t td { border-bottom: 1px solid #e3e6ea; padding: 3px 6px; text-align: left; vertical-align: top; }
+  table.t th { font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: #6b7280; font-weight: 600; }
+  table.t td.m { font-size: 9.6px; }
+  .note { font-size: 11px; margin: 0 0 8px; }
+  .note b { color: #1f2328; }
+  .foot { font-size: 9px; color: #6b7280; text-align: center; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<!-- ================================================================ -->
+<div class="sec first">
+  <div class="kicker">VECTO 5.1.4 · VectoCore · sürücü, frenleme ve vites değiştirme mantığı</div>
+  <h1>Hesap Haritası</h1>
+  <p class="lead">Bu belge, VECTO simülatörünün bir sürüş adımında ne hesapladığını girdiden sonuca kadar gösterir: sürücü hangi aksiyonu seçer, frene ne zaman ve hangi güçle basar, şanzıman çekiş kesintisini nasıl modeller, vites stratejisi hangi koşullarda büyütür ya da küçültür. Formüller ve varsayılan değerler doğrudan koddan alındı; her kutunun yanında dosya ve satır numarası var. Yollar <span class="mono">vecto-source/VectoCore/VectoCore/</span> altına göredir, commit <span class="mono">0ccd8fe9</span> (5.1.4-RC).</p>
+  <div class="legend">
+    <span><span class="sw" style="background:#fff6dd;border-color:#d9a520"></span>Sürücü kararı: aksiyon, mod, tetik</span>
+    <span><span class="sw" style="background:#eef3fb;border-color:#5b7fc4"></span>Aktarma organı: şanzıman, debriyaj, fren, motor</span>
+    <span><span class="sw" style="background:#edf7ee;border-color:#4a9a5b"></span>Vites stratejisi</span>
+    <span><span class="sw" style="background:#fdeeea;border-color:#d2694f"></span>Yanıt tipi (motor → sürücü)</span>
+    <span><span class="sw" style="background:#eef0f3;border-color:#8a929c"></span>Veri, parametre, formül</span>
+    <span><span class="dash"></span>Kesik ok: deneme (dry-run) ya da geri besleme</span>
+  </div>
+  <hr class="rule">
+  <div class="toc">
+    <div><span class="n">1</span>Genel akış: istek-yanıt zinciri<span class="d">bileşen zinciri, yanıt tipleri, arama</span></div>
+    <div><span class="n">7</span>ADAS: EcoRoll, PCC, Stop/Start<span class="d">durum makineleri, bayraklar</span></div>
+    <div><span class="n">2</span>Sürücü adımı: DRIVE mi, BRAKE mi?<span class="d">DoHandleRequest, fren tetiği</span></div>
+    <div><span class="n">8</span>Şanzıman modelleri: AMT/MT ve AT<span class="d">çekiş kesintisi, powershift, ayırma</span></div>
+    <div><span class="n">3</span>İleri bakış: frene ve gaz bırakmaya ne zaman<span class="d">fren mesafesi, coasting enerji dengesi</span></div>
+    <div><span class="n">9</span>Vites polygon'ları ve strateji seçimi<span class="d">geometri, deklarasyon hesabı, fabrika</span></div>
+    <div><span class="n">4</span>Sürücü aksiyonları: Driver.cs<span class="d">Accelerate, Coast, Roll, Brake, Halt</span></div>
+    <div><span class="n">10</span>AMT "EffShift" stratejisi<span class="d">zorunlu, zaman kilidi, yakıt kıyası</span></div>
+    <div><span class="n">5</span>DRIVE modu: yanıt zinciri<span class="d">birinci, ikinci, üçüncü aksiyon</span></div>
+    <div><span class="n">11</span>AT stratejisi: konvertör ve kilit<span class="d">yük kademeleri, C→L, L→L+1</span></div>
+    <div><span class="n">6</span>BRAKE modu ve fren gücü arama<span class="d">Coast fazı, Brake fazı, SearchBrakingPower</span></div>
+    <div><span class="n">12</span>Elektrikli strateji, parametreler, notlar<span class="d">PEV, sabit tabloları, gözlemler</span></div>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sh"><span class="n">1</span><h2>Genel akış: istek-yanıt zinciri</h2></div>
+  <p class="sub">VECTO tekerlekten motora doğru <b>geri yönde</b> hesap yapan, <b>mesafe tabanlı</b> bir simülatördür. Sürücü bir ivme seçer; ivme zincir boyunca tork ve devire çevrilir; motorun döndürdüğü yanıt tipi sürücünün bir sonraki aksiyonunu belirler.</p>
+
+  <div class="fig" id="f1">
+    <div class="cv" style="height:440px">
+      <div class="colhead" style="left:0;top:0">İstek yönü: ivme, dt, eğim →</div>
+      <div class="colhead" style="left:760px;top:0">← yanıt yönü: tork, devir, yanıt tipi</div>
+
+      <div class="box data" id="f1_cyc" style="left:0;top:22px;width:120px"><h4>Sürüş çevrimi</h4><div class="m">ds, v_hedef(s)
+eğim(s), rakım
+PTO, otoyol bayrağı</div><div class="r">…DrivingCycle.cs L337</div></div>
+      <div class="box drv hl" id="f1_drv" style="left:150px;top:22px;width:150px"><h4>Sürücü (Driver)</h4><div class="m">strateji → mod → aksiyon
+a = f(ds, v_hedef)
+dt = ComputeTimeInterval</div><div class="r">Driver/Driver.cs L81</div></div>
+      <div class="box gbx" id="f1_veh" style="left:332px;top:22px;width:110px"><h4>Araç</h4><div class="m">F = m·a + F_hava
+  + F_yuv + F_eğim</div></div>
+      <div class="box gbx" id="f1_whl" style="left:472px;top:22px;width:96px"><h4>Tekerlek</h4><div class="m">T = F·r_dyn
+ω = v / r_dyn</div></div>
+      <div class="box gbx" id="f1_brk" style="left:598px;top:22px;width:110px"><h4>Frenler</h4><div class="m">T += P_fren / ω_ort
+P_fren ≥ 0</div><div class="r">Brakes.cs</div></div>
+      <div class="box gbx" id="f1_axl" style="left:738px;top:22px;width:96px"><h4>Aks + açı</h4><div class="m">T / i_aks
++ kayıp haritası</div></div>
+      <div class="box gbx" id="f1_gbx" style="left:864px;top:22px;width:136px"><h4>Şanzıman</h4><div class="m">T_in = T_out/i + kayıp
+ShiftRequired? → strateji</div><div class="r">AbstractAMTGearbox.cs · APTGearbox.cs</div></div>
+
+      <div class="box gbx" id="f1_tc" style="left:864px;top:118px;width:136px"><h4>Tork konvertörü (AT)</h4><div class="m">sadece C vitesleri
+n_in, T_in = f(ν, μ)</div></div>
+      <div class="box gbx" id="f1_clu" style="left:864px;top:190px;width:136px"><h4>Debriyaj (AMT/MT)</h4><div class="m">kapalı ⇔ GearEngaged(t)
+kayma: 1-2. vites kalkış</div><div class="r">Clutch.cs L339</div></div>
+      <div class="box gbx hl" id="f1_eng" style="left:864px;top:262px;width:136px"><h4>Motor / EM</h4><div class="m">tam yük eğrisi, sürükleme
+eğrisi, devir sınırları
+→ yanıt tipi</div></div>
+
+      <div class="box resp" id="f1_resp" style="left:452px;top:140px;width:400px"><h4>Yanıt tipleri (sürücü karar ağacının girdisi)</h4><div class="m">Success          çalışma noktası geçerli, adım kabul
+Overload         motor/EM istenen gücü veremiyor (tam yükün üstü)
+Underload        nokta sürükleme eğrisinin altında → motor freni yetmez, fren gerek
+EngineSpeedTooHigh  devir sınırı aşıldı → ivmeyi düşür
+SpeedLimitExceeded  coasting'de araç hedef hızı aşacak
+GearShift        AMT vites değiştiriyor → çekiş kesintisi, Roll aksiyonu
+FailTimeInterval adım süresi uygun değil (AT powershift) → DeltaT ile tekrar
+DrivingCycleDistanceExceeded  adım mesafesi MaxDistance'a kısaltılır
+DryRun           deneme: DeltaFullLoad, DeltaDragLoad, DeltaEngineSpeed taşır</div><div class="r">VectoCommon/Models/Response*.cs</div></div>
+
+      <div class="box data" id="f1_srch" style="left:150px;top:140px;width:280px"><h4>Deneme ve arama (dry-run)</h4><div class="m">Sürücü çoğu zaman ilk denemede geçerli ivmeyi bulamaz.
+dryRun=true ile deneme isteği → sapma (delta) okunur
+SearchAlgorithm.Search(x0, delta0, adım, …)
+  secant + line-search; kriter → 0
+  hızlanma: DeltaFullLoad → 0
+  coasting/fren: DeltaDragLoad → 0
+  roll (vites boşta): Gearbox.PowerRequest → 0
+  devir: DeltaEngineSpeed → 0</div><div class="r">Driver.cs L1039 SearchOperatingPoint · L908 SearchBrakingPower</div></div>
+
+      <div class="box data" id="f1_kin" style="left:150px;top:318px;width:280px"><h4>Kinematik: ds ve a verildiğinde dt</h4><div class="m">ds = a/2·dt² + v·dt   → ikinci derece denklem
+a = 0 ise dt = ds / v
+çözüm yoksa araç ds'e varamadan durur:
+  dt = v/−a, ds = durma mesafesi (adım kısaltılır)</div><div class="r">VectoCommon/Utils/VectoMath.cs L314</div></div>
+
+      <div class="box data" id="f1_out" style="left:452px;top:318px;width:400px"><h4>Adım sonu: kayıt ve ilerleme</h4><div class="m">Success → CommitSimulationStep: her bileşen CurrentState → PreviousState
+.vmod satırı: dist, v, acc, Gear, DriverAction, P_brake_loss, P_gbx_loss, FC…
+Success değilse: sürücü başka aksiyon dener ya da adım kısaltılır
+(VECTORUN_PREVIOUS_REQUEST_FAILED hatası ancak kabul edilmemiş adım kaydedilirse)</div><div class="r">Driver.cs L1293 DoCommitSimulationStep</div></div>
+    </div>
+    <svg class="wires"></svg>
+    <p class="cap"><b>Tek bir aksiyon, tek bir yanıt.</b> Sürüş çevrimi sürücüye "ds metre git" der; sürücü ivme seçer; zincir sonundaki motor ya kabul eder ya da neden edemediğini yanıt tipiyle söyler. Sürücü mantığının tamamı bu yanıt tiplerine verilen tepkilerden oluşur. Hedef adım süresi 0,5 s, alt sınır 0,25 s; mesafe adımı hedef hız değişimlerinde ve fren/coasting başlangıç noktalarında kesilir. <span class="ref">Configuration/Constants.cs L282-344</span></p>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<div class="sec">
+  <div class="sh"><span class="n">2</span><h2>Sürücü adımı: DRIVE mi, BRAKE mi?</h2></div>
+  <p class="sub">Her mesafe adımında <span class="mono">DefaultDriverStrategy.DoHandleRequest</span> önce ADAS fonksiyonlarını günceller, sonra sürücü modunu seçer. Kök dizindeki <span class="mono">Impl/DefaultDriverStrategy.cs</span> tamamen yorumdadır; canlı sınıf <span class="mono">Impl/Driver/</span> altındadır.</p>
+
+  <div class="fig" id="f2">
+    <div class="cv" style="height:470px">
+      <div class="box drv" id="f2_in" style="left:0;top:0;width:215px"><h4>Request(absTime, ds, v_hedef, eğim)</h4><div class="m">VehicleHaltTimestamp = null
+v_hedef = min(v_maks_araç, v_hedef)</div><div class="r">DefaultDriverStrategy.cs L146</div></div>
+      <div class="box drv" id="f2_pcc" style="left:0;top:78px;width:215px"><h4>1 · PCC varsa HandlePCC</h4><div class="m">segment durumu, UseCase1/2
+→ şanzımanı ayır, motoru kapat</div><div class="r">L225 · Bölüm 7</div></div>
+      <div class="box drv" id="f2_eco" style="left:0;top:148px;width:215px"><h4>2 · EcoRoll varsa HandleEcoRoll</h4><div class="m">yalnız PCC segment dışında
+Off → PreActivation → On</div><div class="r">L401 · Bölüm 7</div></div>
+      <div class="box drv" id="f2_eng" style="left:0;top:218px;width:215px"><h4>3 · Motor açık</h4><div class="m">EcoRoll On ya da PCC UC1/UC2 değilse
+CombustionEngineOn = true
+(yalnız ICE'li, EM'siz araçta)</div><div class="r">L158</div></div>
+      <div class="box drv hl" id="f2_mode" style="left:0;top:300px;width:215px"><h4>4 · CurrentDrivingMode?</h4><div class="m">DrivingModeDrive / DrivingModeBrake
+(mod bir sonraki adıma taşınır)</div></div>
+
+      <div class="colhead" style="left:255px;top:0">BRAKE modundaysa</div>
+      <div class="box drv" id="f2_b1" style="left:255px;top:18px;width:240px"><h4>Yeni tetik var mı?</h4><div class="m">nextAction = GetNextDrivingAction(ds)
+farklı tetik ve (daha yakın aksiyon
+  ya da fren başlangıcı bu adımda)
+  → BrakeTrigger = nextAction</div><div class="r">L166-171</div></div>
+      <div class="box drv" id="f2_b2" style="left:255px;top:130px;width:240px"><h4>Tetik noktası geçildi mi?</h4><div class="m">mesafe ≥ BrakeTrigger.TriggerDistance
+  (tolerans 1 mm)
+  → DRIVE'a dön, NextDrivingAction = null
+  → DrivingModes[Drive].ResetMode()
+değilse BRAKE modunda kal</div><div class="r">L172-177</div></div>
+      <div class="box data" id="f2_post" style="left:255px;top:260px;width:240px"><h4>Yanıt sonrası (Request sarmalayıcı)</h4><div class="m">Success ise:
+  PreviousBrakePower = fren gücü
+  AcceleratorPedalIdle =
+    |P_sürükleme − T_toplam·n_ort| &lt; 10 W
+  (EcoRoll "gaz boşta" koşulu)</div><div class="r">L91-105</div></div>
+
+      <div class="colhead" style="left:535px;top:0">DRIVE modundaysa</div>
+      <div class="box drv" id="f2_d1" style="left:535px;top:18px;width:240px"><h4>UpdateDrivingAction(mesafe, ds)</h4><div class="m">NextDrivingAction yoksa yenisini al
+varsa mesafeleri güncelle (fren ve
+  coasting başlangıcı her adım mevcut
+  hızla yeniden hesaplanır)
+daha yakın aday varsa onu al</div><div class="r">L495-547</div></div>
+      <div class="box drv hl" id="f2_d2" style="left:535px;top:140px;width:240px"><h4>BRAKE'e geçiş koşulları</h4><div class="m">kalan = ActionDistance − mesafe
+atTrigger: |kalan| ≤ 0,25 m
+closeBefore: kalan/v &lt; 0,25 s
+intervalTooShort: fren aralığı/v
+  &lt; 0,25/20 s ve debriyaj açık
+biri sağlanırsa → BRAKE,
+  BrakeTrigger = NextDrivingAction</div><div class="r">L186-209</div></div>
+
+      <div class="box resp" id="f2_cut" style="left:815px;top:18px;width:185px"><h4>Adımı kes</h4><div class="m">mesafe + ds &gt; ActionDistance
+→ DistanceExceeded,
+  MaxDistance =
+  ActionDistance − mesafe
+fren aralığı kısa ve kalan = ds
+  → MaxDistance = ds/2</div><div class="r">L200-218</div></div>
+      <div class="box drv hl" id="f2_req" style="left:815px;top:160px;width:185px"><h4>5 · Mod isteği</h4><div class="m">DrivingModes[mod].Request(
+  absTime, ds,
+  min(v_maks, v_hedef), eğim)
+→ Bölüm 5 (DRIVE)
+→ Bölüm 6 (BRAKE)
+BRAKE modunda kalındıysa
+  doğrudan buraya gelinir</div><div class="r">L221 · DriverModes.cs L8</div></div>
+      <div class="box data" id="f2_halt" style="left:815px;top:290px;width:185px"><h4>Zaman tabanlı istek (durakta)</h4><div class="m">DriverBehavior = Halted
+mod = Drive
+Stop/Start varsa
+  HandleEngineStopStart…
+Driver.DrivingActionHalt(dt)</div><div class="r">L106-117</div></div>
+    </div>
+    <svg class="wires"></svg>
+    <p class="cap"><b>Fren tetiği yapışkandır.</b> BRAKE modunda sürücü yalnızca daha yakın ya da bu adımda başlayan yeni bir tetiğe geçer; tetik mesafesi geçilince DRIVE'a döner. DRIVE modunda ise aksiyon noktasına 0,25 m ya da 0,25 s kala BRAKE'e geçilir; adım aksiyon noktasını aşacaksa tam o noktada kesilir, böylece fren her zaman doğru mesafede başlar. <span class="ref">Driver/DefaultDriverStrategy.cs L146-224</span></p>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<div class="sec">
+  <div class="sh"><span class="n">3</span><h2>İleri bakış: frene ve gaz bırakmaya ne zaman başlanır</h2></div>
+  <p class="sub">Sürücü, hız düşüşlerini önceden görür. Her hedef hız düşüşü için bir fren başlangıç mesafesi ve (look-ahead coasting açıksa) bir gaz bırakma mesafesi hesaplanır; en erken başlaması gereken aday "sonraki aksiyon" olur.</p>
+
+  <div class="fig" id="f3">
+    <div class="cv" style="height:460px">
+      <div class="box data" id="f3_la" style="left:0;top:0;width:250px"><h4>İleri bakış mesafesi</h4><div class="m">durma = ComputeDecelerationDistance(0)
+L = max( 2·ds,
+         v[km/h] · LookAheadDistanceFactor,
+         1,2·durma + ds )
+Deklarasyon: faktör 10 → 80 km/h'de 800 m</div><div class="r">DefaultDriverStrategy.cs L559-567</div></div>
+      <div class="box data" id="f3_ent" style="left:0;top:118px;width:250px"><h4>Çevrim girdileri (L içinde)</h4><div class="m">her giriş için:
+  v_n = overspeed izinliyse v+2,5 km/h
+  v_n ≥ v_şimdi → hızlanma, atla
+  v_n &lt; v_şimdi → aday üret</div><div class="r">L569-578</div></div>
+      <div class="box drv hl" id="f3_sel" style="left:0;top:218px;width:250px"><h4>Aday seçimi</h4><div class="m">A = min BrakingStartDistance
+B = min CoastingStartDistance
+aynı tetik mesafesi → B (coasting)
+değilse → A (fren)</div><div class="r">L582-586</div></div>
+
+      <div class="box drv" id="f3_gen" style="left:300px;top:0;width:300px"><h4>Aday: GetDrivingBehaviorEntry</h4><div class="m">brakingDistance  = DecelDist(v_n) + 0,1 m
+coastingDistance = ComputeCoastingDistance(v, giriş)
+
+LAC kapalı ya da coasting &lt; 0:
+  Action = Braking, coasting = braking
+LAC açık ve v &gt; LAC.MinSpeed (50 km/h):
+  Action = Coasting
+değilse coasting = −1 (devre dışı)
+
+TriggerDistance      = giriş.mesafe
+BrakingStartDistance = tetik − braking
+CoastingStartDistance= tetik − coasting
+ActionDistance = min(ikisi)</div><div class="r">L589-621 · DrivingBehaviorEntry L685</div></div>
+
+      <div class="box data" id="f3_dec" style="left:300px;top:250px;width:300px"><h4>Fren mesafesi: sürücü yavaşlama eğrisi</h4><div class="m">.vacc: v → acc(v), dec(v); doğrusal interpolasyon
+segment sabitse  s = (v2²−v1²)/(2a)
+segment eğikse   a(v)=k·v+d → üstel çözüm
+  t = ln((v2k+d)/(v1k+d))/k, s = m/k·e^{kt}+bt+c
+Deklarasyon Truck.vacc:
+  v     0    25    50     60    120 km/h
+  acc   1,0  1,0   0,643  0,5   0,5
+  dec  −1,0 −1,0  −1,0   −0,5  −0,5</div><div class="r">AccelerationCurve.cs L103-146</div></div>
+
+      <div class="box data hl" id="f3_coast" style="left:650px;top:0;width:350px"><h4>Coasting mesafesi: enerji dengesi</h4><div class="m">m = m_toplam + m_tekerlek_indirgenmiş
+E_şimdi = m·g·h + ½·m·v²
+E_hedef = m·g·h_n + ½·m·v_n²      (v_n += overspeed)
+ΔE = E_şimdi − E_hedef
+
+F = F_hava(v, v_n) + F_yuv(ort. eğim)
+  + (P_şanz + P_aks + P_EM_sürükleme − P_ICE_sürükleme)/v
+  (ICE sürükleme seri hibrit, FCHV, IEPC-S için 0)
+
+coastingDistance = ΔE / (DF · F)</div><div class="r">L622-651</div></div>
+      <div class="box data" id="f3_df" style="left:650px;top:214px;width:350px"><h4>Karar faktörü DF (LACDecisionFactor)</h4><div class="m">DF = 2,5 − 1,5 · f(v_hedef) · g(v_düşüş)
+f(v_hedef): 0 @ ≤48 km/h → 1 @ ≥52 km/h   LAC-DF-Vtarget.csv
+g(v_düşüş): 1 @ ≤9 km/h  → 0 @ ≥11 km/h   LAC-DF-Vdrop.csv
+
+v_hedef yüksek ve düşüş küçük → DF = 1 (tam mesafe)
+büyük düşüş ya da düşük hedef → DF = 2,5
+  (sürücü 2,5 kat daha geç gaz bırakır)</div><div class="r">Models/Declaration/LACDecisionFactor.cs L66</div></div>
+      <div class="box data" id="f3_os" style="left:650px;top:342px;width:350px"><h4>Overspeed (hız aşımı) izni</h4><div class="m">sürücü modelinde açık VEYA PCC seçenek 3 + otoyol
+ve v_hedef &gt; OverSpeed.MinSpeed (50 km/h)
+ve v_hedef + aşım &lt; v_maks_araç
+Deklarasyon: +2,5 km/h; PCC UC3 otoyolda +5 km/h
+otobüs: MaxBusSpeed ile kırpılır</div><div class="r">L548-558, L662-667</div></div>
+    </div>
+    <svg class="wires"></svg>
+    <p class="cap"><b>Fren mesafesi her adımda yeniden hesaplanır.</b> Hız değiştikçe <span class="mono">UpdateDistancesForCurrentNextAction</span> hem coasting hem fren başlangıç noktasını günceller; bu yüzden coasting sırasında araç beklenenden yavaş yavaşlasa bile fren noktası kayar, hedef hıza tetik mesafesinde varılır. Overspeed izinliyse hedef hız 2,5 km/h yukarı alınır ve sürücü bu hızın üstünde coasting yapar, altında gaz verir. <span class="ref">DefaultDriverStrategy.cs L529-547</span></p>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<div class="sec">
+  <div class="sh"><span class="n">4</span><h2>Sürücü aksiyonları: Driver.cs</h2></div>
+  <p class="sub">Beş temel aksiyon vardır. Her biri önce bir ivme hesaplar, zincire ister, gelen yanıta göre ya kabul eder ya da çalışma noktası arar. Modal çıktıda <span class="mono">DriverAction</span> sütunu bu enum'un sayısal değeridir.</p>
+
+  <div class="cards">
+    <div class="card"><h3>Accelerate = 6 <span class="tag drv">SÜRÜCÜ</span></h3>
+      <pre>op = ComputeAcceleration(ds, v_hedef)
+istek(a) → Success: kabul
+  Underload: dön (strateji frenler)
+  Overload / EngineSpeedTooHigh:
+    SearchOperatingPoint → tam yük eğrisi
+  GearShift: dön (strateji Roll yapar)
+  FailTimeInterval → DistanceExceeded
+debriyaj açıksa sürücü sınırı uygulanır
+Overload tekrar gelirse (AT): yeniden ara
+araç durmuş + bulunamadı → Halt</pre>
+      <p>Hız tutma da bu aksiyondur: hedef = hedef hız, hesaplanan ivme sıfıra yakın çıkar.</p>
+      <span class="ref">Driver.cs L119-315</span></div>
+
+    <div class="card"><h3>Coast = 4 / Roll = 2 <span class="tag drv">SÜRÜCÜ</span></h3>
+      <pre>CoastOrRollAction(rollAction)
+istek(a=0, dryRun) → delta
+SearchOperatingPoint(coastingOrRoll)
+  Coast: DeltaDragLoad → 0 (motor freni)
+  Roll:  Gearbox.PowerRequest → 0 (boşta)
+AT'de bulunamazsa SetTCOperatingPoint…
+  (konvertör yarı-ileri yedek çözüm)
+ds kısaldıysa → DistanceExceeded (araç durur)
+Coast: sürücü yavaşlama sınırı uygulanır
+Roll: sınır yok (yokuşta doğal hızlanma)
+v2 &gt; maxVelocity ve a ≥ 0 → SpeedLimitExceeded</pre>
+      <p>Roll sırasında GearShift gelirse hata; AT'de coast sonrası vites değiştiyse bir kez daha denenir.</p>
+      <span class="ref">Driver.cs L324-482</span></div>
+
+    <div class="card"><h3>Brake = −5 / Halt = 0 <span class="tag drv">SÜRÜCÜ</span></h3>
+      <pre>Brake: Bölüm 6'da ayrıntılı
+  op1 = ComputeAcceleration(ds, v_n)
+  op2 = adım sonunda daha sert yavaşlama
+        varsa onu al
+  op  = targetDistance varsa tam oraya
+        oturan ivme
+  Underload/GearShift/EngineSpeedTooHigh
+    → SearchBrakingPower
+Halt: v = 0 ve v_hedef = 0 şart
+  istek(a=0, dt); GearShift gelirse tekrar</pre>
+      <p>Halt zaman tabanlı tek aksiyondur; durakta Stop/Start ve PTO burada işlenir.</p>
+      <span class="ref">Driver.cs L628-813, L1266</span></div>
+
+    <div class="card"><h3>ComputeAcceleration <span class="tag data">FORMÜL</span></h3>
+      <pre>dt = 2·ds / (v0 + v_hedef)
+a  = (v_hedef − v0) / dt
+limitByDriverModel:
+  a = min(a, acc(v0))
+  a = max(a, dec(v0))
+op = ComputeTimeInterval(a, ds)
+ds değişirse hata (beklenmeyen durum)</pre>
+      <p>Ortalama hız yaklaşımı: aracın ds boyunca sabit ivmeyle hedef hıza varacağı varsayılır.</p>
+      <span class="ref">Driver.cs L1208-1239</span></div>
+
+    <div class="card"><h3>SearchOperatingPoint <span class="tag data">ARAMA</span></h3>
+      <pre>kriter seçimi:
+  EngineSpeedTooHigh → DeltaEngineSpeed+1rpm
+  debriyaj açık      → Gearbox.PowerRequest
+  coastingOrRoll     → DeltaDragLoad
+  aksi               → DeltaFullLoad
+her iterasyon: dt yeniden, dryRun istek
+abort: ds değişti (araç duracak) ya da
+  AT'de 10 kez NaN
+başarısız: line-search ile ikinci deneme
+  (sadece hızlanmada), yoksa null</pre>
+      <p>Bulunan ivme sürücü eğrisi dışındaysa yalnız log yazılır; sınır <span class="mono">LimitAccelerationByDriverModel</span>'de uygulanır.</p>
+      <span class="ref">Driver.cs L1039-1181, L881</span></div>
+
+    <div class="card"><h3>Sürücü eğrisi ve sınırlar <span class="tag data">VERİ</span></h3>
+      <pre>AccelerationCurve.Lookup(v)
+  → {Acceleration, Deceleration}
+5 km/h altı birden fazla satır atılır
+MaxDeceleration = min(dec), MaxAcceleration = max(acc)
+LimitationMode:
+  NoLimitation        Roll, TC yedek çözüm
+  LimitDecelerationDriver  diğer tümü
+ComputeDecelerationDistance(v1, v2)
+  → Bölüm 3</pre>
+      <p>Mühendislik modunda kullanıcı kendi <span class="mono">.vacc</span> dosyasını verir; deklarasyonda sabit <span class="mono">Truck.vacc</span>.</p>
+      <span class="ref">AccelerationCurve.cs L40-75</span></div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<div class="sec">
+  <div class="sh"><span class="n">5</span><h2>DRIVE modu: yanıt zinciri</h2></div>
+  <p class="sub"><span class="mono">DriverModeDrive.HandleRequestEngaged</span> en fazla üç kez denenir. İlk aksiyon hız durumuna göre seçilir; motorun yanıtı ikinci aksiyonu, onun yanıtı üçüncüyü belirler. Köşeli etiketler koddaki <span class="mono">debug.Add("[DMD.HRE-n]")</span> izleridir.</p>
+
+  <div class="fig" id="f5">
+    <div class="cv" style="height:470px">
+      <div class="colhead" style="left:0;top:0">Giriş</div>
+      <div class="box drv" id="f5_in" style="left:0;top:18px;width:180px"><h4>DoHandleRequest</h4><div class="m">DriverBehavior = Driving
+overspeed izinliyse v += 2,5 km/h
+PTO yol süpürme: v ≥ PTODriveMinSpeed</div><div class="r">DriverModes.cs L71</div></div>
+      <div class="box drv" id="f5_dis" style="left:0;top:118px;width:180px"><h4>Vites boşta / debriyaj açık</h4><div class="m">v ≤ 0 → debriyaj kapanana
+  kadar FailTimeInterval
+değilse Roll [HRD-0]
+  Underload + debriyaj kapalı → engaged
+  Underload + açık → Brake [HRD-1]
+  SpeedLimitExceeded → Brake [HRD-2]</div><div class="r">L114-148</div></div>
+      <div class="box drv hl" id="f5_eng" style="left:0;top:252px;width:180px"><h4>Vites takılı (ya da AT)</h4><div class="m">HandleRequestEngaged
+3 deneme, sonuç yoksa
+DRIVER_OPERATING_POINT_NOT_FOUND</div><div class="r">L81-101</div></div>
+
+      <div class="colhead" style="left:230px;top:0">1 · İlk aksiyon (FirstAccelerateOrCoast)</div>
+      <div class="box drv" id="f5_a1" style="left:230px;top:18px;width:230px"><h4>PCC UC1/UC2 aktif</h4><div class="m">Coast [FAOC-0]; Success ise bitti</div></div>
+      <div class="box drv" id="f5_a2" style="left:230px;top:76px;width:230px"><h4>Overspeed izinli ve v ≥ v_hedef</h4><div class="m">Coast [FAOC-1]
+coast ile hız hedefin altına inecekse
+  → Accelerate(v_hedef) [FAOC-2]
+Overload (ICE kapalı / BEV / genel)
+  → Accelerate [FAOC-3..5]</div></div>
+      <div class="box drv" id="f5_a3" style="left:230px;top:190px;width:230px"><h4>v &lt; v_hedef</h4><div class="m">AT ve şanzıman ayrık (EcoRoll/PCC)
+  → Coast [FAOC-6]
+değilse → Accelerate(v_hedef) [FAOC-7]</div><div class="r">L301-364</div></div>
+
+      <div class="colhead" style="left:510px;top:0">2 · Yanıta göre ikinci aksiyon</div>
+      <div class="box resp" id="f5_r1" style="left:510px;top:18px;width:230px"><h4>Underload</h4><div class="m">v &gt; 0 ve overspeed izinli
+  → Coast [HRE-1]
+    Underload/SpeedLimit → Brake
+    EngineSpeedTooHigh → Brake(azaltılmış a)
+değilse → Brake [HRE-2]
+  AT konvektör vitesi + (P1 yok ya da durmuş):
+  overrideAction = Accelerate ("creeping")</div><div class="r">L159-198</div></div>
+      <div class="box resp" id="f5_r2" style="left:510px;top:170px;width:230px"><h4>EngineSpeedTooHigh</h4><div class="m">→ Brake(v_hedef, önceki yanıt)</div></div>
+      <div class="box resp" id="f5_r3" style="left:510px;top:224px;width:230px"><h4>SpeedLimitExceeded</h4><div class="m">EcoRoll On + AT + lockup serbest
+  → EcoRoll Off, şanzımanı bağla
+→ Brake [HRE-3]</div><div class="r">L202-212</div></div>
+
+      <div class="colhead" style="left:790px;top:0">3 · Yanıta göre üçüncü aksiyon</div>
+      <div class="box resp" id="f5_t1" style="left:790px;top:18px;width:210px"><h4>GearShift (AMT çekiş kesintisi)</h4><div class="m">→ Roll [HRE-4]
+  Overload → Coast [HRE-5]
+  Underload → Brake [HRE-6]
+  SpeedLimitExceeded → Brake [HRE-7]
+    Overload → Accelerate [HRE-7-1]</div><div class="r">L221-246</div></div>
+      <div class="box resp" id="f5_t2" style="left:790px;top:150px;width:210px"><h4>Overload (v &gt; 0)</h4><div class="m">→ Coast [HRE-8]
+  GearShift → Coast tekrar [HRE-9]
+  SpeedLimitExceeded:
+    AT konvektör vitesi → Coast(v+1) [HRE-10]
+    değilse → Brake [HRE-11]
+  Overload + APTN/IEPC → Accelerate [HRE-12]</div><div class="r">L247-280</div></div>
+
+      <div class="box data" id="f5_chk" data-below="f5_a3,f5_r3" style="left:230px;top:300px;width:510px"><h4>Adım sonu kontrolü (AbstractDriverMode.Request)</h4><div class="m">Success ve a &gt; 0 ve v2 = v + a·dt &gt; NextDrivingAction.v_n ise:
+  CheckRequestDoesNotExceedNextAction → yeni fren mesafesi (v2 ile)
+  Coasting aksiyonu: coasting mesafesi (v2) ve fren mesafesi; güvenlik faktörü 4 / 0,5 → newds = ds/2
+  Braking aksiyonu: newds = tetik − fren(v2) − mesafe − 0,125 m
+  newds ≤ 0 → ds/2; dt &lt; 0,25 s olacaksa hızlanma yerine sabit hız sür (prohibitOverspeed)
+  → ResponseDrivingCycleDistanceExceeded(newds)</div><div class="r">L8-57, L365-413</div></div>
+
+      <div class="box data" id="f5_beh" style="left:790px;top:300px;width:210px"><h4>DriverBehavior (strateji için)</h4><div class="m">Halted, Accelerating, Driving,
+Coasting, Braking
+Vites stratejisi yalnızca
+Accelerating/Driving'de büyütür.</div><div class="r">IDriverInfo.cs L37</div></div>
+    </div>
+    <svg class="wires"></svg>
+    <p class="cap"><b>Önce gaz, olmazsa motor freni, olmazsa fren.</b> Normal sürüşte sürücü hızlanmayı dener; motor "Underload" derse (yokuş aşağı motor freni yetmiyor) overspeed izni varsa gaz bırakır, yoksa frene basar. AMT vites değiştirirken (GearShift) sürücü boşta süzülür (Roll). AT konvertör vitesinde motor itmeye devam eder ve fazla güç frende harcanır; bu yüzden fren aksiyonu "Accelerate" etiketiyle çağrılır. <span class="ref">Driver/DriverModes.cs L66-417</span></p>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<div class="sec">
+  <div class="sh"><span class="n">6</span><h2>BRAKE modu ve fren gücü arama</h2></div>
+  <p class="sub">Fren modu iki fazlıdır: önce gaz bırakılır (Coast fazı), fren başlangıç noktasında servis freni devreye girer (Brake fazı). Servis freni yalnızca motor freninin yetmediği farkı kapatır.</p>
+
+  <div class="fig" id="f6">
+    <div class="cv" style="height:480px">
+      <div class="box drv" id="f6_in" style="left:0;top:0;width:235px"><h4>DriverModeBrake.DoHandleRequest</h4><div class="m">v ≤ BrakeTrigger.v_n ve araç duruyor değil
+  → HandleTargetspeedReached (3 deneme)
+fren mesafesi her adım yeniden:
+  BrakingStart = tetik − (DecelDist(v_n) + 0,1)
+tetik Action = Braking → faz = Brake</div><div class="r">DriverModes.cs L430-483</div></div>
+      <div class="box drv" id="f6_sw" style="left:0;top:132px;width:235px"><h4>Coast fazı: CheckSwitchingToBraking</h4><div class="m">daha yakın fren tetiği → değiştir
+kalan/v &lt; 0,25 s ya da
+mesafe + 0,25 m &gt; BrakingStart → faz = Brake
+adım BrakingStart'ı aşacaksa → adımı kes
+v &lt; 5 km/h → faz = Brake</div><div class="r">L776-816</div></div>
+      <div class="box drv" id="f6_coast" style="left:0;top:272px;width:235px"><h4>DoCoast</h4><div class="m">debriyaj kapalı → Coast, açık → Roll
+  maxVelocity = max(v_hedef, v)
+Underload → Brake (fren noktasındaysa
+  faz = Brake)
+Overload → Accelerate / Roll
+DistanceExceeded (araç durur) → Brake
+EngineSpeedTooHigh → Brake
+sonra 3 tur: GearShift→Roll, SpeedLimit→Brake,
+  vites değişmişse Overload→Accelerate,
+  Underload→Brake</div><div class="r">L685-775</div></div>
+
+      <div class="box drv hl" id="f6_brake" style="left:255px;top:0;width:235px"><h4>Brake fazı: DoBrake</h4><div class="m">targetDistance:
+  v &lt; 5 km/h → tetik mesafesi
+  v_n = 0 → tetik − 0,1 m
+  (araç tam durma noktasına oturur)
+durmuş + v_n = 0 → küçük hızla Accelerate,
+  Underload'da Brake(override Accelerate)
+normal: Brake(v_n, targetDistance) [DB-3]
+AT/hibrit null → fren sıfırla, 3 tekrar
+Overload (yavaşlama sağlanamıyor):
+  debriyaj açık → Roll → Brake/Accel./Coast
+  kapalı → Brake tekrar → Overload ise
+    Accelerate/Roll → GearShift→Roll,
+    Underload (vites değişti)→Accel.→Brake
+GearShift → fren sıfırla, Brake → Overload→Roll</div><div class="r">L484-684</div></div>
+      <div class="box data" id="f6_tsr" style="left:255px;top:300px;width:235px"><h4>Hedef hıza varıldı: HandleTargetspeedReached</h4><div class="m">AT ya da debriyaj kapalı → Accelerate(v_n)
+  v = 0 → ilk kez ds/2 kes, sonra Accelerate
+debriyaj açık → Roll
+GearShift → Roll → Underload→Brake, SpeedLimit→Brake
+SpeedLimitExceeded → Brake(v)
+Underload → Brake(v + a·dt) → GearShift / Overload
+  → fren sıfırla, Accelerate / Roll</div><div class="r">L817-933</div></div>
+
+      <div class="box gbx hl" id="f6_dab" style="left:510px;top:0;width:235px"><h4>Driver.DrivingActionBrake</h4><div class="m">op1 = ComputeAcceleration(ds, v_n)
+op2 = IncreaseDecelerationToMax…
+  (adım sonundaki dec daha sertse onu al)
+op  = AdaptDecelerationToTargetDistance
+istek(op.a):
+  Success / Overload → dön
+  Underload, GearShift, EngineSpeedTooHigh
+  → SearchBrakingPower</div><div class="r">Driver.cs L628-681</div></div>
+      <div class="box gbx hl" id="f6_sbp" style="left:510px;top:170px;width:235px"><h4>SearchBrakingPower</h4><div class="m">delta0: debriyaj kapalı + vites takılı
+  → DeltaDragLoad, değilse Gearbox.PowerRequest
+aranan: DataBus.Brakes.BrakePower
+her iterasyon dryRun istek
+AT konvertör: line-search, kriter ×1,1
+Accelerate override: motorun çalışabildiği
+  ilk nokta yeter
+başarısız: AT'de %1 adımla 2. deneme
+sonuç P_fren &lt; 0 → Overload döner</div><div class="r">Driver.cs L908-1038</div></div>
+      <div class="box gbx" id="f6_post" style="left:510px;top:372px;width:235px"><h4>Gerçek istek ve doğrulama</h4><div class="m">ds kısaldıysa → DistanceExceeded
+vites değiştiyse (AT/hibrit) → null
+Underload (AT/APTN) → tekrar ara
+Overload (AT) → 5 tekrar
+EcoRoll ayrık durumu geri yüklenir</div><div class="r">L693-812</div></div>
+
+      <div class="box gbx" id="f6_brk" style="left:765px;top:0;width:235px"><h4>Brakes.cs</h4><div class="m">T_fren = P_fren / ω_ort (ω_ort = 0 → −T_out)
+P_fren &lt; 0 → hata
+T_in = T_out + T_fren
+adım sonu P_fren = 0; çıktı: P_brake_loss</div><div class="r">Brakes.cs L45-70</div></div>
+      <div class="box data" id="f6_kin" style="left:765px;top:140px;width:235px"><h4>Fren yavaşlaması</h4><div class="m">sürücü eğrisi dec(v):
+  0-50 km/h: −1,0 m/s² · ≥60 km/h: −0,5 m/s²
+tam durma: hedef mesafe ile ivme yumuşatılır</div></div>
+      <div class="box data" id="f6_mot" style="left:765px;top:250px;width:235px"><h4>Motor freni payı</h4><div class="m">arama motoru sürükleme eğrisinde tutar;
+servis freni kalan farkı alır.
+P_brake_loss = 0 iken araç yine yavaşlayabilir.</div></div>
+    </div>
+    <svg class="wires"></svg>
+    <p class="cap"><b>Fren gücü bir arama değişkenidir.</b> Sürücü istediği yavaşlamayı belirler; <span class="mono">SearchBrakingPower</span> motor sürükleme eğrisi üstünde kalacak şekilde servis freni gücünü bulur. Bu yüzden fren her zaman önce motor frenini tüketir. Durma noktasına yaklaşırken hedef mesafe verilir ve yavaşlama tam o noktada sıfır hıza oturacak şekilde yumuşatılır; 5 km/h altında coasting hiç denenmez. <span class="ref">Driver/DriverModes.cs L418-968 · Driver.cs L628-1038</span></p>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<div class="sec">
+  <div class="sh"><span class="n">7</span><h2>ADAS: EcoRoll, PCC, Stop/Start</h2></div>
+  <p class="sub">Sürücü stratejisinin üstüne eklenen üç yardımcı fonksiyon. Hepsi şanzımanı ayırma (<span class="mono">DisengageGearbox</span>) ya da motoru kapatma (<span class="mono">CombustionEngineOn</span>) bayraklarıyla iş görür; sürüş aksiyonlarına doğrudan dokunmaz.</p>
+
+  <div class="fig" id="f7">
+    <div class="cv" style="height:400px">
+      <div class="colhead" style="left:0;top:0">EcoRoll durum makinesi</div>
+      <div class="box data" id="f7_ecoc" style="left:0;top:18px;width:300px"><h4>AllConditionsMet (her adım)</h4><div class="m">v ≥ EcoRoll.MinSpeed (60 km/h)
+v ≤ v_hedef + overspeed − 2 km/h
+eğim &lt; 0
+a_doğal = −(F_eğim+F_yuv+F_hava)/m ∈ [0; 0,1] m/s²
+  (AT + lockup serbest: ICE sürükleme ve
+   şanzıman/aks kayıpları dahil)
+gaz pedalı boşta (önceki adım motor sürüklemede)
+fren basılı değil (önceki P_fren = 0)</div><div class="r">DefaultDriverStrategy.cs L401-426</div></div>
+      <div class="box drv" id="f7_off" style="left:0;top:206px;width:90px"><h4>Off</h4><div class="m">şanzıman bağlı
+motor açık</div></div>
+      <div class="box drv" id="f7_pre" data-align="f7_off" style="left:100px;top:206px;width:92px"><h4>PreActivation</h4><div class="m">koşullar
+sürüyor mu?</div></div>
+      <div class="box drv hl" id="f7_on" data-align="f7_off" style="left:200px;top:206px;width:100px"><h4>On</h4><div class="m">şanzıman ayrık
+motor kapalı*</div></div>
+      <div class="box data" id="f7_ecor" data-gap="34" style="left:0;top:296px;width:300px"><h4>Geçişler</h4><div class="m">Off → Pre: koşullar sağlandı
+Pre → Off: koşul bozuldu
+Pre → On:  ActivationPhaseDuration (2 s) doldu
+On → Off:  v &lt; v_hedef − UnderspeedThreshold (0) ya da fren
+SpeedLimitExceeded + AT lockup serbest → Off (DRIVE modu)
+* motor yalnız EcoRollType.WithEngineStop ise kapatılır</div><div class="r">L427-470</div></div>
+
+      <div class="colhead" style="left:350px;top:0">PCC: tahmini hız sabitleyici</div>
+      <div class="box data" id="f7_pccp" style="left:350px;top:18px;width:300px"><h4>Ön-işlemci: PCCSegmentPreprocessor</h4><div class="m">test aktarma organı ile çevrim taranır,
+segment: Start, DistanceAtLowestSpeed, End,
+  EnergyAtLowestSpeed, EnergyAtEnd
+PCCEnableSpeed 80 km/h, MinSpeed 50 km/h
+UnderSpeed 8 km/h, Preview UC1 1500 m, UC2 1000 m</div><div class="r">L79-86 · DeclarationData.Driver.PCC</div></div>
+      <div class="box drv" id="f7_uc1" style="left:350px;top:140px;width:300px"><h4>UseCase1: tepeye yaklaşırken erken coasting</h4><div class="m">en düşük hız noktasından ÖNCE
+v ≥ v_hedef − 8 km/h
+E_şimdi ≥ E_son(≤1500 m) + F_coast·Δs
+E_şimdi ≥ E_vLow + F_coast·Δs_vLow
+çıkış: v ≤ v_hedef − 8,4 km/h → PCCinterrupt
+       v ≥ v_hedef + 1 km/h → WithinSegment</div><div class="r">L299-322, L230-237</div></div>
+      <div class="box drv" id="f7_uc2" style="left:350px;top:268px;width:300px"><h4>UseCase2: inişte hedefin altında süzülme</h4><div class="m">en düşük hız noktasından SONRA
+E_şimdi ≥ E_son(≤1000 m) + F_coast·Δs
+v ≥ max(v_hedef − 8, 50 km/h)
+v ≤ v_hedef − 1 km/h
+çıkış: v &lt; 50 km/h ya da v &gt; v_hedef + 1</div><div class="r">L323-341, L238-242</div></div>
+      <div class="box data" id="f7_pcca" style="left:350px;top:368px;width:300px"><h4>Etki</h4><div class="m">UC1/UC2: şanzıman ayrık, EcoRoll tipine göre motor kapalı; DRIVE modu ilk aksiyon = Coast</div></div>
+
+      <div class="colhead" style="left:700px;top:0">Durakta motor Stop/Start</div>
+      <div class="box drv" id="f7_ss" style="left:700px;top:18px;width:300px"><h4>HandleEngineStopStartDuringVehicleStop</h4><div class="m">PTO aktifse devre dışı
+durma süresi ≥ ActivationDelay (2 s)
+  → CombustionEngineOn = false
+kapalı süre ≥ MaxEngineOffTimespan (120 s)
+  → tekrar açılır
+kullanım faktörü (UF): kamyon 0,8;
+  otobüs 0,35 / 0,55 / 0,65 (sonuç ağırlığı)</div><div class="r">L474-494 · DeclarationData.Driver L797-870</div></div>
+      <div class="box data" id="f7_sum" style="left:700px;top:170px;width:300px"><h4>Bayrakların okunduğu yerler</h4><div class="m">DisengageGearbox
+  AMT: GearEngaged() false → RequestGearDisengaged
+  AT: ATEcoRollReleaseLockupClutch
+      true → yalnız kilit açılır, TC aktif
+      false → RequestDisengaged (rölanti)
+CombustionEngineOn
+  motor bileşeni rölanti/kapalı modeli
+  DRIVE modunda Overload + ICE kapalı
+  → Accelerate (motor yeniden çalışır)</div><div class="r">AbstractAMTGearbox.cs L26 · APTGearbox.cs L102, L309</div></div>
+      <div class="box data" id="f7_mod" style="left:700px;top:318px;width:300px"><h4>Modal çıktı</h4><div class="m">EcoRollConditionsMet 0/1 · PCCSegment −5/0/5 · PCCState 0..4</div><div class="r">L118-136</div></div>
+    </div>
+    <svg class="wires"></svg>
+    <p class="cap"><b>Hepsi bayrakla çalışır.</b> EcoRoll ve PCC sürücünün hangi aksiyonu seçeceğine karışmaz; şanzımanı ayırır ya da motoru kapatır, DRIVE modu da bu durumda doğal olarak Coast aksiyonuna düşer. EcoRoll yalnızca PCC segmenti dışında değerlendirilir; PCC öncelikli. <span class="ref">Driver/DefaultDriverStrategy.cs L146-164</span></p>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<div class="sec">
+  <div class="sh"><span class="n">8</span><h2>Şanzıman modelleri: AMT/MT ve AT</h2></div>
+  <p class="sub">AMT ve MT çekiş kesintisini gerçek bir fiziksel kesinti olarak modeller: vites değişimi tetiklenince şanzıman boşa alınır, sürücü <span class="mono">TractionInterruption</span> süresince boşta süzülür. AT'de kesinti yoktur; yerine powershift kayıp enerjisi eklenir.</p>
+
+  <div class="fig" id="f8">
+    <div class="cv" style="height:470px">
+      <div class="colhead" style="left:0;top:0">AMT / MT · AbstractAMTGearbox.Request</div>
+      <div class="box gbx" id="f8_a1" style="left:0px;top:18px;width:235px"><h4>Durum</h4><div class="m">EngageTime: yeni vitesin takılı olacağı an
+GearEngaged(t) = !DisengageGearbox
+  ∧ t ≥ EngageTime − TI/20 ∧ !postpone
+araç durdu → EngageTime = t; Halted → t + dt</div><div class="r">AbstractAMTGearbox.cs L26-32, L95-102</div></div>
+      <div class="box gbx" id="f8_a2" style="left:0px;top:122px;width:235px"><h4>Yeniden takma (ReEngageGear)</h4><div class="m">takılacak ∧ Disengaged ∧ n_out ≠ 0:
+  dt &lt; 0,05 s → ertele (postpone)
+  duruyor → InitGear, değilse Engage(n_out_min)
+  Gear ↑ LastUpshift = t · ↓ LastDownshift = t</div><div class="r">L106-115, L334-351</div></div>
+      <div class="box gbx" id="f8_a3" style="left:0px;top:226px;width:235px"><h4>Giriş torku</h4><div class="m">T_in = T_out·(n_out_ort/n_in_ort) + kayıp(n, T)
+     + J_gbx·Δn_out/dt / i
+n_in = n_out · i</div><div class="r">L130-147</div></div>
+      <div class="box gbx hl" id="f8_a4" style="left:0px;top:300px;width:235px"><h4>Durma öncesi ayırma</h4><div class="m">Halt aksiyonu VEYA (Braking + Brake aksiyonu
+ ∧ (eğim &lt; 0 ∨ n_in &lt; rölanti)
+ ∧ (P_fren &gt; 0 ∨ T_in &lt; 0)
+ ∧ v &lt; DisengageWhenHaltingSpeed)
+→ EngageTime = max(…, t+dt), boşa al
+v_ayır: 1. vites downshift devri (T=0) ×1,05</div><div class="r">L148-168 · EngineeringDataAdapter.cs L733</div></div>
+
+      <div class="box gbx" id="f8_b1" style="left:255px;top:18px;width:235px"><h4>RequestGearEngaged</h4><div class="m">zincire istek(T_in, n_in)
+Success ∧ n_in ≠ 0 ∧ v ≠ 0:
+  strateji.ShiftRequired(…)?
+  evet → Disengaged = true,
+    EngageTime = t + TractionInterruption
+    → ResponseGearShift (dt = TI)
+hayır → durum kaydet, yanıtı ilet</div><div class="r">L264-333</div></div>
+      <div class="box gbx" id="f8_b2" style="left:255px;top:168px;width:235px"><h4>RequestGearDisengaged</h4><div class="m">dryRun: Delta = T_in·n_in (0 W çizgisi)
+adım EngageTime'ı aşıyor → FailTimeInterval
+  (DeltaT = EngageTime − t)
+kalan kesinti &lt; 0,25 s ve &lt; %10·TI → kısalt
+n_in_ort = 0 → T_in = 0
+zincire istek(T_in, n_in) → motor rölantiye</div><div class="r">L189-254</div></div>
+      <div class="box data" id="f8_b3" style="left:255px;top:322px;width:235px"><h4>Adım sonu (DoCommitSimulationStep)</h4><div class="m">araç durdu → Disengaged, EngageTime = −∞
+davranış Driving/Braking'e değişti ve
+  vites takılı → LastUp/Downshift sıfırla
+  (yeni fazda hemen vites değişebilir)
+deklarasyonda kayıp haritası
+  ekstrapolasyonu → hata</div><div class="r">L370-408</div></div>
+
+      <div class="colhead" style="left:510px;top:0">AT · APTGearbox.Request</div>
+      <div class="box gbx" id="f8_c1" style="left:510px;top:18px;width:235px"><h4>Vites pozisyonu</h4><div class="m">GearshiftPosition(gear, TCLocked)
+aynı vites "C" (konvertör) ya da
+"L" (kilitli) olabilir
+oran/kayıp haritası kilit durumuna göre</div><div class="r">APTGearbox.cs L24-26, L269-274</div></div>
+      <div class="box gbx" id="f8_c2" style="left:510px;top:112px;width:235px"><h4>Kalkış</h4><div class="m">araç durmuş ∧ n_out &gt; 0
+ya da ayrık ∧ P_out &gt; 0,5 W
+→ Gear = 1C, Disengaged = false</div><div class="r">L200-206</div></div>
+      <div class="box gbx hl" id="f8_c3" style="left:510px;top:188px;width:235px"><h4>RequestEngaged</h4><div class="m">T_in = T_out·(n_out/n_in)_ort + kayıp
+     + atalet/i + powershift kaybı
+powershift: E_loss / dt / n_motor_ort
+  PowershiftShiftTime (0,8 s) boyunca
+C vitesi ∨ (ayrık ∧ lockup serbest):
+  → TorqueConverter.Request
+L vitesi: zincire istek;
+  Success ∧ ShiftRequired → GearShift</div><div class="r">L262-335</div></div>
+      <div class="box gbx" id="f8_c4" style="left:510px;top:358px;width:235px"><h4>RequestDisengaged</h4><div class="m">P_out &gt; 0 → Overload
+P_out &lt; 0 → Underload (sürücü frenler)
+≈ 0 → IdleController (rölanti)</div><div class="r">L336-450</div></div>
+
+      <div class="box gbx" id="f8_d1" style="left:765px;top:18px;width:235px"><h4>Vites değişimi (döngü)</h4><div class="m">GearShift geldi:
+ConsiderShiftLosses (L vitesi, T &gt; 0)
+ ∧ ilk kez → FailTimeInterval
+   (DeltaT = PowershiftShiftTime)
+   RequestAfterGearshift = true
+değilse → Gear = strateji.Engage
+   LastShift = t, en fazla 2 tur</div><div class="r">L211-241</div></div>
+      <div class="box data" id="f8_d2" style="left:765px;top:160px;width:235px"><h4>Powershift kaybı</h4><div class="m">E = |T_gbx_in · Δn_debriyaj/2
+     · PowershiftShiftTime|
+Δn = n_motor − n_out·i
+çıktı: P_gbx_shift_loss</div><div class="r">AbstractGearbox.cs L533-543</div></div>
+      <div class="box data" id="f8_d3" style="left:765px;top:252px;width:235px"><h4>GearEngaged (AT)</h4><div class="m">!Halted ∧ !Disengaged
+∧ !(DisengageGearbox
+    ∧ !ATEcoRollReleaseLockupClutch)</div><div class="r">L102-112</div></div>
+      <div class="box data" id="f8_d4" style="left:765px;top:330px;width:235px"><h4>Diğer şanzımanlar</h4><div class="m">APTN (konvertörsüz otomatik,
+hibrit/BEV), IEPC tek/çok vites,
+PEV gearbox: AT/AMT türevleri,
+PEVAMTShiftStrategy ile çalışır</div><div class="r">Gearbox/APTNGearbox.cs, IEPCGearbox*.cs</div></div>
+    </div>
+    <svg class="wires"></svg>
+    <p class="cap"><b>Strateji şanzımana "değiştir" der, şanzıman sürücüye "bekle" der.</b> AMT'de <span class="mono">ResponseGearShift</span> sürücüyü Roll aksiyonuna iter, kesinti boyunca motor rölantiye düşer. AT'de ilk istek <span class="mono">FailTimeInterval</span> ile adımı powershift süresine ayarlatır; sonraki adımda yeni vites takılır, kayıp enerjisi 0,8 s boyunca giriş torkuna eklenir. <span class="ref">AbstractAMTGearbox.cs L89-174 · APTGearbox.cs L194-245</span></p>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<div class="sec">
+  <div class="sh"><span class="n">9</span><h2>Vites polygon'ları ve strateji seçimi</h2></div>
+  <p class="sub">Her vites için tork-devir düzleminde bir küçültme (downshift) ve bir büyütme (upshift) çizgisi vardır. Stratejiler çalışma noktasının bu çizgilerin hangi tarafında kaldığına bakar; kararın geri kalanı yakıt/enerji kıyasıdır.</p>
+
+  <div class="cards">
+    <div class="card"><h3>Polygon geometrisi <span class="tag data">VERİ</span></h3>
+      <svg width="290" height="120" viewBox="0 0 290 150" style="display:block;margin:2px 0" preserveAspectRatio="xMidYMid meet">
+        <line x1="30" y1="130" x2="280" y2="130" stroke="#8a929c"/><line x1="30" y1="130" x2="30" y2="10" stroke="#8a929c"/>
+        <text x="265" y="145" font-size="9" fill="#6b7280">n</text><text x="12" y="16" font-size="9" fill="#6b7280">T</text>
+        <path d="M30 40 C 80 18, 160 20, 250 45" fill="none" stroke="#8a929c" stroke-dasharray="3 2"/><text x="200" y="30" font-size="8.5" fill="#6b7280">tam yük</text>
+        <path d="M85 130 L85 95 L95 40 L105 25" fill="none" stroke="#d2694f" stroke-width="2"/><text x="60" y="60" font-size="9" fill="#d2694f">downshift</text>
+        <path d="M190 130 L190 100 L205 50 L225 30" fill="none" stroke="#4a9a5b" stroke-width="2"/><text x="205" y="80" font-size="9" fill="#2f7a40">upshift</text>
+        <circle cx="140" cy="75" r="3.5" fill="#d9a520"/><text x="120" y="92" font-size="8.5" fill="#9a6b00">çalışma noktası</text>
+        <text x="40" y="122" font-size="8.5" fill="#b04a30">← küçült</text><text x="232" y="122" font-size="8.5" fill="#2f7a40">büyüt →</text>
+      </svg>
+      <pre>IsBelowDownshiftCurve(T, n): nokta downshift
+  çizgisinin SOLUNDA → küçült
+IsAboveUpshiftCurve(T, n): upshift
+  çizgisinin SAĞINDA → büyüt
+test: segment×nokta vektörel çarpımının işareti
+InterpolateDownshift(n): o devirde çizgi torku
+  (tork rezervi hesabında üst sınır)</pre>
+      <span class="ref">Data/Gearbox/ShiftPolygon.cs L102-200</span></div>
+
+    <div class="card"><h3>Deklarasyonda polygon hesabı <span class="tag data">VERİ</span></h3>
+      <table class="t">
+        <tr><th>Şanzıman</th><th>Yöntem</th></tr>
+        <tr><td>AMT, APTN, IHPC</td><td>ComputeEfficiencyShiftPolygon ("whitebook 2016"): tam yük ×0,98, devir marjı %7</td></tr>
+        <tr><td>MT</td><td>ComputeManualTransmissionShiftPolygon + genişletilmiş polygon</td></tr>
+        <tr><td>AT seri / powersplit</td><td>TorqueConverter.ComputeShiftPolygon: downshift dikey 700 rpm; upshift 900 rpm'den 1150 rpm'de tam yük torkuna eğik çizgi; 1. viteste downshift, son viteste upshift yok</td></tr>
+        <tr><td>Elektrikli E2 / IEPC</td><td>ComputeElectricMotorShiftPolygon: downshift NP80low ↔ 0,1·n_rated arası tam yük ve sürükleme çizgileri ×0,98; upshift 0,9·n_maks; derate için ayrı polygon</td></tr>
+      </table>
+      <p>Mühendislik modunda kullanıcı <span class="mono">.vgbs</span> verebilir; verilmezse aynı fonksiyonlar çalışır. AT'de ayrıca konvertör vitesleri için <span class="mono">TorqueConverterShiftPolygon</span> vardır.</p>
+      <span class="ref">DeclarationData.cs L1105-1125, L1731-1760</span></div>
+
+    <div class="card"><h3>Strateji seçimi (fabrika) <span class="tag str">STRATEJİ</span></h3>
+      <table class="t">
+        <tr><th>Şanzıman</th><th>İş tipi</th><th>Strateji</th></tr>
+        <tr><td>AMT</td><td>konvansiyonel, P-HEV (ICE)</td><td class="m">AMTShiftStrategyOptimized</td></tr>
+        <tr><td>AMT</td><td>P-HEV batarya-only</td><td class="m">ParallelHybridBatteryOnlyMode…</td></tr>
+        <tr><td>AMT</td><td>BEV, seri hibrit</td><td class="m">PEVAMTShiftStrategy</td></tr>
+        <tr><td>AMT</td><td>FCHV</td><td class="m">FCHVAMTShiftStrategy</td></tr>
+        <tr><td>MT</td><td>tümü</td><td class="m">MTShiftStrategy</td></tr>
+        <tr><td>AT</td><td>konvansiyonel, P-HEV</td><td class="m">ATShiftStrategyOptimized</td></tr>
+        <tr><td>AT</td><td>BEV, SHEV, batarya-only</td><td class="m">APTNShiftStrategy</td></tr>
+        <tr><td>APTN</td><td>hibrit, BEV, IEPC</td><td class="m">APTNShiftStrategy / FCHVAPTN…</td></tr>
+        <tr><td>IHPC</td><td>IHPC</td><td class="m">AMTShiftStrategyOptimized</td></tr>
+        <tr><td>hibrit kontrolcü</td><td>vitesi kontrolcü seçer</td><td class="m">HybridCtl*ShiftStrategy</td></tr>
+      </table>
+      <span class="ref">Impl/ShiftStrategyFactory.cs L30-110</span></div>
+  </div>
+
+  <div class="cards" style="margin-top:12px">
+    <div class="card"><h3>BaseShiftStrategy yardımcıları <span class="tag str">STRATEJİ</span></h3>
+      <pre>SpeedTooLowForEngine(g, n_out): n_out·i &lt; rölanti
+SpeedTooHighForEngine(g, n_out):
+  n_out·i ≥ min(vites maks devri, N95h − 1 rpm)
+EstimateAccelerationForGear(g, n_out):
+  eğim = 100 m ileri bakışla ortalama
+  P = P_maks(n_out·i) − P_şanz − P_aks
+    − P_hava − P_yuv − P_eğim
+  a = P / v / (m + m_tekerlek)</pre>
+      <span class="ref">Shiftstrategies/BaseShiftStrategy.cs L154-182</span></div>
+    <div class="card"><h3>Test aktarma organı <span class="tag str">STRATEJİ</span></h3>
+      <pre>RequestDryRunWithGear(t, dt, T_out, n_out, vites):
+  TestPowertrain.UpdateComponents()
+  test şanzımanı: SetGear = vites, Initialize
+  dryRun istek → ResponseDryRun
+  (motor devri, güç, DeltaFullLoad, Clutch.PowerRequest)</pre>
+      <p>Stratejiler gerçek aktarma organına dokunmaz; her "ne olurdu" sorusu bu kopyada cevaplanır.</p>
+      <span class="ref">AMTShiftStrategyOptimized.cs L472-485</span></div>
+    <div class="card"><h3>Hız düşüşü ön-işlemcisi <span class="tag data">VERİ</span></h3>
+      <pre>VelocitySpeedGearshiftPreprocessor
+  hızlar: 5, 10 … 120 km/h
+  eğimler: −g … +g adım 2 (çevrimdeki maks)
+  her çift için: vites boşta, TractionInterruption
+  süresince süzülme simülasyonu → bitiş hızı
+VelocityDropData.Interpolate(v, eğim)
+  → kesinti sonrası tahmini hız
+  &lt; 5 km/h ise erken vites değişimi yok</pre>
+      <span class="ref">Impl/VelocitySpeedGearshiftPreprocessor.cs L30-160</span></div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<div class="sec">
+  <div class="sh"><span class="n">10</span><h2>AMT "EffShift" stratejisi</h2></div>
+  <p class="sub"><span class="mono">AMTShiftStrategyOptimized.DoCheckShiftRequired</span> her Success yanıtında şanzıman tarafından çağrılır. Sıra önemlidir: önce zorunlu geçişler, sonra zaman kilidi, sonra küçültme, en son büyütme.</p>
+
+  <div class="fig" id="f10">
+    <div class="cv" style="height:470px">
+      <div class="box str" id="f10_s0" style="left:0px;top:0;width:215px"><h4>0 · Araç duruyor</h4><div class="m">→ değişim yok</div></div>
+      <div class="box str" id="f10_s1" style="left:0px;top:48px;width:215px"><h4>1 · Acil (motoru boğma)</h4><div class="m">1. vites ∧ devir &lt; rölanti → evet
+devir &lt; rölanti oldukça alt vites
+devir ≥ min(maks, N95h) oldukça üst
+farklıysa → evet</div><div class="r">L152-168</div></div>
+      <div class="box str" id="f10_s2" style="left:0px;top:146px;width:215px"><h4>2 · PTO yol süpürme</h4><div class="m">PTODriveRoadsweepingGear'a doğru
+(downshift çizgisi / devir sınırı)</div><div class="r">L169-188</div></div>
+      <div class="box str" id="f10_s3" style="left:0px;top:214px;width:215px"><h4>3 · Zaman kilidi</h4><div class="m">t &lt; lastShift + TimeBetweenGearshifts (2 s)
+→ değişim yok</div><div class="r">L190-194</div></div>
+      <div class="box str hl" id="f10_s4" style="left:0px;top:282px;width:215px"><h4>4 · CheckDownshift</h4><div class="m">değiştiyse → evet</div></div>
+      <div class="box str hl" id="f10_s5" style="left:0px;top:338px;width:215px"><h4>5 · CheckUpshift</h4><div class="m">değiştiyse → evet</div></div>
+      <div class="box str" id="f10_s6" style="left:0px;top:394px;width:215px"><h4>Sonuç</h4><div class="m">_nextGear → şanzıman Engage()
+→ ResponseGearShift</div><div class="r">L144-203</div></div>
+
+      <div class="colhead" style="left:245px;top:0">Küçültme</div>
+      <div class="box str" id="f10_d1" style="left:245px;top:18px;width:245px"><h4>CheckDownshift</h4><div class="m">t − LastUpshift &lt; DownshiftAfterUpshiftDelay
+  (6 s) → yok
+DoCheckDownshiftBase:
+  downshift çizgisinin solunda → bir alt vites
+değişmediyse ve vites &gt; 1
+  → CheckEarlyDownshift (FC)</div><div class="r">L264-270, L402-425</div></div>
+      <div class="box str" id="f10_d2" style="left:245px;top:150px;width:245px"><h4>CheckEarlyDownshift (yakıt)</h4><div class="m">kesinti sonrası v &gt; 5 km/h şart
+T_motor ≥ 0,7 · T_sürükleme şart
+alt 1..AllowedGearRangeFC (2) vites:
+  oran ≤ RatioEarlyDownshiftFC
+  upshift çizgisinin sağında değil
+  fc_next &lt; fc_şimdi · 0,97 ∧ en küçük
+→ en verimli alt vites</div><div class="r">L426-470</div></div>
+
+      <div class="colhead" style="left:510px;top:0">Büyütme</div>
+      <div class="box str" id="f10_u1" style="left:510px;top:18px;width:245px"><h4>CheckUpshift</h4><div class="m">DriverBehavior ∉ {Accelerating, Driving}
+  → yok (coasting/frende büyütme yok)
+t − LastDownshift &lt; 6 s → yok
+nextGear = DoCheckUpshift
+EstimateAccelerationForGear(next)
+  &lt; UpshiftMinAcceleration (0,1 m/s²)
+  → tek vites: iptal; atlama: bir üst dene</div><div class="r">L204-232</div></div>
+      <div class="box str" id="f10_u2" style="left:510px;top:160px;width:245px"><h4>DoCheckUpshift (çizgi + atlama)</h4><div class="m">upshift çizgisinin sağında → bir üst vites
+daha üst vitesler dry-run ile:
+  T_in ≤ min(dinamik tam yük,
+             downshift çizgisi torku)
+  ∧ downshift çizgisinin sağında
+  oldukça devam (vites atlama)
+sonra CheckEarlyUpshift</div><div class="r">L233-263</div></div>
+      <div class="box str hl" id="f10_u3" style="left:510px;top:292px;width:245px"><h4>CheckEarlyUpshift (yakıt)</h4><div class="m">T_motor ≥ 0,7·T_sürükleme ∧ v_son &gt; 5 km/h
+üst 1..2 vites: oran &lt; RatioEarlyUpshiftFC
+  downshift çizgisinin sağında
+  n_motor_son ≥ MinEngineSpeedPostUpshift
+  P_istek &lt; P_maks(n_son)
+  rezerv = 1 − P/P_tamyük ≥ TorqueReserve (0)
+   yetmezse: NTq98h-NP98h arası
+   AccelerationFactor (0,5) ile azaltılmış
+   ivme torkuyla tekrar
+  fc_next &lt; fc_şimdi · 0,97 ∧ en küçük
+→ en verimli üst vites</div><div class="r">L272-369</div></div>
+
+      <div class="box data" id="f10_fc" style="left:775px;top:18px;width:225px"><h4>Yakıt derecesi GetFCRating</h4><div class="m">T = T_toplam kırp
+  [T_sürükleme, T_tamyük](n)
+fc = Σ yakıt
+  FC_map(T, n) · LHV
+ekstrapolasyon → uyarı</div><div class="r">L388-401</div></div>
+      <div class="box data" id="f10_start" style="left:775px;top:130px;width:225px"><h4>Kalkış ve başlangıç vitesi</h4><div class="m">MaxStartGear: 8 km/h'de devir
+  &gt; rölanti + 0,065·(nom−rölanti)
+  olan en yüksek vites
+InitStartGear: MaxStartGear'dan
+  1'e; devir &gt; rölanti ∧ rezerv
+  ≥ StartTorqueReserve (0,2)
+InitGear (hareketli): polygon
+  içinde ∧ rezerv ≥ 0,2</div><div class="r">L4-38, L68-132</div></div>
+      <div class="box data" id="f10_eng" style="left:775px;top:292px;width:225px"><h4>Engage (takma anı)</h4><div class="m">devir rölanti altı → alt vites
+devir çok yüksek → üst vites
+(son kontrol, n_out_min ile)</div><div class="r">L133-142</div></div>
+      <div class="box data" id="f10_mt" style="left:775px;top:370px;width:225px"><h4>MT farkları</h4><div class="m">FC tabanlı erken vites yok
+genişletilmiş downshift polygon'u
+atlama rezervi ≥ TorqueReserve
+yokuş yukarı düşük hız istisnası</div><div class="r">MTShiftStrategy.cs L138-209</div></div>
+    </div>
+    <svg class="wires"></svg>
+    <p class="cap"><b>Yüzde üç kuralı.</b> Erken büyütme ve küçültme yalnızca yeni vites mevcut vitesten en az yüzde üç daha az yakıt tüketiyorsa yapılır (<span class="mono">RatingFactorCurrentGear</span> 0,97); 6 saniyelik yön değişim gecikmeleri ve 2 saniyelik asgari aralık vites gezinmesini engeller. Kesinti sonrası hız, ön-işlemcinin tablosundan okunur ve polygon kontrolü o hıza göre yapılır. <span class="ref">Shiftstrategies/AMTShiftStrategyOptimized.cs</span></p>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<div class="sec">
+  <div class="sh"><span class="n">11</span><h2>AT stratejisi: konvertör, kilit ve yük kademeleri</h2></div>
+  <p class="sub"><span class="mono">ATShiftStrategyOptimized</span> vites pozisyonunu C (konvertör) ve L (kilitli) olarak ayırır. Konvertörden kilide geçiş yük kademesi tablosuyla, kilitli vitesler arası geçiş AMT'deki yakıt kıyasıyla yapılır.</p>
+
+  <div class="fig" id="f11">
+    <div class="cv" style="height:470px">
+      <div class="box str" id="f11_s1" style="left:0;top:0;width:220px"><h4>1 · Kalkış: 0 → 1C</h4><div class="m">ayrık ∧ n_out &gt; 0 → 1C</div><div class="r">L134-140</div></div>
+      <div class="box str" id="f11_s2" style="left:0;top:52px;width:220px"><h4>2 · Ayırma: _ → 0</h4><div class="m">frenleme ∧ T_out &lt; 0 ∧ v &lt; DisengageSpeed
+kilitli ∧ n_in = 0
+1C ∧ a &lt; 0 ∧ T_out &lt; 0 ∧ T_in &gt; 0
+frenleme ∧ 1C ∧ n_in ≤ rölanti
+motor itmesi gerekiyorsa (T_out &gt; 0)
+  → ayırma yok, 1. vites</div><div class="r">L141-165</div></div>
+      <div class="box str" id="f11_s3" style="left:0;top:180px;width:220px"><h4>3 · Acil</h4><div class="m">n_in &lt; rölanti → küçült
+n_in ≥ min(maks, N95h) → üst vites
+  ivme &gt; 0 ∨ kilitli ∧ downshift
+  çizgisinin sağında → büyüt</div><div class="r">L184-217</div></div>
+      <div class="box str hl" id="f11_s4" style="left:0;top:272px;width:220px"><h4>4 · CheckUpshift</h4><div class="m">TimeBetweenGearshifts geçmeli</div></div>
+      <div class="box str hl" id="f11_s5" style="left:0;top:322px;width:220px"><h4>5 · CheckDownshift</h4><div class="m">TimeBetweenGearshifts geçmeli</div></div>
+      <div class="box str" id="f11_s6" style="left:0;top:372px;width:220px"><h4>Sonuç: NextGearState</h4><div class="m">(absTime, disengaged, gear)
+Engage() aynı absTime'da okur
+Disengage() desteklenmez (hata)</div><div class="r">L115-129, L732-768</div></div>
+
+      <div class="colhead" style="left:270px;top:0">Büyütme dalları</div>
+      <div class="box str" id="f11_u1" style="left:270px;top:18px;width:230px"><h4>L → L+1, C → L: CheckUpshiftToLocked</h4><div class="m">sürücü ivmesi &lt; 0 → bak ma
+üst viteste eşdeğer tork
+  upshift çizgisinin sağında
+ulaşılabilir ivme ≥ min(
+  0,1 m/s² (Upshift/CLUpshiftMinAcc),
+  max(0, sürücü ivmesi))
+→ büyüt</div><div class="r">L253-289</div></div>
+      <div class="box str" id="f11_u2" style="left:270px;top:150px;width:230px"><h4>C → C+1: CheckUpshiftTcTc</h4><div class="m">yeni TC çalışma noktası hesaplanır
+  (powershift kaybı torka eklenir)
+n_motor &gt; min(700 rpm, oran·(N80h−150))
+T_motor ≤ T_maks − T_atalet
+ivme (TC kayıp farkı dahil) ≥
+  min(CCUpshiftMinAcc 0,1, sürücü ivmesi)</div><div class="r">L290-325</div></div>
+      <div class="box str hl" id="f11_u3" style="left:270px;top:282px;width:230px"><h4>C → L erken: yük kademesi tablosu</h4><div class="m">yük% = T_in / T_dinamik_tamyük
+kademe 1..6: Schmitt-trigger eşikleri
+  yukarı 19,7 36,3 53,0 69,7 86,4
+  aşağı  13,7 30,3 47,0 63,7 80,4
+ShiftSpeedsTCToLocked[kademe]:
+  (iniş −5% / düz / yokuş +5%) × (a_min, a_max)
+  ör. kademe 1: 90 / 120 / 165 rpm
+eğim ve ivmeye göre interpolasyon
+n_out &gt; n_geçiş / i → kilitle</div><div class="r">L343-380 · ShiftLineSet.cs</div></div>
+
+      <div class="box str" id="f11_u4" style="left:550px;top:18px;width:230px"><h4>L → L+1/2 erken: yakıt kıyası</h4><div class="m">ivme ≥ 0, T_motor ≥ 0,7·T_sürükleme
+v_son = v + a·ATLookAheadTime (1,5 s)
+  · VelocityDropFactor, ≤ v_hedef
+n_out, T_out buna göre ölçeklenir
+AllowedGearRangeFC AT = 1
+C→L atlama yasak; oran &lt; RatioEarlyUpshiftFC
+n_son ≥ MinEngineSpeedPostUpshift
+P &lt; P_maks, rezerv ≥ TorqueReserve
+  (AccelerationFactor ile tekrar)
+n &lt; N95h ∧ T_maks &gt; T_sürükleme
+fc_next &lt; fc_şimdi · 0,97 → ShiftGear</div><div class="r">L381-503</div></div>
+
+      <div class="colhead" style="left:550px;top:230px">Küçültme dalları</div>
+      <div class="box str" id="f11_d1" style="left:550px;top:248px;width:230px"><h4>CheckDownshift</h4><div class="m">downshift çizgisinin solunda ∧
+ (alt vites kilitli değil ∨ alt viteste
+  upshift çizgisinin sağında değil) → küçült
+hızlanırken: v &lt; v_hedef − 10 km/h ∧ a &lt; 0
+  alt vites daha fazla rezerv veriyorsa
+  (atalet dahil, n &lt; N95h) → küçült
+vites &gt; 1 → CheckEarlyDownshift</div><div class="r">L507-553</div></div>
+      <div class="box str" id="f11_d2" style="left:550px;top:372px;width:230px"><h4>CheckEarlyDownshift (yakıt)</h4><div class="m">yalnız kilitli alt vitesler, C→L atlama yok
+oran &lt; RatioEarlyDownshiftFC
+upshift çizgisinin sağında değil
+fc_next &lt; fc_şimdi · 0,97 → ShiftGear</div><div class="r">L554-624</div></div>
+
+      <div class="box data" id="f11_tc" style="left:830px;top:18px;width:170px"><h4>Konvertör polygon'u</h4><div class="m">downshift: 700 rpm dikey
+upshift: 900 rpm (T≤0)
+  → 1150 rpm'de tam yük
+C vitesleri için ayrı
+TorqueConverterShiftPolygon</div><div class="r">DeclarationData.cs L1731</div></div>
+      <div class="box data" id="f11_init" style="left:830px;top:130px;width:170px"><h4>Başlangıç</h4><div class="m">v = 0: her zaman 1C, ayrık
+hareketli: en yüksekten
+  rölanti &lt; n &lt; nominal ∧
+  downshift çizgisinin sağında</div><div class="r">L93-114</div></div>
+      <div class="box data" id="f11_est" style="left:830px;top:230px;width:170px"><h4>İvme tahmini (TC)</h4><div class="m">ΔP_TC = kayıp(C+1) − kayıp(C)
+P = n·T − ΔP_TC − P_aks
+  − P_hava − P_yuv − P_eğim
+a = P / v / (m + m_tek)</div><div class="r">L711-731</div></div>
+      <div class="box data" id="f11_hyb" style="left:830px;top:330px;width:170px"><h4>Hibrit / APTN</h4><div class="m">HybridCtl*: karar hibrit
+kontrolcüden (ShiftRequired,
+NextGear)
+APTN: PEV stratejisi,
+dt &lt; 0,05 s'de değişim yok</div><div class="r">HybridCtlShiftStrategy.cs · APTNShiftStrategy.cs</div></div>
+    </div>
+    <svg class="wires"></svg>
+    <p class="cap"><b>Konvertör kilidi yük ve eğime bağlıdır.</b> Motor yükü yüzdesi altı kademeye ayrılır; kademe yükseldikçe kilitleme devri de yükselir (90 rpm'den 205 rpm'e kadar, şanzıman çıkışında). Kilitli vitesler arasında AMT'deki yakıt kıyası çalışır, ancak ileri bakış süresi 1,5 s ve izinli atlama aralığı 1'dir. Konvertörden kilitliye vites atlayarak geçmek yasaktır. <span class="ref">Shiftstrategies/ATShiftStrategyOptimized.cs L130-183</span></p>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<div class="sec">
+  <div class="sh"><span class="n">12</span><h2>Elektrikli araç stratejisi ve parametreler</h2></div>
+  <p class="sub"><span class="mono">PEVAMTShiftStrategy</span> yakıt yerine elektriksel gücü derecelendirir; frenlemede reküperasyonu en yüksek tutan vitesi seçer. Aşağıdaki tablolar deklarasyon modundaki sabitleri verir.</p>
+
+  <div class="cards">
+    <div class="card"><h3>PEV / IEPC stratejisi <span class="tag str">STRATEJİ</span></h3>
+      <pre>EC = P_elektrik(n, T/EMRatio, U_batarya)
+  negatif = tahrik, pozitif = reküperasyon
+derate aktif → DeRatedEmShiftPolygon
+kalkış: DriveOffStandstill, hedef hıza /
+  NP80low'a / tam yüke kadar değişim yok
+  kalkış vitesi: rezerv ≥ 0,2 olan en yüksek
+upshift: polygon + atlama; atalet torku
+  ≤ reküperasyon sınırı
+erken: tahrikte EC_next &gt; EC·0,97,
+  reküperasyonda EC_next &gt; EC/0,97
+frenleme: SelectBrakingGear →
+  n_EM ≥ (PEV_TargetSpeedBrakeNorm·
+  (n_maks/n_rated − 1) + 1)·n_rated
+  olan en düşük devirli alt vites
+maks reküperasyona %10 yakınken
+  erken küçültme yok</pre>
+      <span class="ref">Shiftstrategies/PEVAMTShiftStrategy.cs L130-452</span></div>
+
+    <div class="card"><h3>Simülasyon ve sürücü sabitleri <span class="tag data">VERİ</span></h3>
+      <table class="t">
+        <tr><th>Sabit</th><th>Değer</th></tr>
+        <tr><td class="m">TargetTimeInterval</td><td>0,5 s</td></tr>
+        <tr><td class="m">LowerBoundTimeInterval</td><td>0,25 s</td></tr>
+        <tr><td class="m">MinVelocityForCoast</td><td>5 km/h</td></tr>
+        <tr><td class="m">DriverActionDistanceTolerance</td><td>0,25 m</td></tr>
+        <tr><td class="m">BrakingSafetyMargin</td><td>0,1 m</td></tr>
+        <tr><td class="m">ClutchClosingSpeedNorm</td><td>0,065</td></tr>
+        <tr><td class="m">GearboxLookaheadForAccEstimation</td><td>100 m</td></tr>
+        <tr><td class="m">LAC LookAheadDistanceFactor / MinSpeed</td><td>10 / 50 km/h</td></tr>
+        <tr><td class="m">LAC DF offset / scaling</td><td>2,5 / 1,5</td></tr>
+        <tr><td class="m">OverSpeed MinSpeed / aşım</td><td>50 km/h / 2,5 km/h</td></tr>
+        <tr><td class="m">EcoRoll MinSpeed / gecikme / a</td><td>60 km/h / 2 s / 0–0,1 m/s²</td></tr>
+        <tr><td class="m">PCC enable / min / UC1 / UC2 / under / UC3</td><td>80 / 50 km/h / 1500 / 1000 m / 8 / 5 km/h</td></tr>
+        <tr><td class="m">Stop/Start gecikme / maks kapalı</td><td>2 s / 120 s</td></tr>
+      </table>
+      <span class="ref">Configuration/Constants.cs · DeclarationData.Driver L777-893</span></div>
+
+    <div class="card"><h3>Vites parametreleri (GearboxTCU) <span class="tag data">VERİ</span></h3>
+      <table class="t">
+        <tr><th>Parametre</th><th>Değer</th></tr>
+        <tr><td class="m">MinTimeBetweenGearshifts</td><td>2 s</td></tr>
+        <tr><td class="m">UpshiftAfterDownshiftDelay / tersi</td><td>6 s / 6 s</td></tr>
+        <tr><td class="m">UpshiftMinAcceleration</td><td>0,1 m/s²</td></tr>
+        <tr><td class="m">TorqueReserve / TorqueReserveStart</td><td>0 / 0,2</td></tr>
+        <tr><td class="m">StartSpeed / StartAcceleration</td><td>8 km/h / 0,8 m/s²</td></tr>
+        <tr><td class="m">RatingFactorCurrentGear</td><td>0,97</td></tr>
+        <tr><td class="m">RatioEarlyUpshiftFC / Downshift</td><td>24 / 24 (aks oranına bölünür)</td></tr>
+        <tr><td class="m">AllowedGearRangeFC AMT / AT</td><td>2 / 1</td></tr>
+        <tr><td class="m">AccelerationFactor / VelocityDropFactor</td><td>0,5 / 1,0</td></tr>
+        <tr><td class="m">ATLookAheadTime / PowershiftShiftTime</td><td>1,5 s / 0,8 s</td></tr>
+        <tr><td class="m">DragMarginFactor</td><td>0,7</td></tr>
+        <tr><td class="m">MIN_SPEED_AFTER_TRACTION_INTERRUPTION</td><td>5 km/h</td></tr>
+        <tr><td class="m">AT downshift / upshift düşük / yüksek</td><td>700 / 900 / 1150 rpm</td></tr>
+      </table>
+      <p><span class="mono">Declaration\EffShiftParameters.vtcu</span> varsa bu değerleri ezer.</p>
+      <span class="ref">DeclarationData.cs L974-1083</span></div>
+  </div>
+
+  <div class="cards c2" style="margin-top:12px">
+    <div class="card"><h3>Kod notları</h3>
+      <p class="note"><b>Ölü dosya.</b> <span class="mono">Impl/DefaultDriverStrategy.cs</span> tamamen yorumda; canlı sınıf <span class="mono">Impl/Driver/DefaultDriverStrategy.cs</span>.</p>
+      <p class="note"><b>Yanıt tabanlı karar ağacı.</b> Sürücü mantığı if-else değil deneme-yanıt zinciridir; <span class="mono">debug.Add("[DMD.HRE-n]")</span> etiketleri hangi dalın çalıştığını izlemenin en kısa yoludur.</p>
+      <p class="note"><b>Fren = motor freni + servis freni.</b> <span class="mono">P_brake_loss</span> sıfırken araç yine de yavaşlıyor olabilir.</p>
+      <p class="note"><b>Çekiş kesintisi.</b> AMT'de fiziksel kesinti (<span class="mono">ResponseGearShift</span> → Roll); AT'de kesinti yok, 0,8 s boyunca kayıp enerjisi.</p>
+    </div>
+    <div class="card"><h3>Gözlemler</h3>
+      <p class="note"><b>Her "ne olurdu" dry-run.</b> Stratejiler ayrı bir <span class="mono">TestPowertrain</span> kopyasında çalışır; gerçek duruma dokunmaz.</p>
+      <p class="note"><b>Yüzde üç kuralı</b> (0,97) AMT, AT ve elektrikli stratejide ortaktır; 6 s yön değişim gecikmesiyle birlikte vites gezinmesini engeller.</p>
+      <p class="note"><b>fcUpshiftPossible</b> <span class="mono">CheckEarlyUpshift</span> içinde her zaman true (kodda TODO); <span class="mono">CheckEarlyUpshiftBase</span> hiç çağrılmıyor.</p>
+      <p class="note"><b>Eğim tutarsızlığı.</b> PCC coasting kuvvetinde mevcut eğim, <span class="mono">ComputeCoastingDistance</span>'ta hedefe ortalama eğim kullanılır; kodda <span class="mono">mk20211008</span> notuyla işaretli.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  function rect(fig, id){ const el=fig.querySelector('#'+id); const r=el.getBoundingClientRect(); const f=fig.getBoundingClientRect(); return {l:r.left-f.left, t:r.top-f.top, r:r.right-f.left, b:r.bottom-f.top, w:r.width, h:r.height}; }
+  function anchor(R, side, frac){ frac = (frac==null)?0.5:frac;
+    switch(side){ case 'r': return [R.r, R.t+R.h*frac]; case 'l': return [R.l, R.t+R.h*frac]; case 't': return [R.l+R.w*frac, R.t]; case 'b': return [R.l+R.w*frac, R.b]; } }
+  function auto(A,B){ if(B.l >= A.r-2) return ['r','l']; if(B.r <= A.l+2) return ['l','r']; if(B.t >= A.b-2) return ['b','t']; return ['t','b']; }
+  function path(a, sa, b, sb, bend){
+    const [ax,ay]=a, [bx,by]=b;
+    if(sa===sb){
+      if(sa==='b'){ const my=(bend!=null)?bend:Math.max(ay,by)+16; return `M${ax} ${ay} V${my} H${bx} V${by}`; }
+      if(sa==='t'){ const my=(bend!=null)?bend:Math.min(ay,by)-16; return `M${ax} ${ay} V${my} H${bx} V${by}`; }
+      if(sa==='l'){ const mx=(bend!=null)?bend:Math.min(ax,bx)-16; return `M${ax} ${ay} H${mx} V${by} H${bx}`; }
+      const mx=(bend!=null)?bend:Math.max(ax,bx)+16; return `M${ax} ${ay} H${mx} V${by} H${bx}`;
+    }
+    if((sa==='r'||sa==='l') && (sb==='l'||sb==='r')){ const mx = (bend!=null)? bend : (ax+bx)/2; return `M${ax} ${ay} H${mx} V${by} H${bx}`; }
+    if((sa==='b'||sa==='t') && (sb==='t'||sb==='b')){ const my = (bend!=null)? bend : (ay+by)/2; return `M${ax} ${ay} V${my} H${bx} V${by}`; }
+    if(sa==='r'||sa==='l'){ return `M${ax} ${ay} H${bx} V${by}`; }
+    return `M${ax} ${ay} V${by} H${bx}`;
+  }
+  // Dikey istifleme: aynı "left" değerine sahip kutular bir sütun oluşturur; ilk kutu kendi top'unu korur,
+  // sonrakiler en az (önceki.alt + 12) olacak şekilde aşağı itilir. data-align="id" ile başka kutuyla hizalanır.
+  function stack(cv){
+    const boxes=[...cv.querySelectorAll('.box')]; const cols={};
+    for(const b of boxes){ const l=b.style.left; (cols[l]=cols[l]||[]).push(b); }
+    for(const l in cols){ let prevBottom=null; for(const b of cols[l]){ if(b.dataset.align||b.dataset.below) continue; const top=parseFloat(b.style.top)||0;
+        const gap = b.dataset.gap? parseFloat(b.dataset.gap) : 12;
+        const t = prevBottom==null? top : Math.max(top, prevBottom+gap); b.style.top=t+'px'; prevBottom=t+b.offsetHeight; } }
+    for(const b of boxes){ if(b.dataset.align){ const ref=cv.querySelector('#'+b.dataset.align); b.style.top=ref.style.top; } }
+    for(const b of boxes){ if(b.dataset.below){ let mb=0; for(const id of b.dataset.below.split(',')){ const r=cv.querySelector('#'+id.trim()); mb=Math.max(mb,(parseFloat(r.style.top)||0)+r.offsetHeight); } b.style.top=(mb+14)+'px'; } }
+    let maxB=0; for(const b of boxes){ maxB=Math.max(maxB, (parseFloat(b.style.top)||0)+b.offsetHeight); }
+    cv.style.height=(maxB+4)+'px';
+  }
+  document.querySelectorAll('.fig .cv').forEach(stack);
+  function wire(figId, edges){
+    const fig=document.getElementById(figId); if(!fig) return; const cv=fig.querySelector('.cv'); const svg=fig.querySelector('svg.wires');
+    const fr=fig.getBoundingClientRect(), cr=cv.getBoundingClientRect();
+    svg.style.left=(cr.left-fr.left)+'px'; svg.style.top=(cr.top-fr.top)+'px'; svg.setAttribute('width',cr.width); svg.setAttribute('height',cr.height);
+    const ns='http://www.w3.org/2000/svg';
+    const defs=document.createElementNS(ns,'defs');
+    defs.innerHTML='<marker id="ah_'+figId+'" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#444"/></marker>';
+    svg.appendChild(defs);
+    for(const e of edges){
+      const A=rect(cv,e.from), B=rect(cv,e.to); let [sa,sb]=auto(A,B); if(e.fs) sa=e.fs; if(e.ts) sb=e.ts;
+      const a=anchor(A,sa,e.fo), b=anchor(B,sb,e.tf);
+      const p=document.createElementNS(ns,'path'); p.setAttribute('d',path(a,sa,b,sb,e.bend)); p.setAttribute('fill','none'); p.setAttribute('stroke','#444'); p.setAttribute('stroke-width','1.2');
+      if(e.dashed) p.setAttribute('stroke-dasharray','4 3'); p.setAttribute('marker-end','url(#ah_'+figId+')'); svg.appendChild(p);
+      if(e.label){ const lx = e.lx!=null? e.lx : (a[0]+b[0])/2, ly = e.ly!=null? e.ly : (a[1]+b[1])/2;
+        const t=document.createElementNS(ns,'text'); t.setAttribute('x',lx); t.setAttribute('y',ly); t.setAttribute('font-size','8.5'); t.setAttribute('fill','#444'); t.setAttribute('text-anchor','middle'); t.setAttribute('font-family','Segoe UI, sans-serif'); t.textContent=e.label;
+        svg.appendChild(t); const bb=t.getBBox(); const rc=document.createElementNS(ns,'rect'); rc.setAttribute('x',bb.x-2); rc.setAttribute('y',bb.y-1); rc.setAttribute('width',bb.width+4); rc.setAttribute('height',bb.height+2); rc.setAttribute('fill','#fff'); svg.insertBefore(rc,t); }
+    }
+  }
+  wire('f1',[
+    {from:'f1_cyc',to:'f1_drv',label:'ds, v_hedef, eğim'},{from:'f1_drv',to:'f1_veh',label:'a, dt'},{from:'f1_veh',to:'f1_whl'},{from:'f1_whl',to:'f1_brk'},{from:'f1_brk',to:'f1_axl'},{from:'f1_axl',to:'f1_gbx'},
+    {from:'f1_gbx',to:'f1_tc'},{from:'f1_tc',to:'f1_clu'},{from:'f1_clu',to:'f1_eng'},
+    {from:'f1_eng',to:'f1_resp',fs:'l',ts:'r',label:'yanıt'},{from:'f1_resp',to:'f1_drv',fs:'t',ts:'b',fo:0.2,tf:0.85,bend:124,label:'yanıt tipi → sonraki aksiyon'},
+    {from:'f1_drv',to:'f1_srch',fs:'b',ts:'t',fo:0.3,tf:0.3,dashed:true,label:'dryRun'},{from:'f1_srch',to:'f1_kin',fs:'b',ts:'t'},{from:'f1_resp',to:'f1_out',fs:'b',ts:'t',label:'Success'}
+  ]);
+  wire('f2',[
+    {from:'f2_in',to:'f2_pcc'},{from:'f2_pcc',to:'f2_eco'},{from:'f2_eco',to:'f2_eng'},{from:'f2_eng',to:'f2_mode'},
+    {from:'f2_mode',to:'f2_b1',fs:'r',ts:'l',fo:0.3,tf:0.5,bend:235,label:'BRAKE'},{from:'f2_b1',to:'f2_b2'},
+    {from:'f2_mode',to:'f2_d1',fs:'r',ts:'l',fo:0.7,tf:0.85,bend:515,label:'DRIVE'},{from:'f2_d1',to:'f2_d2'},
+    {from:'f2_d2',to:'f2_cut',fs:'r',ts:'l',fo:0.3,tf:0.7,label:'aşıyor'},{from:'f2_d2',to:'f2_req',fs:'r',ts:'l',fo:0.7,tf:0.4,label:'BRAKE / DRIVE'},
+    {from:'f2_b2',to:'f2_d1',fs:'r',ts:'l',fo:0.3,tf:0.3,dashed:true,label:'tetik geçildi → DRIVE'}
+  ]);
+  wire('f3',[
+    {from:'f3_la',to:'f3_ent'},{from:'f3_ent',to:'f3_gen',fs:'r',ts:'l',tf:0.3,label:'her giriş'},{from:'f3_gen',to:'f3_sel',fs:'l',ts:'r',fo:0.85,label:'adaylar'},
+    {from:'f3_dec',to:'f3_gen',fs:'t',ts:'b',dashed:true,label:'brakingDistance'},{from:'f3_coast',to:'f3_gen',fs:'l',ts:'r',fo:0.5,tf:0.5,dashed:true,label:'coastingDistance'},
+    {from:'f3_df',to:'f3_coast',fs:'t',ts:'b',label:'DF'},{from:'f3_os',to:'f3_coast',fs:'l',ts:'l',dashed:true,label:'v_n'}
+  ]);
+  wire('f5',[
+    {from:'f5_in',to:'f5_dis'},{from:'f5_in',to:'f5_eng',fs:'r',ts:'l',bend:205,label:'takılı'},{from:'f5_dis',to:'f5_eng',dashed:true,label:'debriyaj kapandı'},
+    {from:'f5_eng',to:'f5_a1',fs:'r',ts:'l',bend:205},{from:'f5_eng',to:'f5_a2',fs:'r',ts:'l',bend:205},{from:'f5_eng',to:'f5_a3',fs:'r',ts:'l',bend:205},
+    {from:'f5_a2',to:'f5_r1',label:'Underload'},{from:'f5_a3',to:'f5_r2',fs:'r',ts:'l'},{from:'f5_a3',to:'f5_r3',fs:'r',ts:'l',bend:490},
+    {from:'f5_r1',to:'f5_t1',label:'GearShift'},{from:'f5_r3',to:'f5_t2',fs:'r',ts:'l',label:'Overload'}
+  ]);
+  wire('f6',[
+    {from:'f6_in',to:'f6_sw',label:'Coast fazı'},{from:'f6_sw',to:'f6_coast',label:'coast'},{from:'f6_sw',to:'f6_brake',fs:'r',ts:'l',tf:0.3,label:'faz = Brake'},{from:'f6_coast',to:'f6_brake',fs:'r',ts:'l',fo:0.3,tf:0.85,dashed:true,label:'Underload → Brake'},
+    {from:'f6_brake',to:'f6_dab',fs:'r',ts:'l',fo:0.3,tf:0.4},{from:'f6_dab',to:'f6_sbp',label:'Underload / GearShift'},{from:'f6_sbp',to:'f6_post'},
+    {from:'f6_sbp',to:'f6_brk',fs:'r',ts:'l',fo:0.4,tf:0.7,dashed:true},{from:'f6_dab',to:'f6_brk',fs:'r',ts:'l',fo:0.3,tf:0.3},
+    {from:'f6_in',to:'f6_tsr',fs:'r',ts:'l',fo:0.2,tf:0.5,bend:245,dashed:true,label:'v ≤ v_n'}
+  ]);
+  wire('f7',[
+    {from:'f7_ecoc',to:'f7_pre',fs:'b',ts:'t',fo:0.5},{from:'f7_off',to:'f7_pre'},{from:'f7_pre',to:'f7_on',label:'2 s'},{from:'f7_on',to:'f7_off',fs:'b',ts:'b',label:'fren / yavaş'},
+    {from:'f7_pccp',to:'f7_uc1'},{from:'f7_uc1',to:'f7_uc2'},{from:'f7_uc2',to:'f7_pcca'},{from:'f7_ss',to:'f7_sum'},{from:'f7_sum',to:'f7_mod'}
+  ]);
+  wire('f8',[
+    {from:'f8_a1',to:'f8_a2'},{from:'f8_a2',to:'f8_a3'},{from:'f8_a3',to:'f8_a4'},{from:'f8_a3',to:'f8_b1',fs:'r',ts:'l',tf:0.5,label:'GearEngaged'},{from:'f8_a4',to:'f8_b2',fs:'r',ts:'l',tf:0.6,label:'ayrık'},
+    {from:'f8_b1',to:'f8_b2',label:'GearShift → boşa'},{from:'f8_b2',to:'f8_b3'},
+    {from:'f8_c1',to:'f8_c2'},{from:'f8_c2',to:'f8_c3'},{from:'f8_c3',to:'f8_c4',label:'ayrık / Halted'},{from:'f8_c3',to:'f8_d1',fs:'r',ts:'l',tf:0.5,label:'GearShift'},{from:'f8_d2',to:'f8_c3',fs:'l',ts:'r',fo:0.5,tf:0.75,dashed:true}
+  ]);
+  wire('f10',[
+    {from:'f10_s0',to:'f10_s1'},{from:'f10_s1',to:'f10_s2'},{from:'f10_s2',to:'f10_s3'},{from:'f10_s3',to:'f10_s4'},{from:'f10_s4',to:'f10_s5',label:'değişmedi'},{from:'f10_s5',to:'f10_s6'},
+    {from:'f10_s4',to:'f10_d1',fs:'r',ts:'l',tf:0.5,bend:230},{from:'f10_d1',to:'f10_d2',label:'çizgi içinde'},
+    {from:'f10_s5',to:'f10_u1',fs:'r',ts:'l',tf:0.5,bend:498},{from:'f10_u1',to:'f10_u2'},{from:'f10_u2',to:'f10_u3'},
+    {from:'f10_fc',to:'f10_u3',fs:'l',ts:'r',fo:0.5,tf:0.7,dashed:true,label:'fc'},{from:'f10_fc',to:'f10_d2',fs:'l',ts:'r',fo:0.3,tf:0.5,bend:762,dashed:true}
+  ]);
+  wire('f11',[
+    {from:'f11_s1',to:'f11_s2'},{from:'f11_s2',to:'f11_s3'},{from:'f11_s3',to:'f11_s4'},{from:'f11_s4',to:'f11_s5',label:'değişmedi'},{from:'f11_s5',to:'f11_s6'},
+    {from:'f11_s4',to:'f11_u1',fs:'r',ts:'l',tf:0.5,bend:245},{from:'f11_s4',to:'f11_u2',fs:'r',ts:'l',tf:0.5,bend:245},{from:'f11_s4',to:'f11_u3',fs:'r',ts:'l',tf:0.5,bend:245},
+    {from:'f11_u1',to:'f11_u4',fs:'r',ts:'l',label:'yakıt kıyası'},{from:'f11_s5',to:'f11_d1',fs:'r',ts:'l',tf:0.5,bend:525},{from:'f11_d1',to:'f11_d2'}
+  ]);
+})();
+</script>
+</body>
+</html>
