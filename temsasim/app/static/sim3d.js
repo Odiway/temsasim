@@ -304,11 +304,15 @@ export function buildBus(raster, doorsWanted = 3) {
     add(archLip, paint, ax.x, 0.50, sgn * 1.315, false);
   }
 
-  // roof: traction pack with its glow strip, and the HVAC unit running aft
+  // roof: traction pack with its glow strip (battery-electric only), and the HVAC unit running aft
+  const packs = [];
   for (const x of [3.3, 1.25, -0.8]) {
-    add(new THREE.BoxGeometry(1.9, 0.3, 2.0), packMat, x, 3.28, 0);
-    add(new THREE.BoxGeometry(1.92, 0.045, 2.02), glowMat, x, 3.45, 0, false);
+    packs.push(add(new THREE.BoxGeometry(1.9, 0.3, 2.0), packMat, x, 3.28, 0));
+    packs.push(add(new THREE.BoxGeometry(1.92, 0.045, 2.02), glowMat, x, 3.45, 0, false));
   }
+  // diesel: exhaust tail pipe low at the rear, the only outside sign of the engine
+  const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 10), dark);
+  exhaust.rotation.z = Math.PI / 2; exhaust.position.set(-6.2, 0.38, -0.75); exhaust.visible = false; g.add(exhaust);
   add(new THREE.BoxGeometry(4.3, 0.34, 2.04), hvacMat, -3.80, 3.30, 0);
   for (const x of [-4.85, -2.80]) {
     const fan = new THREE.CylinderGeometry(0.4, 0.4, 0.05, 20);
@@ -322,6 +326,10 @@ export function buildBus(raster, doorsWanted = 3) {
     new THREE.Vector3(-2.45, 0.35, 0)]);
   const hvacCurve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(-0.6, 3.52, 0.65), new THREE.Vector3(-2.2, 3.54, 0.65), new THREE.Vector3(-3.0, 3.56, 0.65)]);
+  // diesel: fuel from the underfloor tank back to the engine, then the propshaft to the axle
+  const dieselCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(1.6, 0.42, -0.55), new THREE.Vector3(-1.5, 0.4, -0.55), new THREE.Vector3(-4.3, 0.45, -0.45),
+    new THREE.Vector3(-5.0, 0.7, -0.3), new THREE.Vector3(-4.6, 0.55, 0.05), new THREE.Vector3(-3.2, 0.5, 0.05), new THREE.Vector3(-2.45, 0.4, 0.05)]);
   const pGeo = new THREE.SphereGeometry(0.1, 10, 8);
   const flowMat = new THREE.MeshBasicMaterial({ color: BLUE, toneMapped: false, transparent: true, opacity: 0.95 });
   const hvacFlowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color("#eb6834"), toneMapped: false, transparent: true, opacity: 0.9 });
@@ -333,7 +341,14 @@ export function buildBus(raster, doorsWanted = 3) {
   g.add(headlight, headlight.target);
 
   return { group: g, signMat, leaves, doorX, wheels, glowMat, tailMat, headMat, flow, flowCurve, flowMat,
-           hvacFlow, hvacCurve, headlight, doorOpen: 0, phase: 0, hvacPhase: 0,
+           hvacFlow, hvacCurve, headlight, doorOpen: 0, phase: 0, hvacPhase: 0, packs, exhaust, dieselCurve,
+           powertrain: "battery_electric",
+           setPowertrain(kind) {
+             this.powertrain = kind || "battery_electric";
+             const dz = this.powertrain === "diesel";
+             for (const m of packs) m.visible = !dz;
+             exhaust.visible = dz;
+           },
            setSign(tex) { signMat.map = tex; signMat.needsUpdate = true; } };
 }
 
@@ -348,19 +363,22 @@ export function animateBus(bus, st, dt, snap = false) {
     lf.mesh.position.z = lf.z0 + 0.16 * bus.doorOpen;
   }
 
-  // pack glow and energy particles follow the battery and motor power
+  // pack glow and energy particles follow the battery and motor power; on a
+  // diesel the particles are fuel, amber, tank -> engine -> axle, never reversed
+  const diesel = bus.powertrain === "diesel";
   const pb = st.p_batt || 0, pm = st.p_motor || 0;
-  const regen = pm < -2;
-  const col = regen ? GREEN : BLUE;
+  const regen = !diesel && pm < -2;
+  const col = diesel ? AMBER : regen ? GREEN : BLUE;
   bus.glowMat.emissive.copy(col);
-  bus.glowMat.emissiveIntensity = Math.min(2.2, Math.abs(pb) / 70);
+  bus.glowMat.emissiveIntensity = diesel ? 0 : Math.min(2.2, Math.abs(pb) / 70);
   bus.flowMat.color.copy(col);
-  const flowOn = Math.abs(pm) > 3;
+  const flowOn = diesel ? pm > 3 : Math.abs(pm) > 3;
   const rate = (regen ? -1 : 1) * (0.12 + Math.min(1.1, Math.abs(pm) / 160));
   bus.phase = (bus.phase + dt * rate + 10) % 1;
+  const curve = diesel ? bus.dieselCurve : bus.flowCurve;
   bus.flow.forEach((m, i) => {
     m.visible = flowOn;
-    if (flowOn) m.position.copy(bus.flowCurve.getPointAt(((i / bus.flow.length) + bus.phase) % 1));
+    if (flowOn) m.position.copy(curve.getPointAt(((i / bus.flow.length) + bus.phase) % 1));
   });
   const hvOn = (st.p_hvac || 0) > 1;
   bus.hvacPhase = (bus.hvacPhase + dt * (0.2 + Math.min(0.8, (st.p_hvac || 0) / 20))) % 1;
@@ -707,7 +725,8 @@ export function createStage(host, { raster } = {}) {
     renderer.dispose(); renderer.domElement.remove();
   }
 
-  return { setProfile, setEnv, setCameraMode, setViewShift, setTraffic, setPeople, frame, setXray: m => xray.setMode(m), dispose, get mode() { return camMode; } };
+  return { setProfile, setEnv, setCameraMode, setViewShift, setTraffic, setPeople, frame, setXray: m => xray.setMode(m),
+           setPowertrain(kind) { bus.setPowertrain(kind); xray.setPowertrain(kind); }, dispose, get mode() { return camMode; } };
 }
 
 export function webglAvailable() {

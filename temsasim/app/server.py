@@ -27,19 +27,24 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 from werkzeug.exceptions import HTTPException
 
 from ..cycle import DriveCycle, Environment, Route
+from ..diesel import DieselResult
 from ..importers import (LOG_ROLES_TR, build_log, detect_log_columns, import_curve,
                          import_map, import_route, read_table)
 from ..library import Library, LibraryError
 from ..messages import localise
 from ..network import Line, line_summary, list_lines, simulate_line
-from .playback import events as play_events, profile_from_cycle, profile_from_route, timeline
+from .playback import (events as play_events, events_diesel, profile_from_cycle, profile_from_route,
+                       timeline, timeline_diesel)
 from ..report import render_report
-from ..schema import (COMPONENT_KINDS, KIND_LABELS_TR, VEHICLE_SLOTS, component_values,
+from ..report_diesel import render_diesel_report
+from ..schema import (COMPONENT_KINDS, KIND_LABELS_TR, STRUCTURED, VEHICLE_SLOTS, component_values,
                       raw_description, safe_stem, save_component, save_vehicle, schema)
-from ..simulator import simulate
+from ..simulator import run, simulate
 from ..traffic import LEVELS as TRAFFIC_LEVELS
-from ..units import air_density
+from ..units import RPM, air_density
 from ..validate import validate
+from ..vecto_import import plan_twin, read_bundle, write_twin
+from ..vehicle import POWERTRAINS, SLOTS_BY_POWERTRAIN
 
 STATIC = pathlib.Path(__file__).parent / "static"
 ROLE_ORDER = ["time", "speed", "power", "voltage", "current", "soc",
@@ -123,16 +128,28 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
         for stem in L.list_kind("vehicle"):
             try:
                 v = L.load_vehicle(stem)
+                if v.is_diesel:
+                    summary = (f"dizel {_tr(v.engine.rated_power_w / 1e3)} kW · "
+                               f"{v.transmission.transmission_type} {v.transmission.n_gears} vites · "
+                               f"{v.passenger_capacity} yolcu")
+                else:
+                    summary = (f"{_tr(v.battery.nominal_energy_kwh)} kWh · "
+                               f"{_tr(v.motor.peak_power_w / 1e3)} kW · "
+                               f"{_SYSTEM_TR.get(v.hvac.system_type, v.hvac.system_type)} · "
+                               f"{v.passenger_capacity} yolcu")
                 vehicles.append({
-                    "stem": stem, "name": v.name, "variant": v.variant,
+                    "stem": stem, "name": v.name, "variant": v.variant, "powertrain": v.powertrain,
+                    "powertrain_tr": POWERTRAINS.get(v.powertrain, v.powertrain),
+                    "rolling_c0": round(v.chassis.rolling_coefficient(v.chassis.kerb_mass_kg), 5),
+                    "rolling_source": ("coast-down" if v.chassis.uses_coastdown else
+                                       "lastik sertifikası (RRC)" if v.chassis.axles else "şasi dosyası"),
                     "validated": v.validated, "unvalidated": v.unvalidated_components(),
-                    "summary": (f"{_tr(v.battery.nominal_energy_kwh)} kWh · "
-                                f"{_tr(v.motor.peak_power_w / 1e3)} kW · "
-                                f"{_SYSTEM_TR.get(v.hvac.system_type, v.hvac.system_type)} · "
-                                f"{v.passenger_capacity} yolcu")})
+                    "summary": summary})
             except Exception as exc:
                 vehicles.append({"stem": stem, "name": stem, "error": str(exc)})
         return jsonify({"components": groups, "vehicles": vehicles,
+                        "powertrains": [[k, v] for k, v in POWERTRAINS.items()],
+                        "slots_by_powertrain": SLOTS_BY_POWERTRAIN,
                         "cycles": L.list_cycles(), "routes": _routes(L),
                         "traffic_levels": [[k, v.label] for k, v in TRAFFIC_LEVELS.items()],
                         "library_root": str(lib_root)})
@@ -152,9 +169,12 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                 if f["type"] == "map" and isinstance(raw.get(f["name"]), str)}
         out = {"stem": stem, "values": component_values(obj, kind),
                "description": raw_description(L, kind, stem),
-               "summary": _summary(kind, obj), "raw_refs": refs}
+               "summary": _summary(kind, obj), "raw_refs": refs,
+               "extra": {k: raw[k] for k in STRUCTURED if k in raw}}
         if kind == "motor" and obj.efficiency_map is not None:
             out["map_preview"] = _map_preview(obj.efficiency_map)
+        if kind == "engine" and obj.fuel_map is not None:
+            out["fuel_map_preview"] = _fuel_map_preview(obj)
         return jsonify(out)
 
     @app.post("/api/component/<kind>")
@@ -175,7 +195,8 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
             rel = _write_map(L, kind, stem, imp)
             map_refs[field] = rel
         path = save_component(L, kind, stem, values, description=body.get("description", ""),
-                              map_refs=map_refs, overwrite=bool(body.get("overwrite")))
+                              map_refs=map_refs, overwrite=bool(body.get("overwrite")),
+                              extra=body.get("extra") or {})
         return jsonify({"saved": f"{kind}/{path.name}", "stem": path.stem})
 
     @app.post("/api/component/<kind>/<stem>/delete")
@@ -275,12 +296,13 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
         raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
         v = L.load_vehicle(stem)
         slots = {}
-        for slot, kind in VEHICLE_SLOTS.items():
+        for slot, kind in SLOTS_BY_POWERTRAIN[v.powertrain].items():
             ref = raw.get(slot)
             ref = ref.get("ref") if isinstance(ref, dict) else ref
             slots[slot] = pathlib.Path(str(ref)).stem if ref else None
-        return jsonify({"stem": stem, "name": v.name, "variant": v.variant,
+        return jsonify({"stem": stem, "name": v.name, "variant": v.variant, "powertrain": v.powertrain,
                         "seats": v.seats, "standees": v.standees, "slots": slots,
+                        "fuel_tank_l": v.fuel_tank_l,
                         "control": component_values(v.control, "control"),
                         "description": " ".join(str(raw.get("description", "")).split()),
                         "describe": v.describe()})
@@ -293,7 +315,9 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                             seats=b.get("seats", 28), standees=b.get("standees", 60),
                             slots=b["slots"], control=b.get("control", {}),
                             description=b.get("description", ""),
-                            overwrite=bool(b.get("overwrite")))
+                            overwrite=bool(b.get("overwrite")),
+                            powertrain=b.get("powertrain") or "battery_electric",
+                            fuel_tank_l=b.get("fuel_tank_l"))
         return jsonify({"saved": f"vehicle/{path.name}", "stem": path.stem})
 
     # ------------------------------------------------------------ simulate
@@ -301,21 +325,25 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
     def run_simulation():
         b = request.get_json(force=True)
         L = lib()
-        veh = L.load_vehicle(b["vehicle"])
+        veh = _tuned(L.load_vehicle(b["vehicle"]), b.get("tune"))
         cyc = _cycle_from(L, b, veh)
         env = _env_from(b)
-        result = simulate(veh, cyc, env)
-        rid = reports.put(render_report(result, lang="tr",
-                                        daily_km=float(b.get("daily_km") or 200)))
+        result = run(veh, cyc, env)
+        rid = reports.put(_render(result, daily_km=float(b.get("daily_km") or 200)))
         base = 0.0
         if b.get("route"):
             base = float(Route.from_csv(L.root / "route" / f"{b['route']}.csv").elevation_m[0])
-        tl = timeline(result, base_elevation_m=base)
+        if veh.is_diesel:
+            tl = timeline_diesel(result, base_elevation_m=base)
+            evs = events_diesel(result)
+        else:
+            tl = timeline(result, base_elevation_m=base)
+            evs = play_events(result)
         doors = np.asarray(tl["doors"])
         starts = np.nonzero(np.diff(np.r_[0, doors]) == 1)[0]
         play = {
             "timeline": tl,
-            "events": play_events(result),
+            "events": evs,
             "profile": {"d": tl["d"], "elev": tl["elev"],
                         "stops": [tl["d"][i] for i in starts],
                         "signals": (cyc.meta or {}).get("signals", []),
@@ -323,11 +351,7 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
             "traffic": _traffic_payload(cyc),
             "env": {"ambient": env.ambient_c, "solar": env.solar_irradiance_w_per_m2,
                     "night": env.night},
-            "vehicle": {"name": veh.name, "variant": veh.variant,
-                        "doors": veh.hvac.door_count, "pack_kwh": veh.battery.nominal_energy_kwh,
-                        "usable_kwh": veh.battery.usable_energy_kwh,
-                        "motor_kw": veh.motor.peak_power_w / 1e3,
-                        "hvac_kw": veh.hvac.heating_capacity_w / 1e3},
+            "vehicle": _vehicle_payload(veh),
         }
         return jsonify({
             "report_id": rid, "kpi": _kpi(result),
@@ -349,39 +373,68 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
         ch, dl, mot, batt, aux = veh.chassis, veh.driveline, veh.motor, veh.battery, veh.auxiliaries
         # steady thermal draw: 15 min at a steady 30 km/h, averaged over the last 5
         n = 900
-        warm = simulate(veh, DriveCycle(np.arange(n, dtype=float), np.full(n, 8.33),
-                                        passengers=np.full(n, pax), doors_open=np.zeros(n, bool),
-                                        name="drive-setup"), env)
+        warm = run(veh, DriveCycle(np.arange(n, dtype=float), np.full(n, 8.33),
+                                   passengers=np.full(n, pax), doors_open=np.zeros(n, bool),
+                                   name="drive-setup"), env)
         s = warm.series
         v_tab = [0.0, 2.0, 5.0, 8.33, 12.0, 16.0, 20.0, 25.0]
+        if veh.is_diesel:
+            # The browser's live physics knows one machine with a torque/power
+            # envelope and an energy store. For a diesel the engine plays the
+            # machine (fuel energy in, 40 % to the shaft), the tank the store,
+            # and a launch gear plus top gear stand in for the 12-speed box.
+            eng, tr = veh.engine, veh.transmission
+            tank_kwh = veh.fuel_tank_l * eng.fuel_density_kg_per_m3 / 1000.0 * eng.fuel_lhv_j_per_kg / 3.6e6
+            launch = tr.gear_ratios[min(4, tr.n_gears - 1)] * tr.axle_ratio
+            machine = {"peak_power_w": eng.rated_power_w, "peak_torque_nm": eng.max_torque_nm,
+                       "max_speed_rads": eng.rated_speed_rads * 1.25, "max_regen_power_w": 0.0, "eff": 0.40}
+            store_ = {"usable_kwh": tank_kwh, "nominal_kwh": tank_kwh, "max_charge_w": 0.0,
+                      "max_discharge_w": 10 * eng.rated_power_w, "soc_start": 1.0, "soc_min": 0.0}
+            ratios = [launch, tr.total_ratio(tr.n_gears - 1)]
+            shift_up, shift_down = 9.0, 6.0
+            dl_eff, m_eq = 0.93, ch.equivalent_rotating_mass_kg(tr.referred_inertia_kgm2(tr.n_gears - 1, eng.inertia_kgm2))
+            aux_w = [aux.power(v, night=env.night)["total_w"] / 0.7 + eng.fan_power_w for v in v_tab]
+            thermal_w, pack_c = 0.0, float(s["cabin_c"][-1])
+            fuel_kwh_per_l = eng.fuel_density_kg_per_m3 / 1000.0 * eng.fuel_lhv_j_per_kg / 3.6e6
+        else:
+            machine = {"peak_power_w": mot.peak_power_w, "peak_torque_nm": mot.peak_torque_nm,
+                       "max_speed_rads": mot.max_speed_rads,
+                       "max_regen_power_w": mot.max_regen_power_w or mot.peak_power_w,
+                       "eff": mot.peak_efficiency}
+            store_ = {"usable_kwh": batt.usable_energy_kwh, "nominal_kwh": batt.nominal_energy_kwh,
+                      "max_charge_w": batt.max_charge_c_rate * batt.capacity_ah * batt.nominal_voltage_v,
+                      "max_discharge_w": batt.max_discharge_c_rate * batt.capacity_ah * batt.nominal_voltage_v,
+                      "soc_start": veh.control.soc_start, "soc_min": batt.soc_min}
+            ratios = [dl.total_ratio(g) for g in range(len(dl.gear_ratios))]
+            shift_up, shift_down = dl.shift_up_speed_mps, dl.shift_down_speed_mps
+            dl_eff, m_eq = dl.gearbox_efficiency * dl.final_drive_efficiency, ch.equivalent_rotating_mass_kg(dl.referred_inertia_kgm2(0))
+            aux_w = [aux.power(v, night=env.night)["total_w"] for v in v_tab]
+            thermal_w, pack_c = float(np.mean(s["p_pack_thermal_w"][-300:])), float(s["pack_c"][-1])
+            fuel_kwh_per_l = None
         return jsonify({
-            "vehicle": {"name": veh.name, "variant": veh.variant},
+            "vehicle": {"name": veh.name, "variant": veh.variant, "powertrain": veh.powertrain},
+            "powertrain": veh.powertrain, "fuel_kwh_per_l": fuel_kwh_per_l,
             "mass_kg": ch.kerb_mass_kg, "passenger_mass_kg": ch.passenger_mass_kg,
-            "m_eq_kg": ch.equivalent_rotating_mass_kg(dl.referred_inertia_kgm2(0)),
+            "m_eq_kg": m_eq,
             "coastdown": ([ch.coastdown_a_n, ch.coastdown_b_n_per_mps, ch.coastdown_c_n_per_mps2,
                            ch.coastdown_test_mass_kg, ch.coastdown_air_density]
                           if ch.uses_coastdown else None),
-            "rolling_c0": ch.rolling_c0, "rolling_c1": ch.rolling_c1_s_per_m,
-            "cda_m2": ch.drag_coefficient * ch.frontal_area_m2,
+            "rolling_c0": ch.rolling_coefficient(ch.kerb_mass_kg + pax * ch.passenger_mass_kg),
+            "rolling_c1": ch.rolling_c1_s_per_m,
+            "cda_m2": ch.drag_area_m2,
             "rho": air_density(env.ambient_c, env.air_pressure_pa),
             "wheel_r_m": ch.tyre_dynamic_radius_m,
-            "ratios": [dl.total_ratio(g) for g in range(len(dl.gear_ratios))],
-            "shift_up_mps": dl.shift_up_speed_mps, "shift_down_mps": dl.shift_down_speed_mps,
-            "driveline_eff": dl.gearbox_efficiency * dl.final_drive_efficiency,
-            "motor": {"peak_power_w": mot.peak_power_w, "peak_torque_nm": mot.peak_torque_nm,
-                      "max_speed_rads": mot.max_speed_rads,
-                      "max_regen_power_w": mot.max_regen_power_w or mot.peak_power_w,
-                      "eff": mot.peak_efficiency},
-            "battery": {"usable_kwh": batt.usable_energy_kwh, "nominal_kwh": batt.nominal_energy_kwh,
-                        "max_charge_w": batt.max_charge_c_rate * batt.capacity_ah * batt.nominal_voltage_v,
-                        "max_discharge_w": batt.max_discharge_c_rate * batt.capacity_ah * batt.nominal_voltage_v,
-                        "soc_start": veh.control.soc_start, "soc_min": batt.soc_min},
+            "ratios": ratios,
+            "shift_up_mps": shift_up, "shift_down_mps": shift_down,
+            "driveline_eff": dl_eff,
+            "motor": machine,
+            "battery": store_,
             "aux_v_mps": v_tab,
-            "aux_w": [aux.power(v, night=env.night)["total_w"] for v in v_tab],
+            "aux_w": aux_w,
             "hvac_w": float(np.mean(s["p_hvac_w"][-300:])),
-            "pack_thermal_w": float(np.mean(s["p_pack_thermal_w"][-300:])),
+            "pack_thermal_w": thermal_w,
             "cabin_c": float(s["cabin_c"][-1]),
-            "pack_c": float(s["pack_c"][-1]),
+            "pack_c": pack_c,
             "surfaces": [{"key": k, "label": lab, "factor": f, "note": note}
                          for k, lab, f, note in SURFACES],
             "tune": {"base": _tune_values(base), "now": _tune_values(veh),
@@ -408,16 +461,21 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                          name=b.get("name") or "Serbest sürüş", source="interactive drive",
                          surface_factor=np.asarray(b.get("surface") or np.ones(n), dtype=float))
         env = _env_from(b)
-        result = simulate(veh, cyc, env)
-        rid = reports.put(render_report(result, lang="tr", daily_km=float(b.get("daily_km") or 200)))
+        result = run(veh, cyc, env)
+        rid = reports.put(_render(result, daily_km=float(b.get("daily_km") or 200)))
         tt = result.totals
+        if veh.is_diesel:
+            keys = ("fuel_energy_kwh", "engine_shaft_kwh", "engine_loss_kwh", "heater_fuel_kwh",
+                    "hvac_kwh", "auxiliary_kwh", "fan_kwh", "rolling_kwh", "aero_kwh", "grade_kwh",
+                    "friction_brake_kwh", "engine_brake_kwh", "gearbox_loss_kwh", "axle_loss_kwh")
+        else:
+            keys = ("battery_energy_kwh", "traction_kwh", "regen_recovered_kwh", "regen_lost_kwh",
+                    "hvac_kwh", "auxiliary_kwh", "pack_thermal_kwh", "rolling_kwh", "aero_kwh",
+                    "grade_kwh", "friction_brake_kwh", "motor_loss_kwh", "driveline_loss_kwh",
+                    "battery_loss_kwh")
         return jsonify({
-            "report_id": rid, "kpi": _kpi(result),
-            "kwh": {k: round(float(tt[k]), 3) for k in (
-                "battery_energy_kwh", "traction_kwh", "regen_recovered_kwh", "regen_lost_kwh",
-                "hvac_kwh", "auxiliary_kwh", "pack_thermal_kwh", "rolling_kwh", "aero_kwh",
-                "grade_kwh", "friction_brake_kwh", "motor_loss_kwh", "driveline_loss_kwh",
-                "battery_loss_kwh")},
+            "report_id": rid, "kpi": _kpi(result), "powertrain": veh.powertrain,
+            "kwh": {k: round(float(tt[k]), 3) for k in keys},
             "achievable": result.achievable, "warnings": localise(result.warnings, "tr")})
 
     # ------------------------------------------------------------ lines / timetables
@@ -474,22 +532,27 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
         refs = b.get("vehicles") or [b["vehicle"]]
         temps = list(np.arange(float(b.get("t_min", -15)), float(b.get("t_max", 40)) + 0.01,
                                float(b.get("t_step", 5))))
-        first = L.load_vehicle(refs[0])
+        first = _tuned(L.load_vehicle(refs[0]), b.get("tune"))
         cyc = _cycle_from(L, b, first)
         series = []
         for ref in refs:
-            veh = L.load_vehicle(ref)
+            veh = _tuned(L.load_vehicle(ref), b.get("tune"))
             pts = []
             for tc in temps:
                 env = Environment(ambient_c=float(tc),
                                   solar_irradiance_w_per_m2=float(b.get("solar") or 0)
                                   if tc >= 25 else 0.0)
-                r = simulate(veh, cyc, env)
-                pts.append({"t": float(tc), "kwh_per_km": round(r.energy_per_km_kwh, 3),
-                            "range_km": round(r.range_km, 1),
-                            "hvac_share": round(r.totals["hvac_share"], 3)})
+                r = run(veh, cyc, env)
+                pt = {"t": float(tc), "kwh_per_km": round(r.energy_per_km_kwh, 3),
+                      "hvac_share": round(r.totals["hvac_share"], 3)}
+                if veh.is_diesel:
+                    pt["l_per_100km"] = round(r.fuel_l_per_100km, 2)
+                    pt["range_km"] = round(veh.fuel_tank_l / max(r.fuel_l_per_100km, 1e-6) * 100, 0)
+                else:
+                    pt["range_km"] = round(r.range_km, 1)
+                pts.append(pt)
             series.append({"vehicle": ref, "label": f"{veh.name} {veh.variant}".strip(),
-                           "points": pts})
+                           "powertrain": veh.powertrain, "points": pts})
         return jsonify({"series": series, "cycle": _cycle_tr(cyc)})
 
     @app.post("/api/traffic_compare")
@@ -500,22 +563,27 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
             raise ValueError("Trafik karşılaştırması bir güzergâh gerektirir; standart "
                              "çevrimlerin hız profili trafiği zaten içerir.")
         L = lib()
-        veh = L.load_vehicle(b["vehicle"])
+        veh = _tuned(L.load_vehicle(b["vehicle"]), b.get("tune"))
         env = _env_from(b)
         rows = []
         for key, lv in TRAFFIC_LEVELS.items():
             cyc = _cycle_from(L, {**b, "traffic": key}, veh)
-            r = simulate(veh, cyc, env)
+            r = run(veh, cyc, env)
             t = r.totals
             m = cyc.meta or {}
             hours = t["duration_s"] / 3600.0
+            if veh.is_diesel:
+                energy, rng = t["fuel_energy_kwh"], veh.fuel_tank_l / max(r.fuel_l_per_100km, 1e-6) * 100
+            else:
+                energy, rng = t["battery_energy_kwh"], r.range_km
             rows.append({
                 "key": key, "label": lv.label,
                 "mean_kmh": round(cyc.mean_speed_kmh, 1),
                 "minutes": round(t["duration_s"] / 60, 1),
                 "kwh_per_km": round(r.energy_per_km_kwh, 3),
-                "kwh_per_h": round(t["battery_energy_kwh"] / hours, 1),
-                "range_km": round(r.range_km, 1),
+                "l_per_100km": round(r.fuel_l_per_100km, 2) if veh.is_diesel else None,
+                "kwh_per_h": round(energy / hours, 1),
+                "range_km": round(rng, 1),
                 "hvac_kwh": round(t["hvac_kwh"], 2), "aux_kwh": round(t["auxiliary_kwh"], 2),
                 "brake_kwh": round(t["friction_brake_kwh"], 2),
                 "red_lights": len(m.get("signal_stops", [])),
@@ -524,6 +592,7 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                 "jam_s": round(sum(j["t1"] - j["t0"] for j in m.get("jams", []))),
             })
         return jsonify({"rows": rows, "route": b["route"], "ambient": env.ambient_c,
+                        "powertrain": veh.powertrain,
                         "synthetic_signals": bool((cyc.meta or {}).get("signals_synthetic"))})
 
     @app.post("/api/maraton")
@@ -550,6 +619,36 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
     def get_report(rid):
         return Response(reports.get(rid), mimetype="text/html")
 
+    # ------------------------------------------------------------ VECTO files
+    @app.post("/api/import/vecto")
+    def import_vecto_upload():
+        """One or many VECTO XML files (or a zip of them): classify, plan the twin."""
+        files = request.files.getlist("file") or request.files.getlist("files")
+        if not files:
+            raise ValueError("Dosya seçilmedi.")
+        items = [(f.filename or "dosya", f.read()) for f in files]
+        bundle = read_bundle(items)
+        plan = plan_twin(bundle)
+        up_id = uploads.put({"bundle": bundle, "plan": plan})
+        model = plan.vehicle.get("model") or ""
+        return jsonify({"upload_id": up_id, "bundle": bundle.summary(), "plan": plan.summary(),
+                        "suggested_name": (f"{model.title()} dizel" if model else "VECTO dizel araç"),
+                        "suggested_stem": safe_stem(f"{model} dizel") if model else "vecto_dizel"})
+
+    @app.post("/api/import/vecto/<up_id>/save")
+    def import_vecto_save(up_id):
+        b = request.get_json(force=True)
+        entry = uploads.get(up_id)
+        L = lib()
+        glazing = b.get("glazing_area_m2")
+        out = write_twin(L, entry["plan"], name=b.get("name") or "VECTO dizel araç",
+                         stem=b.get("stem") or None, variant=b.get("variant", ""),
+                         overwrite=bool(b.get("overwrite")),
+                         glazing_area_m2=float(glazing) if glazing not in (None, "") else None,
+                         notes=b.get("notes", ""),
+                         hvac_ref=b.get("hvac_ref") or None, aux_ref=b.get("aux_ref") or None)
+        return jsonify(out)
+
     # ------------------------------------------------------------ validation
     @app.post("/api/import/log")
     def import_log_upload():
@@ -569,14 +668,17 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
     @app.post("/api/validate")
     def run_validation():
         b = request.get_json(force=True)
+        L = lib()
+        veh = L.load_vehicle(b["vehicle"])
+        if veh.is_diesel:
+            raise ValueError("Doğrulama şimdilik yalnızca elektrikli araçlar için: log batarya gücüyle "
+                             "karşılaştırılır. Dizel araç için yakıt logu karşılaştırması planda.")
         entry = uploads.get(b["upload_id"])
         mapping = {k: int(v) for k, v in (b.get("mapping") or {}).items()
                    if v not in (None, "", -1, "-1")}
         log, notes, settings = build_log(
             entry["table"], mapping, int(b.get("header_row", 0)),
             speed_unit=b.get("speed_unit") or None, power_sign=b.get("power_sign") or None)
-        L = lib()
-        veh = L.load_vehicle(b["vehicle"])
         env = None
         if b.get("ambient") not in (None, ""):
             env = Environment(ambient_c=float(b["ambient"]), label="girilen")
@@ -623,7 +725,12 @@ def _summary(kind, o) -> str:
     """One Turkish line per component for list views."""
     try:
         if kind == "chassis":
-            rl = "coast-down ölçümü" if o.uses_coastdown else f"Cd {_tr(o.drag_coefficient, 2)} · {_tr(o.frontal_area_m2, 1)} m²"
+            if o.uses_coastdown:
+                rl = "coast-down ölçümü"
+            elif o.axles:
+                rl = f"CdxA {_tr(o.drag_area_m2, 2)} m² · {len(o.axles)} aks lastik RRC"
+            else:
+                rl = f"Cd {_tr(o.drag_coefficient, 2)} · {_tr(o.frontal_area_m2, 1)} m²"
             return f"{_tr(o.kerb_mass_kg)} kg boş · {rl}"
         if kind == "driveline":
             return (f"{_LAYOUT_TR.get(o.layout, o.layout)} · toplam oran "
@@ -644,6 +751,13 @@ def _summary(kind, o) -> str:
         if kind == "aging":
             return (f"{o.chemistry} · ömür sonu %{_tr(100 * o.end_of_life_capacity)}"
                     + ("" if o.validated else " · literatür katsayıları"))
+        if kind == "engine":
+            return (f"{o.fuel_type} {_tr(o.displacement_cm3 / 1000, 1)} l · {_tr(o.rated_power_w / 1e3)} kW @ "
+                    f"{_tr(o.rated_speed_rads / RPM)} rpm · {_tr(o.max_torque_nm)} Nm · rölanti {_tr(o.idle_fuel_l_per_h, 2)} l/h")
+        if kind == "transmission":
+            ret = "" if o.retarder_type == "none" else " · retarder"
+            maps = "ölçülmüş kayıp haritaları" if (o.gearbox_loss_map is not None and o.axle_loss_map is not None) else "sabit verim"
+            return (f"{o.transmission_type} {o.n_gears} vites · aks {_tr(o.axle_ratio, 2)} · {maps}{ret}")
     except Exception:
         pass
     return ""
@@ -651,6 +765,8 @@ def _summary(kind, o) -> str:
 
 def _map_kind(obj):
     m = getattr(obj, "efficiency_map", None)
+    if m is None:
+        m = getattr(obj, "fuel_map", None)
     if m is None:
         return None
     return "sentetik" if str(m.source).upper().startswith("SYNTHETIC") else "ölçülmüş"
@@ -690,7 +806,8 @@ def _vehicles_using(L: Library, kind: str, stem: str) -> list:
     users = []
     for v in L.list_kind("vehicle"):
         raw = yaml.safe_load((L.root / "vehicle" / f"{v}.yaml").read_text(encoding="utf-8")) or {}
-        for slot, slot_kind in VEHICLE_SLOTS.items():
+        slots = SLOTS_BY_POWERTRAIN.get(raw.get("powertrain", "battery_electric"), VEHICLE_SLOTS)
+        for slot, slot_kind in slots.items():
             ref = raw.get(slot)
             ref = ref.get("ref") if isinstance(ref, dict) else ref
             if slot_kind == kind and ref and pathlib.Path(str(ref)).stem == stem:
@@ -716,13 +833,20 @@ TUNABLES = {
 
 def _tune_values(veh) -> dict:
     """The tunable settings of a vehicle, in the units the form shows."""
+    if veh.is_diesel:
+        e = veh.engine
+        return {"kerb_mass_kg": veh.chassis.kerb_mass_kg, "motor_peak_kw": e.rated_power_w / 1e3,
+                "motor_peak_nm": e.max_torque_nm, "regen_kw": 0.0,
+                "rolling_c0": veh.chassis.rolling_coefficient(veh.chassis.kerb_mass_kg),
+                "drag_cd": veh.chassis.drag_coefficient, "battery_kwh": 0.0, "soc_start_pct": 100.0,
+                "coastdown": veh.chassis.uses_coastdown, "powertrain": "diesel"}
     m = veh.motor
     return {"kerb_mass_kg": veh.chassis.kerb_mass_kg, "motor_peak_kw": m.peak_power_w / 1e3,
             "motor_peak_nm": m.peak_torque_nm,
             "regen_kw": (m.max_regen_power_w if m.max_regen_power_w is not None else m.peak_power_w) / 1e3,
             "rolling_c0": veh.chassis.rolling_c0, "drag_cd": veh.chassis.drag_coefficient,
             "battery_kwh": veh.battery.nominal_energy_kwh, "soc_start_pct": veh.control.soc_start * 100,
-            "coastdown": veh.chassis.uses_coastdown}
+            "coastdown": veh.chassis.uses_coastdown, "powertrain": veh.powertrain}
 
 
 def _tuned(veh, tune):
@@ -745,16 +869,78 @@ def _tuned(veh, tune):
             parts[comp][fld] = val * k
     if not any(parts.values()):
         return veh
-    return replace(veh, variant=f"{veh.variant} · sürüş ayarlı".strip(" ·"),
+    if veh.is_diesel:
+        # the engine stands in for the motor; battery and SOC settings do not apply
+        eng = {}
+        if "peak_power_w" in parts["motor"]:
+            eng["rated_power_w"] = parts["motor"]["peak_power_w"]
+        if "peak_torque_nm" in parts["motor"]:
+            eng["max_torque_nm"] = parts["motor"]["peak_torque_nm"]
+        ch = dict(parts["chassis"])
+        if "rolling_c0" in ch and veh.chassis.axles:
+            ch["axles"] = None          # a typed-in coefficient replaces the tyre table
+        return replace(veh, variant=f"{veh.variant} · ayarlı".strip(" ·"),
+                       chassis=replace(veh.chassis, **ch),
+                       engine=replace(veh.engine, **eng) if eng else veh.engine)
+    return replace(veh, variant=f"{veh.variant} · ayarlı".strip(" ·"),
                    chassis=replace(veh.chassis, **parts["chassis"]),
                    motor=replace(veh.motor, **parts["motor"]),
                    battery=replace(veh.battery, **parts["battery"]),
                    control=replace(veh.control, **parts["control"]))
 
 
+def _render(result, **kw) -> str:
+    if isinstance(result, DieselResult):
+        return render_diesel_report(result, **kw)
+    return render_report(result, lang="tr", **kw)
+
+
+def _vehicle_payload(veh) -> dict:
+    base = {"name": veh.name, "variant": veh.variant, "powertrain": veh.powertrain,
+            "doors": veh.hvac.door_count, "hvac_kw": veh.hvac.heating_capacity_w / 1e3}
+    if veh.is_diesel:
+        e = veh.engine
+        base.update({"motor_kw": e.rated_power_w / 1e3, "engine_kw": e.rated_power_w / 1e3,
+                     "engine_name": f"{e.manufacturer} {e.model}".strip(),
+                     "gears": veh.transmission.n_gears, "tank_l": veh.fuel_tank_l,
+                     "rated_rpm": e.rated_speed_rads / RPM, "pack_kwh": 0.0, "usable_kwh": 0.0})
+    else:
+        base.update({"pack_kwh": veh.battery.nominal_energy_kwh, "usable_kwh": veh.battery.usable_energy_kwh,
+                     "motor_kw": veh.motor.peak_power_w / 1e3})
+    return base
+
+
+def _fuel_map_preview(eng) -> dict:
+    m = eng.fuel_map
+    return {"speed_rpm": [round(float(x) / RPM, 1) for x in m.x],
+            "torque_nm": [round(float(y), 1) for y in m.y],
+            "fuel_g_per_h": [[round(float(v), 1) for v in row] for row in m.z],
+            "full_load": [[round(float(w) / RPM), round(eng.max_torque(float(w)), 1)]
+                          for w in np.linspace(eng.idle_speed_rads, eng.rated_speed_rads * 1.25, 40)],
+            "source": m.source}
+
+
 def _kpi(result) -> dict:
     t = result.totals
-    return {"kwh_per_km": round(result.energy_per_km_kwh, 3),
+    if isinstance(result, DieselResult):
+        tank = result.vehicle.fuel_tank_l
+        return {"powertrain": "diesel",
+                "l_per_100km": round(result.fuel_l_per_100km, 2),
+                "co2_g_per_km": round(result.co2_g_per_km, 0),
+                "fuel_l": round(t["fuel_total_l"], 2),
+                "idle_fuel_l": round(t["idle_fuel_l"], 2),
+                "idle_fraction": round(t["idle_fraction"], 3),
+                "kwh_per_km": round(result.energy_per_km_kwh, 3),
+                "range_km": round(tank / max(result.fuel_l_per_100km, 1e-6) * 100, 0),
+                "distance_km": round(t["distance_km"], 2),
+                "duration_min": round(t["duration_s"] / 60, 1),
+                "hvac_share": round(t["hvac_share"], 3),
+                "mean_rpm": round(t["mean_engine_rpm"], 0),
+                "shifts": int(t["shifts"]),
+                "friction_brake_kwh": round(t["friction_brake_kwh"], 2),
+                "regen_kwh": 0.0, "regen_lost_kwh": 0.0, "soc_end": None}
+    return {"powertrain": "battery_electric",
+            "kwh_per_km": round(result.energy_per_km_kwh, 3),
             "range_km": round(result.range_km, 1),
             "distance_km": round(t["distance_km"], 2),
             "duration_min": round(t["duration_s"] / 60, 1),

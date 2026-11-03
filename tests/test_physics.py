@@ -31,8 +31,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="module")
-def lib():
-    return Library(ROOT / "library")
+def lib(demo_library):
+    return Library(demo_library)
 
 
 @pytest.fixture(scope="module")
@@ -501,11 +501,11 @@ def test_validator_blames_braking_when_regen_is_the_problem(bus, lib, tmp_path):
     ["compare", "--vehicles", "citybus_12m_be,citybus_12m_be_resistive",
      "--cycle", "cbdbus", "--ambient", "-5"],
 ])
-def test_cli_commands_run(argv, capsys):
+def test_cli_commands_run(argv, capsys, demo_library):
     """Smoke test every command end to end. The physics tests never import the
     CLI, so without this a broken CLI ships with a green test suite."""
     from temsasim.cli import main
-    assert main(["--library", str(ROOT / "library")] + argv) == 0
+    assert main(["--library", str(demo_library)] + argv) == 0
     assert capsys.readouterr().out.strip()
 
 

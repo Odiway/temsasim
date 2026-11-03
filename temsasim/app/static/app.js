@@ -79,6 +79,12 @@ const api = {
     for (const [k, v] of Object.entries(fields)) if (v != null && v !== "") fd.append(k, v);
     return this.req("POST", p, fd, true);
   },
+  uploadMany(p, files, fields = {}) {
+    const fd = new FormData();
+    for (const f of files) fd.append("file", f, f.name);
+    for (const [k, v] of Object.entries(fields)) if (v != null && v !== "") fd.append(k, v);
+    return this.req("POST", p, fd, true);
+  },
 };
 
 let toastTimer;
@@ -387,18 +393,38 @@ function distinctLabels(labels) {
 /* ================================================================ widgets */
 const ICON_SHEET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 2.5h8l4 4v15H6z"/><path d="M14 2.5v4h4"/><path d="M8.5 11h7M8.5 14h7M8.5 17h7M11 11v6"/></svg>';
 
-function dropZone({ accept, title, sub, onFile, compact }) {
-  const input = h("input", { type: "file", accept, hidden: true });
+function dropZone({ accept, title, sub, onFile, onFiles, compact, multiple, directory }) {
+  const input = h("input", { type: "file", accept, hidden: true, multiple: multiple || directory ? true : null, webkitdirectory: directory ? true : null });
   const zone = h("div", { class: "drop" + (compact ? " compact" : ""), tabindex: 0, role: "button", "aria-label": title });
   if (!compact) zone.insertAdjacentHTML("afterbegin", ICON_SHEET);
   zone.append(h("div", { class: "big" }, title), h("div", { class: "sub" }, sub), input);
   const pick = () => input.click();
+  const got = list => {
+    const files = [...list].filter(f => !f.name.startsWith("."));
+    if (!files.length) return;
+    if (onFiles) onFiles(files); else onFile(files[0]);
+  };
   zone.addEventListener("click", pick);
   zone.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
   zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("over"); });
   zone.addEventListener("dragleave", () => zone.classList.remove("over"));
-  zone.addEventListener("drop", e => { e.preventDefault(); zone.classList.remove("over"); if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]); });
-  input.addEventListener("change", () => { if (input.files[0]) onFile(input.files[0]); input.value = ""; });
+  zone.addEventListener("drop", async e => {
+    e.preventDefault(); zone.classList.remove("over");
+    // dropped folders: walk them so a whole VECTO folder can be dropped at once
+    const items = e.dataTransfer.items ? [...e.dataTransfer.items] : [];
+    const entries = items.map(it => it.webkitGetAsEntry && it.webkitGetAsEntry()).filter(Boolean);
+    if (onFiles && entries.some(en => en.isDirectory)) {
+      const out = [];
+      const walk = en => new Promise(res => {
+        if (en.isFile) en.file(f => { out.push(f); res(); }, res);
+        else if (en.isDirectory) { const rd = en.createReader(); const more = () => rd.readEntries(async es => { if (!es.length) return res(); for (const x of es) await walk(x); more(); }, res); more(); }
+        else res();
+      });
+      for (const en of entries) await walk(en);
+      got(out);
+    } else got(e.dataTransfer.files);
+  });
+  input.addEventListener("change", () => { got(input.files); input.value = ""; });
   return zone;
 }
 
@@ -491,7 +517,7 @@ async function pageLibrary() {
   ov.vehicles.forEach(v => {
     const card = h("div", { class: "panel vehicle-card" },
       h("div", {}, h("h3", {}, v.name), h("div", { class: "muted small" }, v.variant || "")),
-      v.error ? notice("err", "Dosya okunamadı", [v.error]) : h("div", { class: "small" }, v.summary),
+      v.error ? notice("err", "Dosya okunamadı", [v.error]) : h("div", { class: "small" }, h("span", { class: "badge plain", style: "margin-right:6px" }, v.powertrain_tr || ""), v.summary),
       v.error ? null : h("div", { class: "row" }, v.validated ? h("span", { class: "badge ok" }, "tüm bileşenler doğrulandı")
         : h("span", { class: "badge warn", title: v.unvalidated.join(", ") }, `${v.unvalidated.length} bileşen ölçülmedi`)),
       h("div", { class: "actions" },
@@ -538,12 +564,13 @@ async function pageUpload(which) {
   root.append(pageHead("Veri yükle", "Dosyanızı olduğu gibi getirin",
     "Biçim dönüştürmenize gerek yok. Excel ya da CSV, noktalı virgül ya da virgül, ondalık virgül, ızgara ya da uzun liste, rpm ya da rad/s: araç ne olduğunu algılar, önizlemeyi gösterir, siz onaylayınca kaydeder."));
   const TILES = [
+    ["vecto", "VECTO dosyaları (dizel araç)", "Homologasyonun motor, şanzıman, aks, lastik ve araç XML dosyaları. Klasörü olduğu gibi bırakın; dijital ikiz kurulur."],
     ["harita", "Motor verim haritası", "Tedarikçi ya da dinamometre verisi. Verim (% ya da kesir) veya kayıp gücü."],
     ["guzergah", "Güzergâh", "GPX izi ya da mesafe–rakım tablosu. Duraklar GPX noktalarından okunur."],
     ["egri", "Batarya ya da klima eğrisi", "OCV–SOC, COP–sıcaklık gibi iki sütunlu eğriler."],
     ["log", "Araç logu", "CAN / telematik kaydı. Modeli gerçek otobüsle karşılaştırır."],
   ];
-  const cur = which || store.get("uploadTile", "harita");
+  const cur = which || store.get("uploadTile", "vecto");
   const body = h("div", {});
   const tiles = h("div", { class: "tiles" });
   TILES.forEach(([k, t, d]) => {
@@ -559,9 +586,95 @@ async function pageUpload(which) {
   });
   root.append(tiles, body);
   const show = k => {
-    body.replaceChildren(k === "guzergah" ? routeWizard() : k === "egri" ? curveTarget() : mapWizard({ mode: "hub" }));
+    body.replaceChildren(k === "guzergah" ? routeWizard() : k === "egri" ? curveTarget() : k === "vecto" ? vectoWizard() : mapWizard({ mode: "hub" }));
   };
   show(cur === "log" ? "harita" : cur);
+  return root;
+}
+
+/* ---- VECTO wizard --------------------------------------------------------- */
+/* A folder of VECTO declaration files -> one diesel vehicle in the library.
+   Step 1: drop the folder (or the XML files, or a zip). Step 2: the server
+   says what it recognised, what it will build the vehicle from and what it
+   had to assume. Step 3: name it and save; the vehicle page opens. */
+function vectoWizard() {
+  const root = h("div", {});
+  let st = null;
+  const LABELS = ["Dosyalar", "Kontrol et", "Kaydet"];
+  const stepFiles = () => root.replaceChildren(steps(LABELS, 0), h("div", { class: "stack" },
+    dropZone({ accept: ".xml,.vecto,.zip", title: "VECTO klasörünü ya da dosyalarını bırakın",
+      sub: "Motor, şanzıman, aks, lastik, retarder, birincil araç ve tamamlanmış araç XML dosyaları; bir zip de olur. Tek tek seçmek için tıklayın.",
+      multiple: true,
+      onFiles: async files => {
+        root.replaceChildren(steps(LABELS, 0), h("div", { class: "muted" }, `${files.length} dosya okunuyor…`));
+        try { st = await api.uploadMany("/api/import/vecto", files); stepCheck(); }
+        catch (e) { stepFiles(); root.append(notice("err", "Dosyalar okunamadı.", [e.message])); }
+      } }),
+    h("div", { class: "row" }, h("button", { type: "button", class: "ghost", onclick: () => {
+      const inp = h("input", { type: "file", webkitdirectory: true, multiple: true, hidden: true });
+      inp.addEventListener("change", async () => {
+        const files = [...inp.files];
+        if (!files.length) return;
+        root.replaceChildren(steps(LABELS, 0), h("div", { class: "muted" }, `${files.length} dosya okunuyor…`));
+        try { st = await api.uploadMany("/api/import/vecto", files); stepCheck(); }
+        catch (e) { stepFiles(); root.append(notice("err", "Dosyalar okunamadı.", [e.message])); }
+      });
+      document.body.append(inp); inp.click(); inp.remove();
+    } }, "Klasör seç…")),
+    h("details", {}, h("summary", { class: "small muted" }, "Hangi dosyalar gerekli?"),
+      h("div", { class: "doc" }, h("ul", {},
+        h("li", {}, "Zorunlu: motor (yakıt haritası, tam yük eğrisi), şanzıman (vites oranları ve kayıp haritaları), aks (oran ve kayıp haritası), lastik (RRC)."),
+        h("li", {}, "Araç seviyesi: tamamlanmış araç dosyası (kütle, koltuk, boyutlar, CdxA, klima donanımı) ve birincil araç dosyası (aks düzeni, retarder)."),
+        h("li", {}, "Sertifikalı bileşen dosyası varsa, birincil araç dosyasının içindeki kopyaya tercih edilir."),
+        h("li", {}, "Aks yük payları, lastik dinamik yarıçapı ve tekerlek ataleti VECTO'nun kendi tablolarından alınır; ikiz dosyasında kaynak olarak yazılır."))))));
+
+  const stepCheck = () => {
+    const b = st.bundle, pl = st.plan;
+    const fileRows = b.files.map(f => h("tr", { class: f.kind === "unknown" ? "muted" : null },
+      h("td", {}, h("b", {}, f.kind_tr), h("div", { class: "small muted" }, f.filename)),
+      h("td", {}, f.label || "—", f.certification ? h("div", { class: "small muted" }, `sertifika ${f.certification}`) : null),
+      h("td", { class: "small" }, f.facts.map(([k, v]) => h("div", {}, h("span", { class: "muted" }, k + ": "), v)), f.warnings.length ? h("div", { style: "color:var(--err)" }, f.warnings.join(" ")) : null)));
+    const planRows = pl.rows.map(r => h("tr", {}, h("td", {}, r.label), h("td", {}, r.value), h("td", { class: "small muted" }, r.source)));
+    const next = h("button", { class: "primary", type: "button", disabled: pl.missing.length ? true : null, onclick: stepSave }, "Devam: aracı adlandır ve kaydet");
+    root.replaceChildren(steps(LABELS, 1), h("div", { class: "stack" },
+      pl.missing.length ? notice("err", "Dijital ikiz için eksik veri var", pl.missing) : null,
+      pl.warnings.length ? notice("warn", "Dikkat", pl.warnings) : null,
+      h("div", { class: "panel" }, h("h3", {}, "Araç neyle kurulacak"),
+        h("p", { class: "small muted", style: "margin:4px 0 8px" }, "Her satırda değerin hangi dosyadan geldiği yazar. Kaynak sütununda “örnek mimari dosyası” ya da “varsayım” görüyorsanız o değeri gerçek araçla doğrulayın."),
+        h("div", { class: "scrollx" }, h("table", { class: "data" }, h("thead", {}, h("tr", {}, ["Veri", "Değer", "Kaynak"].map(c => h("th", {}, c)))), h("tbody", {}, planRows)))),
+      h("div", { class: "panel" }, h("h3", {}, `Tanınan dosyalar (${b.files.length})`),
+        h("div", { class: "scrollx" }, h("table", { class: "data" }, h("thead", {}, h("tr", {}, ["Tür", "Bileşen", "İçerik"].map(c => h("th", {}, c)))), h("tbody", {}, fileRows)))),
+      h("div", { class: "savebar" }, next, h("button", { type: "button", class: "ghost", onclick: stepFiles }, "Başka dosyalar seç"))));
+  };
+
+  const stepSave = () => {
+    const pl = st.plan;
+    const nameIn = h("input", { type: "text", value: st.suggested_name });
+    const stemIn = h("input", { type: "text", value: st.suggested_stem });
+    const varIn = h("input", { type: "text", value: `${pl.model || ""} dizel`.trim(), placeholder: "ör. 13 m, 55 koltuk" });
+    const glazIn = numInput("", { unit: "m²", placeholder: "CAD/CFD cam alanı" });
+    const notesIn = h("textarea", { placeholder: "Bu dosyalar nereden geldi, hangi araç, hangi tarih?" });
+    const over = h("input", { type: "checkbox" });
+    root.replaceChildren(steps(LABELS, 2), h("div", { class: "panel stack" },
+      h("div", { class: "formgrid" },
+        field("Araç adı", nameIn), field("Dosya adı", stemIn, { hint: "library/vehicle/<ad>.yaml" }),
+        field("Varyant", varIn),
+        field("Toplam cam alanı", glazIn, { hint: "Boş bırakılırsa yan yüzeyin %30'u kabul edilir ve kabin dosyasında KABUL diye yazılır." }),
+        h("div", { class: "wide" }, field("Not", notesIn)),
+        h("label", { class: "check" }, over, h("span", {}, "Aynı adlı dosyaların üzerine yaz"))),
+      h("p", { class: "small muted", style: "margin:0" }, "Kaydedince motor, şanzıman+aks, şasi, kabin ve yardımcı tüketici dosyaları ile araç dosyası yazılır; harita CSV'leri maps/ klasörüne gider. Klima ve yardımcı dosyaları kabul değerleriyle başlar, ölçümle değiştirin."),
+      h("div", { class: "row" },
+        h("button", { class: "primary", type: "button", onclick: e => busy(e.currentTarget, async () => {
+          const r = await api.post(`/api/import/vecto/${st.upload_id}/save`, { name: nameIn.value.trim(), stem: stemIn.value.trim(), variant: varIn.value.trim(),
+            glazing_area_m2: parseNum($("input", glazIn).value) || "", notes: notesIn.value, overwrite: over.checked });
+          await overview(true); store.set("vehicle", r.stem);
+          toast(`Kaydedildi: ${Object.values(r.written).length} dosya`);
+          if (r.warnings && r.warnings.length) alert("Dikkat:\n\n" + r.warnings.join("\n"));
+          location.hash = `#/arac/${encodeURIComponent(r.stem)}`;
+        }) }, "Dijital ikizi kaydet"),
+        h("button", { type: "button", class: "ghost", onclick: stepCheck }, "← Geri"))));
+  };
+  stepFiles();
   return root;
 }
 
@@ -774,9 +887,12 @@ async function pageComponent(kind, stem) {
       return curveField(f, v, lab, docBox, controls, () => { try { return controls.cells_series ? controls.cells_series() : values.cells_series; } catch { return values.cells_series; } });
     } else if (f.type === "map") {
       if (kind !== "motor") {
+        const ref = rawRefs[f.name] || (cur && cur.values[f.name] && cur.values[f.name].source);
+        const fm = f.name === "fuel_map" && cur && cur.fuel_map_preview;
         return h("div", { class: "field" }, lab, h("div", { class: "subfield small" },
-          rawRefs[f.name] ? `Bağlı: ${rawRefs[f.name]} (formda değiştirilemez; kaydederken korunur).`
-                          : "Sabit verim kullanılıyor. Bu harita şimdilik yalnızca YAML dosyasından eklenebilir."), docBox);
+          ref ? h("span", {}, h("span", { class: "badge ok" }, "yüklü"), ` ${ref} — formda değiştirilemez; kaydederken korunur. Yeni bir harita için VECTO dosyasını yeniden içe aktarın.`)
+              : h("span", {}, h("span", { class: "badge plain" }, "yok"), " Sabit verim ya da sentetik eğri kullanılıyor. Bu harita VECTO dosyasından ya da YAML'dan eklenir."),
+          fm ? h("div", { class: "muted", style: "margin-top:4px" }, `${fm.speed_rpm.length} devir × ${fm.torque_nm.length} tork noktası, ${fm.speed_rpm[0]}–${fm.speed_rpm[fm.speed_rpm.length - 1]} rpm`) : null), docBox);
       }
       return mapField(f, lab, docBox, mapState, () => refreshIgnored(), hasMap);
     } else {
@@ -826,7 +942,7 @@ async function pageComponent(kind, stem) {
     return out;
   };
   const save = async (stemOut, overwrite) => {
-    const body = { stem: stemOut, values: collect(), description: descIn.value, overwrite };
+    const body = { stem: stemOut, values: collect(), description: descIn.value, overwrite, extra: (cur && cur.extra) || {} };
     if (kind === "motor" && !mapState.removed && mapState.uploadId) body.map_uploads = { efficiency_map: mapState.uploadId };
     const r = await api.post(`/api/component/${kind}`, body);
     await overview(true);
@@ -912,31 +1028,45 @@ async function pageVehicle(stem) {
   const ov = await overview(true);
   const csch = await api.get("/api/schema/control");
   const cur = isNew ? null : await api.get(`/api/vehicle/${encodeURIComponent(stem)}`);
-  const SLOTS = [["chassis", "chassis"], ["driveline", "driveline"], ["motor", "motor"], ["battery", "battery"], ["hvac", "hvac"], ["auxiliaries", "auxiliary"], ["aging", "aging"]];
+  let powertrain = cur ? cur.powertrain : store.get("newPowertrain", "battery_electric");
   const root = h("div", {});
   root.append(pageHead("Araç kur", isNew ? "Yeni araç" : `${cur.name}`,
     "Bir araç, kütüphanedeki bileşenlerin bir seçimidir. Bir bileşeni değiştirmek için başka bir tane seçin; varyant için bu aracı kopya olarak kaydedin."));
   const nameIn = h("input", { type: "text", value: cur ? cur.name : "", placeholder: "ör. 12 m şehir içi BE" });
   const varIn = h("input", { type: "text", value: cur ? cur.variant : "", placeholder: "ör. 350 kWh / ısı pompası" });
   const seats = numInput(cur ? cur.seats : 28), stand = numInput(cur ? cur.standees : 60);
+  const tankIn = numInput(cur && cur.fuel_tank_l ? cur.fuel_tank_l : 400, { unit: "l" });
   const descIn = h("textarea", {}, cur ? cur.description : "");
+  const ptBox = h("div", { class: "field" }, h("div", { class: "lab" }, "Güç aktarma"));
+  const tankField = field("Yakıt deposu", tankIn, { hint: "Yalnızca menzil ve oyun içi yakıt göstergesi için." });
   root.append(h("div", { class: "panel" }, h("div", { class: "formgrid" },
-    field("Ad", nameIn), field("Varyant", varIn), field("Oturan yolcu", seats), field("Ayakta yolcu", stand),
+    field("Ad", nameIn), field("Varyant", varIn), ptBox, field("Oturan yolcu", seats), field("Ayakta yolcu", stand), tankField,
     h("div", { class: "wide" }, field("Açıklama", descIn)))));
 
   const slotSel = {};
   const slotPanel = h("div", { class: "panel", style: "margin-top:16px" }, h("h2", {}, "Bileşenler"));
   const grid = h("div", { class: "formgrid", style: "margin-top:10px" });
-  SLOTS.forEach(([slot, kind]) => {
-    const g = ov.components.find(x => x.kind === kind);
-    const items = g ? g.items.filter(i => !i.error) : [];
-    const sel = select(items.map(i => [i.stem, i.name]), cur ? cur.slots[slot] : items[0] && items[0].stem);
-    const info = h("div", { class: "hint" });
-    const upd = () => { const it = items.find(i => i.stem === sel.value); info.replaceChildren(it ? h("span", {}, it.summary, " ", valBadge(it.validated)) : "Bu tipte bileşen yok."); };
-    sel.addEventListener("change", upd); upd();
-    slotSel[slot] = sel;
-    grid.append(h("div", { class: "field" }, h("div", { class: "lab" }, g ? g.label : kind, h("span", { class: "spacer" }), h("a", { href: `#/bilesen/${kind}/yeni`, class: "small" }, "yeni ekle")), sel, info));
-  });
+  const ctlPanel = h("div", { class: "panel", style: "margin-top:16px" });
+  const drawSlots = () => {
+    for (const k of Object.keys(slotSel)) delete slotSel[k];
+    grid.replaceChildren();
+    const SLOTS = Object.entries(ov.slots_by_powertrain[powertrain] || {});
+    SLOTS.forEach(([slot, kind]) => {
+      const g = ov.components.find(x => x.kind === kind);
+      const items = g ? g.items.filter(i => !i.error) : [];
+      const sel = select(items.map(i => [i.stem, i.name]), cur && cur.slots[slot] ? cur.slots[slot] : items[0] && items[0].stem);
+      const info = h("div", { class: "hint" });
+      const upd = () => { const it = items.find(i => i.stem === sel.value); info.replaceChildren(it ? h("span", {}, it.summary, " ", valBadge(it.validated)) : h("span", {}, "Bu tipte bileşen yok. ", kind === "engine" || kind === "transmission" ? h("a", { href: "#/yukle/vecto" }, "VECTO dosyalarından ekleyin") : null)); };
+      sel.addEventListener("change", upd); upd();
+      slotSel[slot] = sel;
+      grid.append(h("div", { class: "field" }, h("div", { class: "lab" }, g ? g.label : kind, h("span", { class: "spacer" }), h("a", { href: `#/bilesen/${kind}/yeni`, class: "small" }, "yeni ekle")), sel, info));
+    });
+    tankField.hidden = powertrain !== "diesel";
+    ctlPanel.hidden = powertrain === "diesel";
+  };
+  if (isNew) ptBox.append(seg(ov.powertrains, powertrain, v => { powertrain = v; store.set("newPowertrain", v); drawSlots(); }));
+  else ptBox.append(h("div", { class: "small", style: "padding:8px 0" }, h("span", { class: "badge plain" }, (ov.powertrains.find(x => x[0] === powertrain) || [0, powertrain])[1]), " ", h("span", { class: "muted" }, "güç aktarma tipi sonradan değişmez; yeni araç kurun")));
+  drawSlots();
   slotPanel.append(grid);
   root.append(slotPanel);
 
@@ -950,18 +1080,21 @@ async function pageVehicle(stem) {
     return field(f.label, inp, { unit: null });
   };
   const ess = csch.fields.filter(f => f.essential), adv = csch.fields.filter(f => !f.essential);
-  root.append(h("div", { class: "panel", style: "margin-top:16px" }, h("h2", {}, "Kontrol stratejisi"),
+  ctlPanel.append(h("h2", {}, "Kontrol stratejisi"),
     h("div", { class: "formgrid", style: "margin-top:10px" }, ess.map(ctlField)),
     h("details", { style: "margin-top:14px" }, h("summary", { class: "small" }, `Rejenerasyon ve ön koşullandırma ayrıntıları (${adv.length})`),
-      h("div", { class: "formgrid", style: "margin-top:10px" }, adv.map(ctlField)))));
+      h("div", { class: "formgrid", style: "margin-top:10px" }, adv.map(ctlField))));
+  ctlPanel.hidden = powertrain === "diesel";
+  root.append(ctlPanel);
 
   const collect = () => {
     const control = {};
-    for (const [k, g] of Object.entries(controls)) { const v = g(); if (v !== null) control[k] = v; }
+    if (powertrain !== "diesel") for (const [k, g] of Object.entries(controls)) { const v = g(); if (v !== null) control[k] = v; }
     const slots = Object.fromEntries(Object.entries(slotSel).map(([k, s]) => [k, s.value]));
     const n = nameIn.value.trim(); if (!n) throw new Error("Araç adı boş olamaz.");
     return { name: n, variant: varIn.value.trim(), seats: parseNum($("input", seats).value) || 0,
-      standees: parseNum($("input", stand).value) || 0, slots, control, description: descIn.value };
+      standees: parseNum($("input", stand).value) || 0, slots, control, description: descIn.value,
+      powertrain, fuel_tank_l: powertrain === "diesel" ? (parseNum($("input", tankIn).value) || 400) : null };
   };
   const save = async (stemOut, overwrite) => {
     const r = await api.post("/api/vehicle", { ...collect(), stem: stemOut, overwrite });
@@ -1048,6 +1181,15 @@ async function pageSim() {
   amb.addEventListener("input", () => { updRanges(); if (stage && !S.play) stage.setEnv({ ambient: +amb.value }); });
   sol.addEventListener("input", updRanges); updRanges();
   const pax = numInput(store.get("simPax", 40), { unit: "kişi" });
+  // tyre rolling resistance for this run only; blank = the vehicle's own value
+  const roll = numInput(store.get("simRoll", ""), { placeholder: "" });
+  const rollHint = h("div", { class: "hint" });
+  const rollInfo = () => {
+    const v = vehicles.find(x => x.stem === vSel.value) || {};
+    $("input", roll).placeholder = v.rolling_c0 != null ? fmt(v.rolling_c0, 4) : "";
+    rollHint.textContent = v.rolling_c0 != null ? `Boş bırakılırsa aracın kendi değeri: ${fmt(v.rolling_c0, 4)} (${v.rolling_source}). Yalnızca bu koşuya uygulanır, kütüphane değişmez. 0,003–0,03 arası.` : "";
+  };
+  vSel.addEventListener("change", rollInfo); rollInfo();
   let occMode = store.get("simOcc", "profile");
   const night = h("input", { type: "checkbox" });
   night.addEventListener("change", () => { if (stage && !S.play) stage.setEnv({ night: night.checked }); });
@@ -1059,7 +1201,9 @@ async function pageSim() {
     store.set("dutyKind", dutyKind); store.set(dutyKind === "route" ? "simRoute" : "simCycle", dutySel.value);
     store.set("simRepeat", parseNum($("input", repeat).value) || 1); store.set("simOcc", occMode);
     store.set("vehicle", vSel.value);
+    const rollV = parseNum($("input", roll).value); store.set("simRoll", $("input", roll).value);
     return { vehicle: vSel.value, [dutyKind === "route" ? "route" : "cycle"]: dutySel.value,
+      tune: Number.isNaN(rollV) || !rollV ? {} : { rolling_c0: rollV },
       repeat: parseNum($("input", repeat).value) || 1, ambient: +amb.value, solar: +sol.value,
       passengers: parseNum($("input", pax).value) || 0, occupancy_mode: occMode, night: night.checked,
       daily_km: parseNum($("input", daily).value) || 200,
@@ -1080,6 +1224,7 @@ async function pageSim() {
       h("div", { class: "field" }, h("div", { class: "lab" }, "Dış sıcaklık", h("span", { class: "spacer" }), ambOut), amb),
       h("div", { class: "field" }, h("div", { class: "lab" }, "Güneş ışınımı", h("span", { class: "spacer" }), solOut), sol),
       h("div", {}, field("Yolcu", pax), h("div", { style: "margin-top:6px" }, seg([["profile", "Yol boyunca değişken"], ["constant", "Sabit"]], occMode, v => (occMode = v)))),
+      h("div", {}, field("Lastik yuvarlanma katsayısı", roll), rollHint),
       h("label", { class: "check" }, night, h("span", {}, "Gece (aydınlatma ve farlar açık)")),
       h("details", { class: "simx-more" }, h("summary", {}, "Diğer ayarlar, sıcaklık taraması"),
         h("div", { class: "stack", style: "margin-top:10px" },
@@ -1145,6 +1290,7 @@ async function pageSim() {
       if (!mod.webglAvailable()) throw new Error("WebGL yok");
       stage = mod.createStage(canvasHost, { raster: Sign.raster });
       stage.setEnv({ ambient: +amb.value, night: night.checked, solar: +sol.value });
+      stage.setPowertrain((vehicles.find(v => v.stem === vSel.value) || {}).powertrain);
       recenter();
       addEventListener("resize", recenter);
       await loadPreview();
@@ -1168,10 +1314,13 @@ async function pageSim() {
     } catch (e) { toast(e.message, "err"); }
   }
   dutySel.addEventListener("change", () => { S.play = null; idleTele(); playBtn.disabled = true; loadPreview(); });
+  vSel.addEventListener("change", () => { if (stage) stage.setPowertrain((vehicles.find(v => v.stem === vSel.value) || {}).powertrain); });
 
   /* ---------------- sampling ---------------- */
-  const KEYS = ["d", "v", "grade", "elev", "soc", "p_batt", "p_motor", "p_hvac", "p_aux", "p_thermal", "regen_lost",
+  const KEYS_BASE = ["d", "v", "grade", "elev", "soc", "p_batt", "p_motor", "p_hvac", "p_aux", "p_thermal", "regen_lost",
                 "cabin", "pack", "pax", "e_used", "e_trac", "e_regen", "e_hvac", "e_aux", "e_thermal"];
+  const KEYS_DIESEL = ["rpm", "gear", "fuel_lph", "l100", "e_brake", "e_engbrake", "e_heater"];
+  let KEYS = KEYS_BASE;
   function sample(t) {
     const tl = S.play.timeline, T = tl.t, n = T.length;
     let i = Math.min(Math.max(S.cursor, 0), n - 2);
@@ -1235,8 +1384,11 @@ async function pageSim() {
       const p = params();
       const r = await api.post("/api/simulate", p);
       S.play = r.play; S.reportId = r.report_id; S.t = 0; S.cursor = 0; S.lastEv = -2; S.run = r;
+      S.diesel = r.play.vehicle.powertrain === "diesel";
+      KEYS = S.diesel ? KEYS_BASE.concat(KEYS_DIESEL.filter(k => k in r.play.timeline)) : KEYS_BASE;
       S.profile = r.play.profile;
       if (stage) {
+        stage.setPowertrain(r.play.vehicle.powertrain);
         stage.setEnv({ ambient: p.ambient, solar: p.solar, night: p.night });
         stage.setProfile(r.play.profile, { sign: r.play.profile.name.replace(/_/g, " ") });
         stage.setTraffic(r.play.traffic);
@@ -1285,15 +1437,22 @@ async function pageSim() {
 
   function buildTele(r, p) {
     const pl = r.play, veh = pl.vehicle, tl = pl.timeline;
-    H.speed = gauge("hız", "km/h", 80, css("--amber"));
-    H.soc = gauge("şarj durumu", "%", 100, css("--s1"));
+    const diesel = veh.powertrain === "diesel";
+    H.diesel = diesel;
+    H.speed = gauge("hız", "km/h", diesel ? 120 : 80, css("--amber"));
+    H.soc = diesel ? gauge("motor devri", "rpm", Math.max(1000, (veh.rated_rpm || 2000) * 1.15), css("--s1")) : gauge("şarj durumu", "%", 100, css("--s1"));
     H.battNum = h("div", { class: "batt-num num" });
     H.battLab = h("div", { class: "batt-lab" });
-    H.rows = {
+    H.rows = diesel ? {
+      trac: flowRow("Motor mili", veh.motor_kw), hvac: flowRow("Klima", Math.max(veh.hvac_kw, 10)),
+      aux: flowRow("Yardımcı + fan", 12), therm: flowRow("Sürtünmeli fren", veh.motor_kw),
+    } : {
       trac: flowRow("Çekiş", veh.motor_kw), hvac: flowRow("Klima", Math.max(veh.hvac_kw, 10)),
       aux: flowRow("Yardımcı", 12), therm: flowRow("Paket ısıl", 15),
     };
-    H.stats = { dist: stat("Mesafe"), cons: stat("Ortalama tüketim"), used: stat("Harcanan"), regen: stat("Geri kazanılan"),
+    H.stats = diesel ? { dist: stat("Mesafe"), cons: stat("Ortalama tüketim"), used: stat("Yakıt"), regen: stat("Vites"),
+      cabin: stat("Kabin"), pack: stat("Anlık yakıt"), pax: stat("Yolcu"), grade: stat("Eğim"),
+      red: stat("Kırmızı ışıkta"), jam: stat("Sıkışıklıkta") } : { dist: stat("Mesafe"), cons: stat("Ortalama tüketim"), used: stat("Harcanan"), regen: stat("Geri kazanılan"),
       cabin: stat("Kabin"), pack: stat("Paket"), pax: stat("Yolcu"), grade: stat("Eğim"),
       red: stat("Kırmızı ışıkta"), jam: stat("Sıkışıklıkta") };
     H.split = h("div", { class: "split" });
@@ -1332,10 +1491,17 @@ async function pageSim() {
           h("div", { class: "hint", style: "margin-top:2px" }, "Çubuk: tüketicinin kendi kapasitesine göre kullanımı")),
         h("section", { class: "tele-sec" }, h("div", { class: "sec-t" }, "Şu ana kadar"), h("div", { class: "stats" }, Object.values(H.stats).map(x => x.el))),
         h("section", { class: "tele-sec" }, h("div", { class: "sec-t" }, "Enerji nereye gitti"), H.split, H.splitLegend),
-        h("section", { class: "tele-sec" }, h("div", { class: "sec-t" }, "Batarya gücü, güzergâh boyunca"), H.powerChart.el),
+        h("section", { class: "tele-sec" }, h("div", { class: "sec-t" }, diesel ? "Motor gücü, güzergâh boyunca" : "Batarya gücü, güzergâh boyunca"), H.powerChart.el),
         h("section", { class: "tele-sec" }, h("div", { class: "sec-t" }, `Olaylar (${pl.events.length})`), H.feed),
         h("section", { class: "tele-sec tele-final" }, h("div", { class: "sec-t" }, "Koşunun tamamı"),
-          h("div", { class: "stats" },
+          diesel ? h("div", { class: "stats" },
+            h("div", { class: "stat" }, h("span", {}, "Tüketim"), h("b", { class: "num" }, `${fmt(k.l_per_100km, 2)} l/100 km`)),
+            h("div", { class: "stat" }, h("span", {}, "CO₂"), h("b", { class: "num" }, `${fmt(k.co2_g_per_km, 0)} g/km`)),
+            h("div", { class: "stat" }, h("span", {}, "Depoyla menzil"), h("b", { class: "num" }, `${fmt(k.range_km, 0)} km`)),
+            h("div", { class: "stat" }, h("span", {}, "Rölanti yakıtı"), h("b", { class: "num" }, `${fmt(k.idle_fuel_l, 2)} l · %${fmt(k.idle_fraction * 100, 0)} süre`)),
+            h("div", { class: "stat" }, h("span", {}, "Ortalama devir"), h("b", { class: "num" }, `${fmt(k.mean_rpm, 0)} rpm · ${k.shifts} vites`)),
+            h("div", { class: "stat" }, h("span", {}, "Sürtünmeli fren"), h("b", { class: "num" }, `${fmt(k.friction_brake_kwh, 2)} kWh`)))
+          : h("div", { class: "stats" },
             h("div", { class: "stat" }, h("span", {}, "Tüketim"), h("b", { class: "num" }, `${fmt(k.kwh_per_km, 3)} kWh/km`)),
             h("div", { class: "stat" }, h("span", {}, "Menzil"), h("b", { class: "num" }, `${fmt(k.range_km, 0)} km`)),
             h("div", { class: "stat" }, h("span", {}, "Klima payı"), h("b", { class: "num" }, `%${fmt(k.hvac_share * 100, 0)}`)),
@@ -1374,6 +1540,25 @@ async function pageSim() {
     const tl = S.play.timeline, T = tl.t;
     const regen = st.p_motor < -2;
     H.speed.set(st.v, fmt(st.v, 0));
+    const km = st.d / 1000;
+    if (H.diesel) {
+      H.soc.set(st.rpm || 0, fmt(st.rpm || 0, 0), css("--s1"));
+      H.battNum.textContent = `${st.p_batt >= 0 ? "" : "−"}${fmt(Math.abs(st.p_batt), 1)} kW`;
+      H.battNum.style.color = st.p_batt < 0 ? css("--s6") || "#0ca30c" : css("--s1");
+      H.battLab.textContent = st.p_batt < -0.5 ? "motor freni (yakıt kesik)" : st.p_batt > 0.5 ? "motor mili gücü" : st.v < 0.5 ? "rölanti" : "boşta";
+      H.rows.trac.set(Math.max(0, st.p_motor), css("--s1"));
+      H.rows.hvac.set(st.p_hvac, css("--s2"));
+      H.rows.aux.set(st.p_aux, css("--s3"));
+      H.rows.therm.set(st.regen_lost, "#d03b3b");
+      H.stats.dist.set(`${fmt(km, 2)} / ${fmt(H.total / 1000, 2)} km`);
+      H.stats.cons.set(km > 0.2 ? `${fmt(st.l100 || 0, 1)} l/100 km` : "—");
+      H.stats.used.set(`${fmt(st.e_used, 2)} l · depo %${fmt(st.soc, 0)}`);
+      H.stats.regen.set(st.gear > 0 ? `${Math.round(st.gear)}` : "N");
+      H.stats.cabin.set(`${fmt(st.cabin, 1)} °C`);
+      H.stats.pack.set(`${fmt(st.fuel_lph || 0, 1)} l/h`);
+      H.stats.pax.set(fmt(st.pax, 0));
+      H.stats.grade.set(`%${fmt(st.grade, 1)}`);
+    } else {
     H.soc.set(st.soc, fmt(st.soc, 1), st.soc < 25 ? css("--amber") : css("--s1"));
     H.battNum.textContent = `${st.p_batt >= 0 ? "" : "−"}${fmt(Math.abs(st.p_batt), 1)} kW`;
     H.battNum.style.color = st.p_batt < 0 ? css("--s6") || "#0ca30c" : css("--s1");
@@ -1382,7 +1567,6 @@ async function pageSim() {
     H.rows.hvac.set(st.p_hvac, css("--s2"));
     H.rows.aux.set(st.p_aux, css("--s3"));
     H.rows.therm.set(st.p_thermal, css("--s4"));
-    const km = st.d / 1000;
     H.stats.dist.set(`${fmt(km, 2)} / ${fmt(H.total / 1000, 2)} km`);
     H.stats.cons.set(km > 0.05 ? `${fmt(st.e_used / km, 2)} kWh/km` : "—");
     H.stats.used.set(`${fmt(st.e_used, 2)} kWh`);
@@ -1391,15 +1575,19 @@ async function pageSim() {
     H.stats.pack.set(`${fmt(st.pack, 1)} °C`);
     H.stats.pax.set(fmt(st.pax, 0));
     H.stats.grade.set(`%${fmt(st.grade, 1)}`);
+    }
     const tr = S.play.traffic || {};
     const upTo = (a, b) => Math.max(0, Math.min(st.t, b) - a);
     const redS = (tr.signal_stops || []).reduce((acc, e) => acc + upTo(e.t0, e.t_go), 0);
     const jamS = (tr.jams || []).reduce((acc, j) => acc + upTo(j.t0, j.t1), 0);
     H.stats.red.set(`${fmt(redS, 0)} s · ${(tr.signal_stops || []).filter(e => e.t0 <= st.t).length} kez`);
     H.stats.jam.set(`${fmt(jamS, 0)} s`);
-    // cumulative split: net traction, climate, auxiliaries, pack thermal
-    const parts = [["Çekiş (net)", Math.max(0, st.e_trac - st.e_regen), css("--s1")], ["Klima", st.e_hvac, css("--s2")],
-                   ["Yardımcı", st.e_aux, css("--s3")], ["Paket ısıl", st.e_thermal, css("--s4")]];
+    // cumulative split: net traction, climate, auxiliaries, pack thermal (diesel: shaft work, climate, aux, brakes)
+    const parts = H.diesel
+      ? [["Motor mili (net)", Math.max(0, st.e_trac - st.e_hvac - st.e_aux), css("--s1")], ["Klima", st.e_hvac, css("--s2")],
+         ["Yardımcı + fan", st.e_aux, css("--s3")], ["Sürtünmeli fren", st.e_brake || 0, "#d03b3b"]]
+      : [["Çekiş (net)", Math.max(0, st.e_trac - st.e_regen), css("--s1")], ["Klima", st.e_hvac, css("--s2")],
+         ["Yardımcı", st.e_aux, css("--s3")], ["Paket ısıl", st.e_thermal, css("--s4")]];
     const tot = parts.reduce((a, q) => a + q[1], 0) || 1;
     H.split.replaceChildren(...parts.map(([, v, c]) => h("i", { style: `flex:${Math.max(v, 0.0001)};background:${c}` })));
     H.splitLegend.replaceChildren(...parts.map(([n, v, c]) => h("span", {}, h("i", { style: `background:${c}` }), `${n} ${fmt(v, 1)} kWh · %${fmt(v / tot * 100, 0)}`)));
@@ -1481,7 +1669,8 @@ async function openTrafficCompare(p) {
   const rows = r.rows, x = rows.map((_, i) => i), lab = i => rows[Math.round(i)] ? rows[Math.round(i)].label : "";
   const dlg = h("dialog", {});
   const close = () => { dlg.close(); dlg.remove(); };
-  const best = Math.min(...rows.map(q => q.kwh_per_km)), worst = Math.max(...rows.map(q => q.kwh_per_km));
+  const dz = r.powertrain === "diesel", ck = dz ? "l_per_100km" : "kwh_per_km", cd = dz ? 2 : 3, cu = dz ? "l/100 km" : "kWh/km";
+  const best = Math.min(...rows.map(q => q[ck])), worst = Math.max(...rows.map(q => q[ck]));
   dlg.append(h("div", { class: "dlg-head" }, h("h2", {}, "Trafik seviyelerine göre"), h("span", { class: "spacer" }), h("button", { type: "button", class: "ghost", onclick: close }, "Kapat")),
     h("div", { class: "dlg-body stack" },
       h("p", { class: "small muted", style: "margin:0" }, `${r.route} · ${fmt(r.ambient, 0)} °C · aynı araç, aynı yolcu profili.` +
@@ -1490,14 +1679,14 @@ async function openTrafficCompare(p) {
         "Trafik, frenlerde kaybedilen enerjiyi azaltır (araç daha yavaş gider) ama klima ve yardımcı tüketicilerin çalıştığı süreyi uzatır.",
         "Ilıman havada bu iki etki birbirini dengeleyebilir; soğukta ya da sıcakta trafik km başına tüketimi belirgin artırır.",
         "Saatlik tüketim (kWh/h) trafikte düşer: tarifeli bir sefer bloğunda araç daha az km yapar."]),
-      lineChart({ x, series: [{ label: "Tüketim", color: css("--s1"), y: rows.map(q => q.kwh_per_km) }], xLabel: "trafik seviyesi", yLabel: "Tüketim (kWh/km)", xFmt: lab, yFmt: v => fmt(v, 3), markers: true, height: 220 }),
+      lineChart({ x, series: [{ label: "Tüketim", color: css("--s1"), y: rows.map(q => q[ck]) }], xLabel: "trafik seviyesi", yLabel: `Tüketim (${cu})`, xFmt: lab, yFmt: v => fmt(v, cd), markers: true, height: 220 }),
       lineChart({ x, series: [{ label: "Ortalama hız", color: css("--s2"), y: rows.map(q => q.mean_kmh) }], xLabel: "trafik seviyesi", yLabel: "Ortalama hız (km/h)", xFmt: lab, yFmt: v => fmt(v, 1), markers: true, height: 200 }),
       h("div", { class: "scrollx" }, h("table", { class: "data" },
-        h("thead", {}, h("tr", {}, ["Trafik", "Ort. hız", "Süre", "kWh/km", "kWh/h", "Menzil", "Klima kWh", "Yardımcı kWh", "Sürtünmeli fren kWh", "Kırmızı ışık", "Sıkışıklık"].map(c => h("th", {}, c)))),
+        h("thead", {}, h("tr", {}, ["Trafik", "Ort. hız", "Süre", cu, dz ? "kWh yakıt/h" : "kWh/h", "Menzil", "Klima kWh", "Yardımcı kWh", "Sürtünmeli fren kWh", "Kırmızı ışık", "Sıkışıklık"].map(c => h("th", {}, c)))),
         h("tbody", {}, rows.map(q => h("tr", {},
           h("td", {}, h("b", {}, q.label)),
           h("td", { class: "n" }, `${fmt(q.mean_kmh, 1)} km/h`), h("td", { class: "n" }, `${fmt(q.minutes, 1)} dk`),
-          h("td", { class: "n", style: q.kwh_per_km === worst ? "color:var(--err);font-weight:700" : q.kwh_per_km === best ? "color:var(--ok);font-weight:700" : "" }, fmt(q.kwh_per_km, 3)),
+          h("td", { class: "n", style: q[ck] === worst ? "color:var(--err);font-weight:700" : q[ck] === best ? "color:var(--ok);font-weight:700" : "" }, fmt(q[ck], cd)),
           h("td", { class: "n" }, fmt(q.kwh_per_h, 1)), h("td", { class: "n" }, `${fmt(q.range_km, 0)} km`),
           h("td", { class: "n" }, fmt(q.hvac_kwh, 2)), h("td", { class: "n" }, fmt(q.aux_kwh, 2)), h("td", { class: "n" }, fmt(q.brake_kwh, 2)),
           h("td", { class: "n" }, `${q.red_lights} · ${fmt(q.red_wait_s, 0)} s`), h("td", { class: "n" }, `${q.jams} · ${fmt(q.jam_s, 0)} s`))))))));
@@ -1551,15 +1740,19 @@ async function openSweep(p) {
   const colors = [css("--s1"), css("--s2")];
   const names = distinctLabels(r.series.map(sr => sr.label));
   const ser = key => r.series.map((sr, i) => ({ label: names[i], color: colors[i], y: sr.points.map(q => q[key]) }));
+  const mixed = r.series.some(sr => sr.powertrain === "diesel") && r.series.some(sr => sr.powertrain !== "diesel");
+  const allDiesel = r.series.every(sr => sr.powertrain === "diesel");
+  const unitLab = allDiesel ? "l/100 km" : mixed ? "kWh/km (dizelde yakıt enerjisi)" : "kWh/km";
+  const consKey = allDiesel ? "l_per_100km" : "kwh_per_km";
   const dlg = h("dialog", {});
   const close = () => { dlg.close(); dlg.remove(); };
   dlg.append(h("div", { class: "dlg-head" }, h("h2", {}, "Sıcaklığa göre tüketim ve menzil"), h("span", { class: "spacer" }), h("button", { type: "button", class: "ghost", onclick: close }, "Kapat")),
-    h("div", { class: "dlg-body stack" }, h("p", { class: "small muted", style: "margin:0" }, r.cycle),
-      lineChart({ x, series: ser("kwh_per_km"), xLabel: "dış sıcaklık (°C)", yLabel: "Tüketim (kWh/km)", yFmt: v => fmt(v, 3), markers: true }),
+    h("div", { class: "dlg-body stack" }, h("p", { class: "small muted", style: "margin:0" }, r.cycle + (mixed ? " · Dizel araçta tüketim yakıtın alt ısıl değeri cinsinden kWh/km olarak gösterilir." : "")),
+      lineChart({ x, series: ser(consKey), xLabel: "dış sıcaklık (°C)", yLabel: `Tüketim (${unitLab})`, yFmt: v => fmt(v, allDiesel ? 2 : 3), markers: true }),
       lineChart({ x, series: ser("range_km"), xLabel: "dış sıcaklık (°C)", yLabel: "Menzil (km)", yFmt: v => fmt(v, 0) + " km", markers: true }),
       h("div", { class: "scrollx" }, h("table", { class: "data" },
-        h("thead", {}, h("tr", {}, h("th", {}, "Sıcaklık"), r.series.flatMap((sr, i) => [h("th", {}, `${names[i]} · kWh/km`), h("th", {}, "menzil km"), h("th", {}, "klima %")]))),
-        h("tbody", {}, x.map((t, i) => h("tr", {}, h("td", { class: "n" }, `${fmt(t, 0)} °C`), r.series.flatMap(sr => [h("td", { class: "n" }, fmt(sr.points[i].kwh_per_km, 3)), h("td", { class: "n" }, fmt(sr.points[i].range_km, 0)), h("td", { class: "n" }, fmt(sr.points[i].hvac_share * 100, 0))]))))))));
+        h("thead", {}, h("tr", {}, h("th", {}, "Sıcaklık"), r.series.flatMap((sr, i) => [h("th", {}, `${names[i]} · ${sr.powertrain === "diesel" ? "l/100 km" : "kWh/km"}`), h("th", {}, "menzil km"), h("th", {}, "klima %")]))),
+        h("tbody", {}, x.map((t, i) => h("tr", {}, h("td", { class: "n" }, `${fmt(t, 0)} °C`), r.series.flatMap(sr => [h("td", { class: "n" }, sr.powertrain === "diesel" ? fmt(sr.points[i].l_per_100km, 2) : fmt(sr.points[i].kwh_per_km, 3)), h("td", { class: "n" }, fmt(sr.points[i].range_km, 0)), h("td", { class: "n" }, fmt(sr.points[i].hvac_share * 100, 0))]))))))));
   document.body.append(dlg);
   dlg.showModal();
 }

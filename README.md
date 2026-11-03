@@ -1,8 +1,10 @@
 # temsasim: bus energy simulation
 
 A route-based energy, range and battery-life simulator for battery-electric city
-buses. It works the same way as NREL ADVISOR (backward-facing, quasi-static) and
-adds the physics that decide real-world e-bus range, which ADVISOR does not have:
+buses and, since November 2026, a fuel and CO₂ simulator for diesel coaches
+built from their VECTO homologation files. It works the same way as NREL
+ADVISOR (backward-facing, quasi-static) and adds the physics that decide
+real-world e-bus range, which ADVISOR does not have:
 
 | | ADVISOR 2002 | temsasim |
 |---|---|---|
@@ -13,10 +15,19 @@ adds the physics that decide real-world e-bus range, which ADVISOR does not have
 | Auxiliaries | constant | electrified steering, air compressor duty scaled by stops, DC-DC losses |
 | Trust | none | closed energy balance with visible residual, unvalidated-data warnings, **model-vs-measurement validation tool** |
 
-> **Every component in `library/` is placeholder data.** The numbers are
-> plausible industry values, not TEMSA measurements. Each file is marked
-> `validated: false`, and every report says so on its face until real data
-> replaces it.
+> **What is measured and what is assumed.** `library/` holds TEMSA data: the
+> Maraton 13 diesel twin (`vehicle/maraton_13_dizel.yaml`) is built from the
+> homologation team's VECTO certificates (engine fuel map, gearbox and axle
+> loss maps, tyres), and the Maraton coast-down chassis files come from the
+> 2026 test campaign. Everything else in a component file is marked
+> `validated: false` and named as an assumption in its description; every
+> report repeats the warning. The battery-electric placeholder buses are not
+> in the library any more: they live in `examples/vehicle/` and are only
+> merged in by the test suite.
+>
+> **Confidentiality:** the VECTO source files under `ARAÇ VERİLERİ/` are
+> ignored by git. The generated library files carry supplier data (fuel maps,
+> certificate numbers); do not push them to a public repository.
 
 ## Arayüz (önerilen başlangıç)
 
@@ -27,8 +38,8 @@ bilgisayarda çalışır, şirket ağına açılmaz. İnternet gerekmez.
 | Bölüm | Ne yapar |
 |---|---|
 | **Kütüphane** | Tüm araçlar ve bileşenler; hangisi ölçümle doğrulandı, hangisi hâlâ varsayılan. |
-| **Veri yükle** | Motor verim haritası, güzergâh (GPX / tablo), batarya ve klima eğrileri. Dosyayı olduğu gibi bırakın: Excel ya da CSV, `;` ya da `,`, ondalık virgül, ızgara ya da uzun liste, rpm ya da rad/s, verim % / kesir ya da kayıp kW, hepsi otomatik algılanır. Önizlemede yanlış görünen bir ayarı tek tıkla değiştirirsiniz; onaylamadan hiçbir şey kaydedilmez. |
-| **Araç kur** | Bileşenleri açılır listelerden seçerek araç ya da varyant oluşturma. |
+| **Veri yükle** | **VECTO dosyaları:** homologasyonun motor, şanzıman, aks, lastik ve araç XML dosyalarını (klasörü olduğu gibi) bırakın; dizel dijital ikiz kurulur, her değerin hangi dosyadan geldiği gösterilir. Ayrıca motor verim haritası, güzergâh (GPX / tablo), batarya ve klima eğrileri. Dosyayı olduğu gibi bırakın: Excel ya da CSV, `;` ya da `,`, ondalık virgül, ızgara ya da uzun liste, rpm ya da rad/s, verim % / kesir ya da kayıp kW, hepsi otomatik algılanır. Önizlemede yanlış görünen bir ayarı tek tıkla değiştirirsiniz; onaylamadan hiçbir şey kaydedilmez. |
+| **Araç kur** | Bileşenleri açılır listelerden seçerek araç ya da varyant oluşturma. Güç aktarma tipi seçilir: bataryalı elektrikli (şasi, aktarma, motor, batarya, klima, yardımcılar, yaşlanma) ya da dizel (şasi, şanzıman+aks+retarder, dizel motor, klima, yardımcılar). |
 | **Simülasyon** | Tam ekran 3B sahne: otobüs güzergâhta ilerler; sağda canlı hız/SOC göstergeleri, güç akışı, harcanan enerji ve olay akışı; altta sürüklenebilir rakım zaman çizelgesi. Kış/yaz/gece koşula göre değişir. Ayrıca Türkçe tam rapor ve −15…+40 °C sıcaklık taraması. |
 | **Doğrulama** | Gerçek otobüsün CAN/telematik logunu yükleyin; sütunlar (Türkçe başlıklar dahil) otomatik eşleşir, güç yoksa gerilim × akımdan hesaplanır. Model ile ölçüm karşılaştırılır ve fark varsa hangi bileşene bakılacağı söylenir. |
 
@@ -88,6 +99,18 @@ enerji, otobüs başına enerji ve şarj ihtiyacı. Sefer aralığı değiştiri
 veridir (`tools/make_adana_example.py` üretir); gerçek GTFS / AVL / bilet verisi
 geldiğinde değiştirilir.
 
+**Dizel araç:** `powertrain: diesel` olan araç `temsasim/diesel.py` ile koşar:
+tekerlekten motora geri; aks ve şanzıman kayıp haritaları (vites başına), retarder
+boşta sürüklemesi, AMT vites stratejisi (devir penceresi, tork rezervi), yakıt
+sertifikalı haritadan, motor freninde sıfır, duruşta rölanti; yardımcı tüketiciler
+ve klima kompresörü krank miline mekanik yük; kabin ısıtması motor soğutma suyundan,
+yetmezse yakıtlı ısıtıcıdan. Çıktı l/100 km, g CO₂/km, rölanti yakıtı, vites payları,
+motor çalışma noktaları ve yakıttan tekerleğe kapalı enerji dengesi; rapor
+`report_diesel.py`. Simülasyon, serbest sürüş, hat ve sefer, sıcaklık taraması ve
+trafik karşılaştırması dizel aracı da kabul eder. Bileşenler
+`library/engine/`, `library/transmission/` altındadır; kurulumu
+`docs/vecto_dosyalarindan_dijital_ikiz.md` anlatır.
+
 **VECTO köprüsü:** `temsasim/vecto.py` yerel VECTO sürümünü (depoya dahil değil,
 `2026_09_03-VECTO-5.1.4/` klasöründe) başsız çalıştırır, `.vmod` / `.vsum`
 çıktısını okur, güzergâhı `.vdri` olarak yazar ve VECTO'nun sürdüğü izi bizim
@@ -105,28 +128,31 @@ Formdaki sayılar Türkçe yazılabilir (`95,5`). Birimler mühendislik birimidi
 pip install -r requirements.txt
 
 python -m temsasim list                                  # what's in the library
-python -m temsasim describe citybus_12m_be               # an assembled bus
+python -m temsasim describe maraton_13_dizel             # the diesel twin
 
-# one run, with the HTML report (2D bus diagram + charts)
-python -m temsasim run --vehicle citybus_12m_be --route demo_hilly_city \
-    --ambient -7 --occupancy-profile 55 --report out/winter.html
+# one run, with the HTML report
+python -m temsasim run --vehicle maraton_13_dizel --cycle hhddt65 \
+    --ambient 35 --solar 800 --passengers 40 --report out/yaz.html
 
-# the same run in heavy traffic (traffic lights, queues, stop-and-go)
-python -m temsasim run --vehicle citybus_12m_be --route demo_hilly_city --traffic yogun
+# the same route in heavy traffic (traffic lights, queues, stop-and-go)
+python -m temsasim run --vehicle maraton_13_dizel --route demo_hilly_city --traffic yogun
 
-# consumption and range from -15 to +40 degC
-python -m temsasim sweep --vehicle citybus_12m_be --route demo_hilly_city \
-    --occupancy-profile 55 --solar 900
+# fuel from -15 to +40 degC
+python -m temsasim sweep --vehicle maraton_13_dizel --cycle wvuinter --solar 900
 
-# two variants on an identical duty
+# build (or rebuild) a diesel twin from VECTO declaration files
+python -m temsasim vecto-import "ARAÇ VERİLERİ/MARATON ÖRNEK ARAÇ" --name "Maraton 13 dizel" --glazing 28.58
+python tools/build_maraton_twin.py --force              # the same, with the ANSA glazing areas built in
+
+# the placeholder e-buses live in examples/; copy one into library/vehicle/ to use it
 python -m temsasim compare --route demo_hilly_city --ambient -7 --occupancy-profile 55 \
-    --vehicles citybus_12m_be,citybus_12m_be_resistive
+    --vehicles maraton_13_dizel,citybus_12m_be
 
-# score the model against a real vehicle log
+# score the model against a real vehicle log (battery-electric vehicles)
 python -m temsasim validate --vehicle citybus_12m_be --log logs/bus_1042_2026-01-14.csv \
     --overlay out/bus_1042_overlay.csv
 
-python -m pytest tests                                   # 107 tests
+python -m pytest tests                                   # 145 tests
 python -m temsasim gui                                   # the web interface
 ```
 
@@ -192,8 +218,31 @@ Rules that protect you:
   motor map fixes every bus that uses it.
 
 Map and curve formats: `Map2D` CSV grids (see
-`library/motor/maps/_TEMPLATE_efficiency_grid.csv`), and `Curve1D` either inline
-as `[[x, y], ...]` pairs or as a two-column CSV.
+`library/motor/maps/_TEMPLATE_efficiency_grid.csv`; a corner label such as
+`torque_nm / speed_rpm` makes the loader convert rpm to rad/s), `LossMap`
+long-format CSVs (`gear,input_speed_rpm,input_torque_nm,loss_nm`) for gearbox
+and axle stages, and `Curve1D` either inline as `[[x, y], ...]` pairs, as a
+two-column CSV, or as `{path, columns: [x, y], x_unit: rpm}` picking two
+named columns of a wider CSV (an engine's full-load and drag curves share one
+file).
+
+A diesel vehicle names different slots:
+
+```yaml
+kind: vehicle
+name: Maraton 13 dizel
+powertrain: diesel
+chassis: chassis/maraton_vecto.yaml            # masses, CdxA, per-axle tyre table
+transmission: transmission/zf_12_tx_2210_td_a_133_203.yaml
+engine: engine/daf_mx_11_h5_330.yaml
+hvac: hvac/maraton_kabin.yaml
+auxiliaries: auxiliary/maraton_yardimci.yaml
+seats: 55
+standees: 0
+fuel_tank_l: 400
+```
+
+You normally do not write these by hand: the VECTO import writes them.
 
 ## Validation: how `validated: false` becomes `true`
 
@@ -225,20 +274,29 @@ Suggested order of measurement, cheapest and highest-leverage first:
 
 ```
 temsasim/            solver package
-  components/        chassis, driveline, motor, battery, hvac, auxiliary, aging
+  components/        chassis, driveline, motor, battery, hvac, auxiliary, aging,
+                     engine (diesel), transmission (gearbox + axle + retarder)
   cycle.py           drive cycles, routes, power-aware driver model
   traffic.py         traffic levels, signal timing, queues and stop-and-go jams
-  simulator.py       backward-facing solver and energy balance
+  simulator.py       backward-facing solver (battery-electric) and energy balance; run() dispatches
+  diesel.py          backward-facing solver for the combustion powertrain
+  network.py         line and timetable simulation (one day of a bus line)
   validate.py        model-vs-measurement correlation
   report.py          HTML report with 2D bus diagram (English / Turkish)
+  report_diesel.py   HTML report for a diesel run
   library.py         YAML loader, unit aliases, validation
   importers.py       tolerant readers: Excel/CSV maps, curves, GPX routes, CAN logs
+  vecto_xml.py       reader for VECTO declaration XML (engine, gearbox, axle, tyre, vehicle)
+  vecto_import.py    VECTO bundle -> library components and vehicle, with sources
+  vecto.py           bridge to a local VECTO release (runs it, reads .vmod/.vsum)
   schema.py          forms generated from the component dataclasses
   app/               local web interface (Flask + one static page, offline)
-library/             component data (all PLACEHOLDER), cycles, routes
-tests/               physics, importer and interface tests
+library/             TEMSA data: the Maraton twin, Maraton coast-down chassis, cycles, routes, lines
+examples/            placeholder battery-electric buses (merged in by the tests only)
+docs/                calculation map, VECTO analyses, how a VECTO twin is built
+tests/               physics, importer, interface, line, VECTO and diesel tests
 baslat.bat           double-click launcher for the interface (Windows)
-tools/               ADVISOR cycle importer, demo route generator
+tools/               ADVISOR cycle importer, demo route generator, Maraton twin builder
 advisor/             original NREL ADVISOR 2002 source, for reference
 ```
 
@@ -253,6 +311,10 @@ advisor/             original NREL ADVISOR 2002 source, for reference
   optimistic.
 - The demo route is synthetic. Replace it with DEM-based elevation and real
   stop positions.
+- **Diesel:** no traction interruption during AMT shifts, no torque converter
+  (an AT box is run like an AMT), constant CdxA (no VECTO cross-wind
+  correction), raw certificate fuel map (no WHTC weighting), and no log-based
+  validation yet. The VECTO fuel comparison for the diesel twin is still to do.
 
 ADVISOR is © Alliance for Sustainable Energy, LLC, under a permissive license
 (`advisor/license.txt`). temsasim does not contain ADVISOR code; it uses

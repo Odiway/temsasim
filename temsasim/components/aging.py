@@ -100,6 +100,7 @@ class AgingModel:
 
     source: str = "Wang et al. 2011 (LFP) form; coefficients NOT TEMSA-calibrated"
     validated: bool = False
+    notes: str = ""
 
     # ----------------------------------------------------------------------
     def calendar_fade(self, days: float, temp_c: float, mean_soc: float) -> float:

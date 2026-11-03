@@ -105,14 +105,20 @@ export async function pageNetwork(U) {
         h("div", {}, h("b", {}, fmt(S ? s : b, d)), h("span", { class: "unit" }, unit)),
         S ? h("div", { class: "small muted" }, `temel ${fmt(b, d)}`) : null, delta);
     };
+    const dz = B.powertrain === "diesel";
+    if (dz) { for (const X of [B, S].filter(Boolean)) { X.fuel_l_per_bus_day = X.fleet ? X.fuel_l_per_day / X.fleet : 0; X.fuel_l_per_pax = X.passengers_per_day ? X.fuel_l_per_day / X.passengers_per_day : 0; } }
     const tiles = h("div", { class: "kpis" },
       kpi("Filo (zirve)", "fleet", "otobüs"), kpi("Sefer / gün", "trips_per_day", "", 0, false),
       kpi("Yolcu / gün", "passengers_per_day", "", 0, false), kpi("Binemeyen / gün", "denied_per_day", "kişi"),
       kpi("Ortalama bekleme", "mean_wait_min", "dk", 1), kpi("Trafik kaybı", "traffic_loss_min_per_day", "dk/gün", 0),
-      kpi("Enerji / gün", "kwh_per_day", "kWh", 0), kpi("Otobüs başına", "kwh_per_bus_day", "kWh/gün", 0),
-      kpi("Yolcu başına", "kwh_per_pax", "kWh", 3), kpi("Araç-km / gün", "vehicle_km", "km", 0),
-      kpi("Araç-saat / gün", "vehicle_hours", "sa", 1), kpi("Şarj oturumu", "charge_sessions_per_bus", "/otobüs-gün"));
-    const charge = (R) => R.kwh_per_bus_day <= R.usable_kwh
+      dz ? kpi("Yakıt / gün", "fuel_l_per_day", "l", 0) : kpi("Enerji / gün", "kwh_per_day", "kWh", 0),
+      dz ? kpi("Otobüs başına", "fuel_l_per_bus_day", "l/gün", 0) : kpi("Otobüs başına", "kwh_per_bus_day", "kWh/gün", 0),
+      dz ? kpi("Yolcu başına", "fuel_l_per_pax", "l", 3) : kpi("Yolcu başına", "kwh_per_pax", "kWh", 3),
+      dz ? kpi("Ortalama tüketim", "fuel_l_per_100km", "l/100 km", 1) : kpi("Araç-km / gün", "vehicle_km", "km", 0),
+      kpi("Araç-saat / gün", "vehicle_hours", "sa", 1), dz ? kpi("Yakıt ikmali", "charge_sessions_per_bus", "/otobüs-gün") : kpi("Şarj oturumu", "charge_sessions_per_bus", "/otobüs-gün"));
+    const charge = (R) => dz
+      ? `Otobüs başına ${fmt(R.fuel_l_per_bus_day, 0)} l/gün; ${fmt(R.vehicle_km, 0)} araç-km/gün, ${fmt(R.fuel_l_per_100km, 1)} l/100 km. Depo ${R.charge_sessions_per_bus <= 1 ? "bir günü çıkarır" : `günde ${R.charge_sessions_per_bus} dolum ister`}.`
+      : R.kwh_per_bus_day <= R.usable_kwh
       ? `Otobüs başına ${fmt(R.kwh_per_bus_day, 0)} kWh/gün, kullanılabilir ${fmt(R.usable_kwh, 0)} kWh: gece depo şarjı yeter (${fmt(100 * R.kwh_per_bus_day / R.usable_kwh, 0)}% kullanım).`
       : `Otobüs başına ${fmt(R.kwh_per_bus_day, 0)} kWh/gün, kullanılabilir ${fmt(R.usable_kwh, 0)} kWh: gün içinde ${R.charge_sessions_per_bus - 1} ara şarj gerekir ya da filo büyütülür.`;
     results.replaceChildren(
@@ -211,10 +217,13 @@ export async function pageNetwork(U) {
       const cell = (v, d, suffix = "") => h("td", { class: "num" }, s ? `${fmt(s[v], d)}${suffix} ` : `${fmt(b[v], d)}${suffix}`, s ? h("span", { class: "muted" }, `(${fmt(b[v], d)})`) : null);
       return h("tr", {}, h("td", {}, `${b.label} ${b.direction}`), h("td", { class: "num" }, s ? `${s.headway_min} (${b.headway_min})` : b.headway_min),
         h("td", {}, s ? `${s.traffic} (${b.traffic})` : b.traffic), cell("trips", 0), cell("runtime_min", 1), cell("free_runtime_min", 1),
-        cell("peak_load", 0), cell("load_factor", 2), cell("denied", 0), cell("kwh", 1), cell("kwh_per_km", 2), cell("soc_drop", 3));
+        cell("peak_load", 0), cell("load_factor", 2), cell("denied", 0),
+        ...(B.powertrain === "diesel" ? [cell("fuel_l", 2), h("td", { class: "num" }, s ? `${fmt(100 * s.fuel_l / s.distance_km, 1)} ` : `${fmt(100 * b.fuel_l / b.distance_km, 1)}`, s ? h("span", { class: "muted" }, `(${fmt(100 * b.fuel_l / b.distance_km, 1)})`) : null), cell("kwh", 1)]
+                                      : [cell("kwh", 1), cell("kwh_per_km", 2), cell("soc_drop", 3)]));
     });
+    const cols = B.powertrain === "diesel" ? ["l/sefer", "l/100 km", "kWh yakıt/sefer"] : ["kWh/sefer", "kWh/km", "SOC düşüşü"];
     return h("div", { style: "overflow-x:auto" }, h("table", { class: "net" },
-      h("thead", {}, h("tr", {}, ...["Bant", "Aralık dk", "Trafik", "Sefer", "Süre dk", "Serbest dk", "Zirve yük", "Doluluk", "Binemeyen", "kWh/sefer", "kWh/km", "SOC düşüşü"].map(t => h("th", {}, t)))),
+      h("thead", {}, h("tr", {}, ...["Bant", "Aralık dk", "Trafik", "Sefer", "Süre dk", "Serbest dk", "Zirve yük", "Doluluk", "Binemeyen", ...cols].map(t => h("th", {}, t)))),
       h("tbody", {}, ...rows)),
       S ? h("div", { class: "hint" }, "Önce deneme, parantez içinde temel.") : null);
   }

@@ -451,6 +451,20 @@ def simulate(
         soh=soh)
 
 
+def run(vehicle: Vehicle, cycle: DriveCycle, environment: Environment | None = None, **kw):
+    """Simulate with whichever solver the vehicle's powertrain needs.
+
+    Returns a ``SimulationResult`` for a battery bus and a ``DieselResult``
+    for a diesel one; both carry ``totals``, ``series``, ``warnings``,
+    ``achievable`` and ``energy_per_km_kwh``.
+    """
+    if vehicle.is_diesel:
+        from .diesel import simulate_diesel
+        kw = {k: v for k, v in kw.items() if k in ("dt_s", "initial_cabin_c")}
+        return simulate_diesel(vehicle, cycle, environment, **kw)
+    return simulate(vehicle, cycle, environment, **kw)
+
+
 def _motor_to_wheel(driveline, motor_speed_rads: float, motor_torque_nm: float,
                     gear: int = 0):
     """Forward step, used only to work out what the machine actually absorbed

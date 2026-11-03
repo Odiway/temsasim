@@ -31,23 +31,25 @@ from .components.auxiliary import Auxiliaries
 from .components.battery import BatteryPack
 from .components.chassis import Chassis
 from .components.driveline import Driveline
+from .components.engine import Engine
 from .components.hvac import HVAC
 from .components.motor import Motor
+from .components.transmission import Transmission
 from .library import KINDS, Library, LibraryError, _alias_table, build
-from .maps import Curve1D, Map2D
+from .maps import Curve1D, LossMap, Map2D
 from .units import RPM
-from .vehicle import ControlStrategy, Vehicle
+from .vehicle import POWERTRAINS, SLOTS_BY_POWERTRAIN, ControlStrategy, Vehicle
 
 COMPONENT_KINDS = {
     "chassis": Chassis, "driveline": Driveline, "motor": Motor,
     "battery": BatteryPack, "hvac": HVAC, "auxiliary": Auxiliaries,
-    "aging": AgingModel,
+    "aging": AgingModel, "engine": Engine, "transmission": Transmission,
 }
 KIND_LABELS_TR = {
     "vehicle": "Araç", "chassis": "Şasi ve yol direnci", "driveline": "Aktarma organları",
     "motor": "Motor ve invertör", "battery": "Batarya paketi", "hvac": "Klima (HVAC)",
     "auxiliary": "Yardımcı tüketiciler", "aging": "Batarya yaşlanma modeli",
-    "control": "Kontrol stratejisi",
+    "control": "Kontrol stratejisi", "engine": "Dizel motor", "transmission": "Şanzıman, aks ve retarder",
 }
 VEHICLE_SLOTS = {"chassis": "chassis", "driveline": "driveline", "motor": "motor",
                  "battery": "battery", "hvac": "hvac", "auxiliaries": "auxiliary",
@@ -56,6 +58,7 @@ VEHICLE_SLOTS = {"chassis": "chassis", "driveline": "driveline", "motor": "motor
 # Display units: (suffix, unit label, multiplier from SI to display).
 # Longest suffixes first so '_n_per_mps' wins over '_mps'.
 UNIT_RULES = [
+    ("_kg_per_kg_fuel", "kg/kg", 1.0), ("_kg_per_m3", "kg/m³", 1.0), ("_j_per_kg", "MJ/kg", 1e-6),
     ("_n_per_mps2", "N/(m/s)²", 1.0), ("_n_per_mps", "N/(m/s)", 1.0),
     ("_w_per_m2k", "W/m²K", 1.0), ("_w_per_k", "W/K", 1.0),
     ("_j_per_kgk", "J/kgK", 1.0), ("_j_per_mol", "kJ/mol", 1e-3),
@@ -65,7 +68,7 @@ UNIT_RULES = [
     ("_rads", "rpm", 1.0 / RPM), ("_rpm", "rpm", 1.0), ("_ohm", "mΩ", 1e3),
     ("_w", "kW", 1e-3), ("_j", "kJ", 1e-3), ("_kg", "kg", 1.0), ("_nm", "Nm", 1.0),
     ("_n", "N", 1.0), ("_m3", "m³", 1.0), ("_m2", "m²", 1.0), ("_m", "m", 1.0),
-    ("_ah", "Ah", 1.0), ("_v", "V", 1.0), ("_c", "°C", 1.0), ("_s", "s", 1.0),
+    ("_ah", "Ah", 1.0), ("_v", "V", 1.0), ("_c", "°C", 1.0), ("_s", "s", 1.0), ("_cm3", "cm³", 1.0),
 ]
 # Fields that are fractions in the solver and percentages to humans.
 PERCENT_FIELDS = {
@@ -74,10 +77,15 @@ PERCENT_FIELDS = {
     "resistive_efficiency", "fuel_fired_efficiency", "dcdc_efficiency",
     "end_of_life_capacity", "regen_blend_fraction", "coast_regen_fraction",
     "air_compressor_duty_base", "steering_speed_factor", "regen_efficiency_penalty",
+    "axle_efficiency", "torque_reserve",
 }
 PLAIN_UNITS = {"max_discharge_c_rate": "C", "max_charge_c_rate": "C",
                "cyc_c_rate_alpha": "", "air_density": "kg/m³",
-               "coastdown_air_density": "kg/m³", "power_margin": ""}
+               "coastdown_air_density": "kg/m³", "power_margin": "",
+               "whtc_urban": "", "whtc_rural": "", "whtc_motorway": "", "cold_hot_factor": "",
+               "regper_factor": "", "correction_factor": "", "retarder_ratio": "", "axle_ratio": ""}
+# Fields the form does not show: structured data the importers write.
+STRUCTURED = {"axles"}
 
 CHOICES = {
     "system_type": [("heat_pump", "Isı pompası"), ("hybrid", "Isı pompası + yedek ısıtıcı"),
@@ -89,6 +97,11 @@ CHOICES = {
     "layout": [("direct_drive", "Merkezi motor, doğrudan aks"),
                ("central_motor", "Merkezi motor + şanzıman"),
                ("portal_axle", "Portal aks / tekerlek içi motor")],
+    "fuel_type": [("diesel", "Dizel"), ("biodiesel", "Biyodizel B100"), ("cng", "CNG")],
+    "transmission_type": [("AMT", "AMT (otomatikleştirilmiş manuel)"), ("AT", "AT (tork konvertörlü otomatik)"),
+                          ("MT", "Manuel")],
+    "retarder_type": [("none", "Yok"), ("transmission_output", "Şanzıman çıkışında (Intarder)"),
+                      ("transmission_input", "Şanzıman girişinde")],
 }
 
 LABELS_TR = {
@@ -171,6 +184,26 @@ LABELS_TR = {
     "pack_preconditioned": "Paket depoda ön ısıtılır", "precondition_pack_c": "Ön koşullandırma paket sıcaklığı",
     # vehicle
     "variant": "Varyant", "seats": "Oturan yolcu", "standees": "Ayakta yolcu",
+    # engine
+    "fuel_type": "Yakıt", "manufacturer": "Üretici", "model": "Model", "certification_number": "Sertifika no",
+    "displacement_cm3": "Silindir hacmi", "idle_speed_rads": "Rölanti devri", "rated_speed_rads": "Anma devri",
+    "rated_power_w": "Anma gücü", "max_torque_nm": "Azami tork", "fuel_map": "Yakıt haritası (g/h)",
+    "full_load_curve": "Tam yük eğrisi", "drag_curve": "Sürükleme (motor freni) eğrisi",
+    "inertia_kgm2": "Motor ataleti", "fan_power_w": "Soğutma fanı ortalama gücü",
+    "whtc_urban": "WHTC kent katsayısı", "whtc_rural": "WHTC kırsal katsayısı", "whtc_motorway": "WHTC otoyol katsayısı",
+    "cold_hot_factor": "Soğuk/sıcak dengeleme katsayısı", "regper_factor": "Rejenerasyon katsayısı",
+    "correction_factor": "Uygulanan yakıt düzeltme çarpanı", "fuel_density_kg_per_m3": "Yakıt yoğunluğu",
+    "fuel_lhv_j_per_kg": "Alt ısıl değer", "co2_kg_per_kg_fuel": "CO₂ / yakıt kütlesi",
+    # transmission
+    "transmission_type": "Şanzıman tipi", "gear_max_torque_nm": "Vites başına azami giriş torku",
+    "gearbox_loss_map": "Şanzıman kayıp haritası", "gearbox_inertia_kgm2": "Şanzıman giriş ataleti",
+    "axle_ratio": "Aks oranı", "axle_loss_map": "Aks kayıp haritası", "axle_efficiency": "Aks verimi",
+    "retarder_type": "Retarder tipi", "retarder_ratio": "Retarder oranı", "retarder_loss_curve": "Retarder boşta kayıp eğrisi",
+    "downshift_speed_rads": "Vites küçültme devri", "upshift_speed_rads": "Vites büyütme devri",
+    "torque_reserve": "Tork rezervi", "min_shift_interval_s": "İki vites arası asgari süre",
+    "start_speed_mps": "Kalkış vitesi hız sınırı",
+    # chassis additions
+    "cda_m2": "Sürükleme alanı CdxA (ölçülmüş)",
 }
 SECTIONS_TR = {
     "mass": "Kütle", "road load, physical parameterisation": "Yol direnci (fiziksel)",
@@ -182,6 +215,9 @@ SECTIONS_TR = {
     "ventilation and doors": "Havalandırma ve kapılar",
     "capacity and efficiency": "Kapasite ve verim", "control": "Kontrol",
     "calendar": "Takvim yaşlanması", "cycling": "Çevrim yaşlanması",
+    "rating": "Anma değerleri", "maps": "Haritalar ve eğriler",
+    "certificate correction factors": "Sertifika düzeltme katsayıları", "fuel properties": "Yakıt özellikleri",
+    "gearbox": "Şanzıman", "axle": "Aks", "retarder": "Retarder", "shift strategy": "Vites stratejisi",
 }
 ESSENTIAL = {
     "chassis": {"name", "kerb_mass_kg", "gross_mass_kg", "drag_coefficient", "frontal_area_m2",
@@ -203,6 +239,12 @@ ESSENTIAL = {
     "aging": {"name", "chemistry", "end_of_life_capacity", "validated"},
     "control": {"regen_enabled", "soc_start", "soc_target_min", "cabin_preconditioned",
                 "pack_preconditioned"},
+    "engine": {"name", "manufacturer", "model", "fuel_type", "displacement_cm3", "idle_speed_rads",
+               "rated_speed_rads", "rated_power_w", "max_torque_nm", "fuel_map", "full_load_curve",
+               "drag_curve", "validated"},
+    "transmission": {"name", "manufacturer", "model", "transmission_type", "gear_ratios", "axle_ratio",
+                     "gearbox_loss_map", "axle_loss_map", "retarder_type", "retarder_ratio",
+                     "downshift_speed_rads", "upshift_speed_rads", "validated"},
 }
 # Fields the form greys out when another field is set.
 IGNORED_IF = {"peak_efficiency": "efficiency_map", "peak_efficiency_at_rpm": "efficiency_map",
@@ -253,7 +295,7 @@ def _ftype(f) -> str:
     t = str(f.type)
     if "Curve1D" in t:
         return "curve"
-    if "Map2D" in t:
+    if "Map2D" in t or "LossMap" in t:
         return "map"
     if t.startswith("bool"):
         return "bool"
@@ -275,7 +317,7 @@ def schema(kind: str) -> dict:
     defaults = cls()
     fields = []
     for f in dataclasses.fields(cls):
-        if f.name in HIDDEN:
+        if f.name in HIDDEN or f.name in STRUCTURED:
             continue
         ft = _ftype(f)
         if ft == "other":
@@ -410,10 +452,17 @@ def safe_stem(text: str) -> str:
 
 def save_component(lib: Library, kind: str, stem: str, values: dict, *,
                    description: str = "", map_refs: dict | None = None,
-                   overwrite: bool = False) -> pathlib.Path:
-    """Validate by building, then write library/<kind>/<stem>.yaml."""
+                   overwrite: bool = False, extra: dict | None = None) -> pathlib.Path:
+    """Validate by building, then write library/<kind>/<stem>.yaml.
+
+    ``extra`` carries raw YAML keys the form does not show (structured data an
+    importer wrote, such as a chassis's axle table) so a save from the form
+    keeps them."""
     stem = safe_stem(stem)
     data = to_yaml_dict(kind, values, map_refs=map_refs)
+    for k, v in (extra or {}).items():
+        if k in STRUCTURED and v is not None:
+            data[k] = v
     if description:
         data["description"] = description
     folder = lib.root / kind
@@ -432,19 +481,26 @@ def save_component(lib: Library, kind: str, stem: str, values: dict, *,
 
 def save_vehicle(lib: Library, stem: str, *, name: str, variant: str, seats: int,
                  standees: int, slots: dict, control: dict, description: str = "",
-                 overwrite: bool = False) -> pathlib.Path:
+                 overwrite: bool = False, powertrain: str = "battery_electric",
+                 fuel_tank_l: float | None = None) -> pathlib.Path:
     stem = safe_stem(stem)
-    data: dict = {"kind": "vehicle", "name": name, "variant": variant}
+    if powertrain not in POWERTRAINS:
+        raise LibraryError(f"bilinmeyen güç aktarma tipi: {powertrain!r}")
+    data: dict = {"kind": "vehicle", "name": name, "variant": variant, "powertrain": powertrain}
     if description:
         data["description"] = description
-    for slot, kind in VEHICLE_SLOTS.items():
+    for slot, kind in SLOTS_BY_POWERTRAIN[powertrain].items():
         ref = slots.get(slot)
         if not ref:
             raise LibraryError(f"{KIND_LABELS_TR[kind]} seçilmedi")
         data[slot] = f"{kind}/{ref}.yaml"
     data["seats"] = int(seats)
     data["standees"] = int(standees)
-    data["control"] = to_yaml_dict("control", control)
+    if powertrain == "diesel":
+        if fuel_tank_l:
+            data["fuel_tank_l"] = float(fuel_tank_l)
+    else:
+        data["control"] = to_yaml_dict("control", control)
     path = lib.root / "vehicle" / f"{stem}.yaml"
     if path.exists() and not overwrite:
         raise FileExistsError(f"vehicle/{stem}.yaml zaten var")

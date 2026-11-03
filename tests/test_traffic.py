@@ -30,8 +30,8 @@ def route():
 
 
 @pytest.fixture(scope="module")
-def bus():
-    return Library(ROOT / "library").load_vehicle("citybus_12m_be")
+def bus(demo_library, ):
+    return Library(demo_library).load_vehicle("citybus_12m_be")
 
 
 @pytest.fixture(scope="module")
@@ -99,10 +99,10 @@ def test_congestion_slows_the_bus_and_shifts_energy_from_braking_to_standing(cyc
         assert abs(r.energy_balance()["residual (should be ~0)"]) < 1e-6 + 1e-6 * r.totals["cell_energy_kwh"]
 
 
-def test_when_climate_dominates_congestion_costs_energy_per_km(route):
+def test_when_climate_dominates_congestion_costs_energy_per_km(route, demo_library):
     """Resistive heating at -10 degC: standing time is paid for in heat, so
     kWh/km rises steadily with congestion."""
-    bus = Library(ROOT / "library").load_vehicle("citybus_12m_be_resistive")
+    bus = Library(demo_library).load_vehicle("citybus_12m_be_resistive")
     env = Environment(ambient_c=-10.0)
     kwh = [simulate(bus, route.to_cycle(vehicle=bus, occupancy=OCC, traffic=k), env).energy_per_km_kwh
            for k in ("yok", "orta", "sikisik")]

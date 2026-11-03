@@ -10,7 +10,9 @@
    - "powertrain": roof battery packs coloured by pack temperature, orange HV
      cables, inverter, the central motor on the rear axle, the auxiliary box
      and the friction brakes, each glowing with the power the model puts
-     through it this instant.
+     through it this instant. For a diesel vehicle the same view shows the
+     rear engine, the gearbox and retarder, the propshaft, the underfloor
+     fuel tank and the exhaust instead, labelled with rpm, gear and fuel.
 
    Purely visual, like the rest of the stage: it reads the state, never writes it. */
 
@@ -35,7 +37,7 @@ export function tempColor(t, out = new THREE.Color()) {
 const nf = (x, d = 0) => (x ?? 0).toLocaleString("tr-TR", { minimumFractionDigits: d, maximumFractionDigits: d });
 
 export function createXray(bus, host) {
-  let mode = "off";
+  let mode = "off", diesel = false;
 
   /* ---------------- the shell: remember every material, fade them on demand ---------------- */
   const skip = new Set([...bus.flow, ...bus.hvacFlow]);
@@ -173,9 +175,38 @@ export function createXray(bus, host) {
   add(pt, new THREE.BoxGeometry(0.5, 0.45, 0.6), auxMat, -5.2, 1.0, 0.55);
   // friction brake discs: red when the model sends braking energy to them instead of the pack
   const brakeMat = M({ color: 0x55595e, roughness: 0.4, metalness: 0.6, emissive: 0xff3b1a, emissiveIntensity: 0 });
-  for (const [x, z] of [[3.55, 0.86], [3.55, -0.86], [-2.45, 0.68], [-2.45, -0.68]]) {
-    const d = add(pt, new THREE.CylinderGeometry(0.3, 0.3, 0.05, 20), brakeMat, x, 0.5, z); d.rotation.x = Math.PI / 2;
-  }
+  const addBrakes = grp => {
+    for (const [x, z] of [[3.55, 0.86], [3.55, -0.86], [-2.45, 0.68], [-2.45, -0.68]]) {
+      const d = add(grp, new THREE.CylinderGeometry(0.3, 0.3, 0.05, 20), brakeMat, x, 0.5, z); d.rotation.x = Math.PI / 2;
+    }
+  };
+  addBrakes(pt);
+
+  /* ---------------- diesel powertrain: rear engine, gearbox, retarder, propshaft, tank, exhaust ---------------- */
+  const ptd = new THREE.Group(); ptd.visible = false; bus.group.add(ptd);
+  const engineMat = M({ color: 0x4a5058, roughness: 0.55, metalness: 0.45, emissive: 0xf2a104, emissiveIntensity: 0 });
+  const engine = add(ptd, new THREE.BoxGeometry(1.25, 0.95, 0.8), engineMat, -5.05, 1.0, 0.1);
+  for (let k = 0; k < 6; k++) add(ptd, new THREE.CylinderGeometry(0.09, 0.09, 0.12, 10), steel, -5.55 + k * 0.2, 1.53, 0.1); // injectors on the head
+  add(ptd, new THREE.BoxGeometry(0.4, 0.3, 0.3), steel, -5.2, 1.55, -0.45);                                      // turbocharger
+  const radMat = M({ color: 0x8b9298, roughness: 0.7, metalness: 0.2, emissive: 0x3987e5, emissiveIntensity: 0 });
+  add(ptd, new THREE.BoxGeometry(0.1, 1.0, 1.5), radMat, -5.95, 1.05, 0);                                        // radiator and fan at the rear
+  const gboxMat = M({ color: 0x9aa3ad, roughness: 0.35, metalness: 0.6, emissive: 0x3987e5, emissiveIntensity: 0 });
+  add(ptd, new THREE.BoxGeometry(0.95, 0.62, 0.56), gboxMat, -4.0, 0.72, 0.1);                                    // 12-speed AMT
+  const retMat = M({ color: 0x7c858e, roughness: 0.4, metalness: 0.6, emissive: 0xff3b1a, emissiveIntensity: 0 });
+  const ret = add(ptd, new THREE.CylinderGeometry(0.24, 0.24, 0.3, 16), retMat, -3.35, 0.68, 0.1); ret.rotation.z = Math.PI / 2;
+  const dshaft = add(ptd, new THREE.CylinderGeometry(0.05, 0.05, 0.75, 10), steel, -2.8, 0.55, 0.05); dshaft.rotation.z = Math.PI / 2;
+  add(ptd, new THREE.SphereGeometry(0.25, 16, 12), steel, -2.45, 0.5, 0);
+  const daxle = add(ptd, new THREE.CylinderGeometry(0.075, 0.075, 1.95, 10), steel, -2.45, 0.5, 0); daxle.rotation.x = Math.PI / 2;
+  const tankMat = M({ color: 0xb8bcc2, roughness: 0.4, metalness: 0.5, emissive: 0xf2a104, emissiveIntensity: 0.15 });
+  add(ptd, new THREE.BoxGeometry(1.7, 0.5, 1.5), tankMat, 1.6, 0.4, 0);                                         // underfloor fuel tank
+  const fuelLine = pts => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(...p))), 30, 0.03, 6, false);
+  const fuelMat = M({ color: 0xf2a104, roughness: 0.5, emissive: 0xf2a104, emissiveIntensity: 0.3 });
+  ptd.add(new THREE.Mesh(fuelLine([[1.6, 0.42, -0.6], [-1.5, 0.4, -0.6], [-4.4, 0.45, -0.5], [-5.0, 0.75, -0.3]]), fuelMat));
+  const exhMat = M({ color: 0x3a3f45, roughness: 0.6, metalness: 0.5, emissive: 0x9aa3ad, emissiveIntensity: 0 });
+  ptd.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-5.4, 0.62, -0.5), new THREE.Vector3(-5.9, 0.45, -0.7), new THREE.Vector3(-6.3, 0.38, -0.75)]), 20, 0.05, 8, false), exhMat));
+  const auxdMat = M({ color: 0x8b9298, roughness: 0.5, emissive: 0xffb000, emissiveIntensity: 0 });
+  add(ptd, new THREE.BoxGeometry(0.45, 0.4, 0.5), auxdMat, -5.5, 1.75, 0.65);                                    // alternator, compressor, steering pump
+  addBrakes(ptd);
 
   /* ---------------- labels and legend (HTML over the canvas) ---------------- */
   const layer = document.createElement("div"); layer.className = "xr-layer"; layer.hidden = true;
@@ -208,6 +239,18 @@ export function createXray(bus, host) {
   });
   label("powertrain", -5.2, 1.55, 0.9, s => `Yardımcı sistemler ${nf(s.p_aux, 1)} kW`);
   label("powertrain", 3.55, 1.3, 0.9, s => (s.regen_lost || 0) > 1 ? `Sürtünmeli fren ${nf(s.regen_lost, 0)} kW` : null);
+  // diesel labels: rpm, power and fuel from the model's own series
+  label("powertrain_d", -5.05, 1.95, 0.1, s => {
+    const p = s.p_motor || 0, rpm = s.rpm;
+    const head = rpm != null ? `Dizel motor · ${nf(rpm, 0)} rpm` : "Dizel motor";
+    return p < -0.5 ? `${head} · motor freni ${nf(-p, 0)} kW` : (s.v || 0) < 0.5 && p < 8 ? `${head} · rölanti` : `${head} · ${nf(p, 0)} kW`;
+  });
+  label("powertrain_d", -5.05, 1.65, 0.1, s => s.fuel_lph != null ? `yakıt ${nf(s.fuel_lph, 1)} l/h` : null);
+  label("powertrain_d", -4.0, 1.25, 0.1, s => s.gear != null ? (s.gear > 0 ? `Şanzıman · ${nf(s.gear, 0)}. vites` : "Şanzıman · boşta") : "Şanzıman");
+  label("powertrain_d", -3.35, 1.0, 0.1, s => (s.regen_lost || 0) > 1 ? `Retarder ve frenler ${nf(s.regen_lost, 0)} kW` : "Retarder");
+  label("powertrain_d", 1.6, 1.05, 0, s => s.soc != null ? `Yakıt deposu %${nf(s.soc, 0)}` + (s.e_used != null ? ` · ${nf(s.e_used, 2)} l yakıldı` : "") : "Yakıt deposu");
+  label("powertrain_d", -5.5, 2.3, 0.65, s => `Yardımcı sistemler ${nf(s.p_aux, 1)} kW`);
+  label("powertrain_d", -6.3, 0.8, -0.75, () => "Egzoz");
 
   /* ---------------- per frame ---------------- */
   const tmpC = new THREE.Color(), cabC = new THREE.Color(), ambC = new THREE.Color(), v = new THREE.Vector3();
@@ -232,6 +275,16 @@ export function createXray(bus, host) {
       placePassengers(Math.round(st.pax || 0));
       hvacMat.emissiveIntensity = Math.min(2, (st.p_hvac || 0) / 6);
       marker.style.left = `${Math.max(0, Math.min(100, cab / 40 * 100))}%`;
+    } else if (diesel) {
+      const pm = st.p_motor || 0;
+      engineMat.emissiveIntensity = Math.min(1.6, Math.max(0, pm) / 120 + 0.08);
+      exhMat.emissiveIntensity = Math.min(0.8, Math.max(0, pm) / 200);
+      radMat.emissiveIntensity = Math.min(0.6, (st.p_aux || 0) / 15);
+      gboxMat.emissiveIntensity = Math.min(1.2, Math.abs(pm) / 150);
+      tankMat.emissiveIntensity = 0.1 + 0.5 * Math.max(0, Math.min(1, (st.soc ?? 100) / 100));
+      auxdMat.emissiveIntensity = Math.min(1.5, (st.p_aux || 0) / 8);
+      retMat.emissiveIntensity = Math.min(2.5, (st.regen_lost || 0) / 40);
+      brakeMat.emissiveIntensity = Math.min(3, (st.regen_lost || 0) / 25);
     } else {
       const pb = st.p_batt || 0, pm = st.p_motor || 0, regen = pm < -2;
       for (const m of packMats) {
@@ -247,8 +300,9 @@ export function createXray(bus, host) {
     // labels follow their anchors on screen
     bus.group.updateMatrixWorld(); camera.updateMatrixWorld();
     const w = host.clientWidth, h = host.clientHeight, shown = [];
+    const labelMode = mode === "powertrain" && diesel ? "powertrain_d" : mode;
     for (const l of labels) {
-      const txt = l.mode === mode ? l.text(st, env) : null;
+      const txt = l.mode === labelMode ? l.text(st, env) : null;
       if (!txt) { l.el.hidden = true; continue; }
       v.copy(l.pos).applyMatrix4(bus.group.matrixWorld).project(camera);
       if (v.z > 1 || Math.abs(v.x) > 1.2 || Math.abs(v.y) > 1.2) { l.el.hidden = true; continue; }
@@ -278,11 +332,18 @@ export function createXray(bus, host) {
     if (on) fadeShell(true);
     ghost.visible = on;
     cabin.visible = m === "cabin";
-    pt.visible = m === "powertrain";
+    pt.visible = m === "powertrain" && !diesel;
+    ptd.visible = m === "powertrain" && diesel;
     layer.hidden = !on;
     legend.hidden = m !== "cabin";
   }
 
-  return { setMode, update, get mode() { return mode; },
+  function setPowertrain(kind) {
+    diesel = kind === "diesel";
+    pt.visible = mode === "powertrain" && !diesel;
+    ptd.visible = mode === "powertrain" && diesel;
+  }
+
+  return { setMode, setPowertrain, update, get mode() { return mode; },
            dispose() { layer.remove(); legend.remove(); } };
 }

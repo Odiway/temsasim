@@ -21,3 +21,9 @@ Thumbs.db
 # VECTO release and source (944 MB, EUPL): kept local, not versioned; our analyses live in docs/
 2026_09_03-VECTO-5.1.4/
 image.png
+
+# confidential supplier/homologation data: never in the public repo
+ARAÇ VERİLERİ/
+
+# per-machine Python environment made by baslat.bat
+.venv/

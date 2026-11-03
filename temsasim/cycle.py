@@ -351,12 +351,7 @@ class Route:
         a_limit_fn = None
         if vehicle is not None:
             ch = vehicle.chassis
-            p_avail = vehicle.motor.peak_power_w * power_margin * (
-                vehicle.driveline.gearbox_efficiency
-                * vehicle.driveline.final_drive_efficiency)
-            t_wheel_max = (vehicle.motor.peak_torque_nm * power_margin
-                           * vehicle.driveline.total_ratio(0)
-                           * vehicle.driveline.final_drive_efficiency)
+            p_avail, t_wheel_max, spin_loss_nm = vehicle.tractive_limits(power_margin)
             f_torque_max = t_wheel_max / ch.tyre_dynamic_radius_m
             grade_profile = self.grade_at(self.distance_m)
 
@@ -364,9 +359,9 @@ class Route:
                 m = ch.mass(pax)
                 theta = float(np.interp(s_m, self.distance_m, grade_profile))
                 f_avail = min(p_avail / max(v_mps, 0.5), f_torque_max)
-                f_resist = (m * 9.80665 * (np.sin(theta) + ch.rolling_c0 * np.cos(theta))
-                            + 0.5 * 1.25 * ch.drag_coefficient * ch.frontal_area_m2 * v_mps ** 2
-                            + vehicle.driveline.spin_loss_nm / ch.tyre_dynamic_radius_m)
+                f_resist = (m * 9.80665 * (np.sin(theta) + ch.rolling_coefficient(m) * np.cos(theta))
+                            + 0.5 * 1.25 * ch.drag_area_m2 * v_mps ** 2
+                            + spin_loss_nm / ch.tyre_dynamic_radius_m)
                 return max((f_avail - f_resist) / (m * 1.05), 0.05)
 
         pax_fn = None

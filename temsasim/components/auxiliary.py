@@ -56,6 +56,7 @@ class Auxiliaries:
 
     source: str = "unspecified"
     validated: bool = False
+    notes: str = ""
 
     # ----------------------------------------------------------------------
     def power(self, speed_mps: float, *, night: bool = False,

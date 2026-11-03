@@ -16,8 +16,20 @@ from .components.auxiliary import Auxiliaries
 from .components.battery import BatteryPack
 from .components.chassis import Chassis
 from .components.driveline import Driveline
+from .components.engine import Engine
 from .components.hvac import HVAC
 from .components.motor import Motor
+from .components.transmission import Transmission
+
+POWERTRAINS = {"battery_electric": "Bataryalı elektrikli", "diesel": "Dizel"}
+# Which component slots a powertrain is built from (slot name -> library kind).
+SLOTS_BY_POWERTRAIN = {
+    "battery_electric": {"chassis": "chassis", "driveline": "driveline", "motor": "motor",
+                         "battery": "battery", "hvac": "hvac", "auxiliaries": "auxiliary",
+                         "aging": "aging"},
+    "diesel": {"chassis": "chassis", "transmission": "transmission", "engine": "engine",
+               "hvac": "hvac", "auxiliaries": "auxiliary"},
+}
 
 
 @dataclass
@@ -69,6 +81,10 @@ class Vehicle:
 
     name: str = "unnamed_vehicle"
     variant: str = ""
+    powertrain: str = "battery_electric"
+    """``battery_electric`` or ``diesel``. Decides which components the
+    vehicle is built from and which solver runs it."""
+
     chassis: Chassis = field(default_factory=Chassis)
     driveline: Driveline = field(default_factory=Driveline)
     motor: Motor = field(default_factory=Motor)
@@ -78,14 +94,65 @@ class Vehicle:
     aging: AgingModel = field(default_factory=AgingModel)
     control: ControlStrategy = field(default_factory=ControlStrategy)
 
+    engine: Engine | None = None
+    transmission: Transmission | None = None
+
     seats: int = 28
     standees: int = 60
+    fuel_tank_l: float = 400.0
+    """Diesel tank volume, only for the fuel gauge in the playback."""
     source: str = "unspecified"
     notes: str = ""
+
+    def __post_init__(self) -> None:
+        if self.powertrain not in POWERTRAINS:
+            raise ValueError(f"unknown powertrain {self.powertrain!r}; "
+                             f"one of {sorted(POWERTRAINS)}")
+        if self.is_diesel:
+            if self.engine is None:
+                self.engine = Engine()
+            if self.transmission is None:
+                self.transmission = Transmission()
+
+    @property
+    def is_diesel(self) -> bool:
+        return self.powertrain == "diesel"
 
     @property
     def passenger_capacity(self) -> int:
         return self.seats + self.standees
+
+    @property
+    def peak_power_w(self) -> float:
+        """Rated traction power, whichever machine provides it."""
+        return self.engine.rated_power_w if self.is_diesel else self.motor.peak_power_w
+
+    def tractive_limits(self, power_margin: float = 0.90) -> tuple:
+        """(wheel power [W], wheel torque [Nm], wheel drag [Nm]) the driver
+        model may count on when it plans accelerations."""
+        if self.is_diesel:
+            # An AMT launches in its 2nd-4th gear, not 1st, and the engine also
+            # carries the auxiliaries: plan with the launch gear and ~10 kW less,
+            # so the route the driver builds stays achievable by construction.
+            eta = 0.93
+            tr = self.transmission
+            launch = tr.gear_ratios[min(2, tr.n_gears - 1)] * tr.axle_ratio
+            return ((self.engine.rated_power_w - 10e3) * power_margin * eta,
+                    self.engine.max_torque_nm * power_margin * launch * eta, 0.0)
+        dl = self.driveline
+        return (self.motor.peak_power_w * power_margin * dl.gearbox_efficiency * dl.final_drive_efficiency,
+                self.motor.peak_torque_nm * power_margin * dl.total_ratio(0) * dl.final_drive_efficiency,
+                dl.spin_loss_nm)
+
+    def _named_components(self) -> list:
+        if self.is_diesel:
+            return [("chassis", self.chassis), ("transmission", self.transmission),
+                    ("engine", self.engine), ("hvac", self.hvac),
+                    ("auxiliaries", self.auxiliaries)]
+        return [("chassis", self.chassis), ("driveline", self.driveline),
+                ("motor", self.motor), ("battery", self.battery),
+                ("hvac", self.hvac), ("auxiliaries", self.auxiliaries),
+                ("aging", self.aging)]
 
     @property
     def validated(self) -> bool:
@@ -95,32 +162,37 @@ class Vehicle:
         overall number indicative rather than defensible, and the report says so
         on its face.
         """
-        return all(c.validated for c in (
-            self.chassis, self.driveline, self.motor,
-            self.battery, self.hvac, self.auxiliaries))
+        return all(c.validated for n, c in self._named_components() if n != "aging")
 
     def unvalidated_components(self) -> list:
-        named = [("chassis", self.chassis), ("driveline", self.driveline),
-                 ("motor", self.motor), ("battery", self.battery),
-                 ("hvac", self.hvac), ("auxiliaries", self.auxiliaries),
-                 ("aging", self.aging)]
-        return [n for n, c in named if not c.validated]
+        return [n for n, c in self._named_components() if not c.validated]
 
     def describe(self) -> str:
         head = f"{self.name}" + (f" ({self.variant})" if self.variant else "")
         lines = [
             head,
             "-" * len(head),
+            f"  powertrain {POWERTRAINS.get(self.powertrain, self.powertrain)}",
             f"  capacity   {self.seats} seated + {self.standees} standing "
             f"= {self.passenger_capacity}",
             f"  chassis    {self.chassis.describe()}",
-            f"  driveline  {self.driveline.describe()}",
-            f"  motor      {self.motor.describe()}",
-            f"  battery    {self.battery.describe()}",
-            f"  hvac       {self.hvac.describe()}",
-            f"  auxiliary  {self.auxiliaries.describe()}",
-            f"  ageing     {self.aging.describe()}",
         ]
+        if self.is_diesel:
+            lines += [
+                f"  engine     {self.engine.describe()}",
+                f"  transmission {self.transmission.describe()}",
+                f"  hvac       {self.hvac.describe()}",
+                f"  auxiliary  {self.auxiliaries.describe()}",
+            ]
+        else:
+            lines += [
+                f"  driveline  {self.driveline.describe()}",
+                f"  motor      {self.motor.describe()}",
+                f"  battery    {self.battery.describe()}",
+                f"  hvac       {self.hvac.describe()}",
+                f"  auxiliary  {self.auxiliaries.describe()}",
+                f"  ageing     {self.aging.describe()}",
+            ]
         missing = self.unvalidated_components()
         if missing:
             lines.append(f"  WARNING    unvalidated data in: {', '.join(missing)}")

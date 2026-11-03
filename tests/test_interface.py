@@ -25,10 +25,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 @pytest.fixture()
 def lib_copy(tmp_path):
-    dst = tmp_path / "library"
-    shutil.copytree(ROOT / "library", dst,
-                    ignore=shutil.ignore_patterns(".cop_kutusu"))
-    return dst
+    from conftest import merged_library
+    return merged_library(tmp_path / "library")
 
 
 @pytest.fixture()
@@ -54,8 +52,8 @@ def _upload_map(client):
                        content_type="multipart/form-data").get_json()
 
 
-def test_every_component_round_trips_through_the_form_layer():
-    lib = Library(ROOT / "library")
+def test_every_component_round_trips_through_the_form_layer(demo_library):
+    lib = Library(demo_library)
     for kind in COMPONENT_KINDS:
         for stem in lib.list_kind(kind):
             obj = lib.load_component(f"{kind}/{stem}.yaml", kind)
@@ -171,14 +169,14 @@ def test_log_upload_detects_columns_and_validation_runs(client, lib_copy):
     assert abs(v["metrics"]["energy_error"]) < 0.02
 
 
-def test_turkish_report_is_complete_and_english_stays_english():
+def test_turkish_report_is_complete_and_english_stays_english(demo_library):
     """Every translation key must exist in the template (render_report raises
     otherwise), headline English must be gone from the Turkish report, and the
     English report must be untouched."""
     from temsasim.cycle import Environment
     from temsasim.report import render_report
     from temsasim.simulator import simulate
-    lib = Library(ROOT / "library")
+    lib = Library(demo_library)
     r = simulate(lib.load_vehicle("citybus_12m_be"), lib.load_cycle("cbdbus"),
                  Environment(ambient_c=-5))
     tr, en = render_report(r, lang="tr"), render_report(r, lang="en")

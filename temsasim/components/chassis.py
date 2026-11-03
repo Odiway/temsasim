@@ -73,6 +73,19 @@ class Chassis:
     """Frontal area [m^2]. Roughly width x height minus glazing curvature; a
     12 m city bus is about 2.55 m x 3.2 m gross."""
 
+    cda_m2: float | None = None
+    """Drag area Cd·A measured directly, as an air-drag certificate (VECTO
+    CdxA) states it. When given it replaces ``drag_coefficient`` ×
+    ``frontal_area_m2``; the two are kept only for the report."""
+
+    axles: list | None = None
+    """Per-axle tyre data in VECTO's form, one dict per axle with ``share``
+    (of vehicle mass), ``rrc_iso`` (tyre label coefficient), ``fz_iso`` (the
+    ISO 28580 test load [N]), ``twin_tyres`` and optionally
+    ``wheel_inertia_kgm2`` per wheel. When present the rolling resistance is
+    computed from the tyres with VECTO's load correction, so it follows the
+    laden mass, and ``rolling_c0`` is ignored."""
+
     # --- road load, coast-down parameterisation ----------------------------
     coastdown_a_n: float | None = None
     coastdown_b_n_per_mps: float | None = None
@@ -103,6 +116,48 @@ class Chassis:
         """Laden mass at a given occupancy [kg]."""
         return self.kerb_mass_kg + n_passengers * self.passenger_mass_kg
 
+    @property
+    def drag_area_m2(self) -> float:
+        return self.cda_m2 if self.cda_m2 is not None else self.drag_coefficient * self.frontal_area_m2
+
+    @property
+    def wheel_inertia_kgm2(self) -> float:
+        """Wheel inertia from the axle table when it has it, else the field."""
+        if self.axles:
+            total = 0.0
+            for a in self.axles:
+                per_wheel = float(a.get("wheel_inertia_kgm2", 0.0) or 0.0)
+                total += per_wheel * (4 if a.get("twin_tyres") else 2)
+            if total > 0:
+                return total
+        return self.rotational_inertia_kgm2
+
+    def rolling_coefficient(self, mass_kg: float) -> float:
+        """Speed-independent rolling coefficient at a laden mass.
+
+        With an axle table this is VECTO's load-corrected tyre coefficient::
+
+            c_r = Σ share · RRC_ISO · (F_z,wheel / F_z,ISO) ** (0.9 − 1)
+
+        with ``F_z,wheel = share · m · g / wheels on the axle``: a wheel carrying
+        less than the ISO test load rolls slightly worse than its label says,
+        one carrying more slightly better. Otherwise it is ``rolling_c0``.
+        """
+        if not self.axles:
+            return self.rolling_c0
+        total = 0.0
+        for a in self.axles:
+            share, rrc, fz_iso = float(a["share"]), float(a["rrc_iso"]), float(a.get("fz_iso") or 0)
+            if share <= 0:
+                continue
+            if fz_iso <= 0:
+                total += share * rrc
+                continue
+            n_wheels = 4 if a.get("twin_tyres") else 2
+            fz = mass_kg * G * share / n_wheels
+            total += share * rrc * (fz / fz_iso) ** (0.9 - 1.0)
+        return total
+
     def equivalent_rotating_mass_kg(self, driveline_inertia_kgm2: float = 0.0) -> float:
         """Rotating inertia expressed as an equivalent translational mass.
 
@@ -110,7 +165,7 @@ class Chassis:
         mass, and it is not negligible on a stop-start city duty cycle where the
         vehicle accelerates several hundred times per shift.
         """
-        i_total = self.rotational_inertia_kgm2 + driveline_inertia_kgm2
+        i_total = self.wheel_inertia_kgm2 + driveline_inertia_kgm2
         return i_total / (self.tyre_dynamic_radius_m ** 2)
 
     # ----------------------------------------------------------------------
@@ -145,9 +200,8 @@ class Chassis:
             f_aero = self.coastdown_c_n_per_mps2 * rho_ratio * v_air ** 2
         else:
             f_roll = (mass_kg * G * np.cos(theta)
-                      * (self.rolling_c0 + self.rolling_c1_s_per_m * v))
-            f_aero = (0.5 * air_density * self.drag_coefficient
-                      * self.frontal_area_m2 * v_air ** 2)
+                      * (self.rolling_coefficient(mass_kg) + self.rolling_c1_s_per_m * v))
+            f_aero = 0.5 * air_density * self.drag_area_m2 * v_air ** 2
 
         # Rolling resistance and aero always oppose motion; grade does not.
         f_roll = np.where(v > 0.01, f_roll, 0.0)
@@ -157,6 +211,11 @@ class Chassis:
         return {"rolling": f_roll, "aero": f_aero, "grade": f_grade}
 
     def describe(self) -> str:
-        road_load = "coast-down (measured)" if self.uses_coastdown else "physical Cr/Cd"
+        if self.uses_coastdown:
+            road_load = "coast-down (measured)"
+        elif self.axles:
+            road_load = (f"tyre RRC x {len(self.axles)} axles, CdA {self.drag_area_m2:.2f} m2")
+        else:
+            road_load = "physical Cr/Cd"
         flag = "VALIDATED" if self.validated else "UNVALIDATED"
         return f"{self.name}: {road_load}, {self.kerb_mass_kg:.0f} kg kerb [{flag}]"

@@ -58,7 +58,9 @@ export async function pageDrive(U) {
     const base = P && P.tune ? P.tune.base : null;
     if (!base) { tuneBox.replaceChildren(h("div", { class: "hint" }, "Araç hazırlanınca ayarlar burada görünür.")); return; }
     const lim = P.tune.limits;
-    const rows = TUNE_FIELDS.map(([k, lab, unit, dec]) => {
+    const dieselSkip = new Set(["regen_kw", "battery_kwh", "soc_start_pct"]);
+    const rows = TUNE_FIELDS.filter(([k]) => !(base.powertrain === "diesel" && dieselSkip.has(k))).map(([k, lab0, unit, dec]) => {
+      const lab = base.powertrain === "diesel" && k === "motor_peak_kw" ? "Motor anma gücü" : base.powertrain === "diesel" && k === "motor_peak_nm" ? "Motor azami torku" : lab0;
       const locked = base.coastdown && (k === "rolling_c0" || k === "drag_cd");
       const inp = h("input", { type: "text", inputmode: "decimal", class: "numeric", value: fmt(tune[k] ?? base[k], dec),
         disabled: locked ? true : null, "aria-label": lab });
@@ -226,6 +228,13 @@ export async function pageDrive(U) {
     try {
       const key = JSON.stringify(p);
       if (key !== setupFor) { P = await api.post("/api/drive/setup", p); surfaces = P.surfaces; setupFor = key; }
+      {
+        const dz = P.powertrain === "diesel";
+        if (stage && stage.setPowertrain) stage.setPowertrain(P.powertrain);
+        S.soc.el.querySelector(".lab").textContent = dz ? "Yakıt deposu" : "Şarj durumu";
+        S.trac.el.querySelector("span").textContent = dz ? "Motor mili" : "Çekiş / rejen";
+        S.used.el.querySelector("span").textContent = dz ? "Yakıt (tahmin)" : "Harcanan (tahmin)";
+      }
       paxNow = p.passengers; finished = false;
       if (mode === "city") {
         city = buildCity({ hill: +hillSel, surfaces, line: lineSel, traffic: trafficSel });
@@ -259,6 +268,24 @@ export async function pageDrive(U) {
     const r = await api.post("/api/drive/simulate", { ...p, ...tr, name: mission ? `${city.route.code} hattı görevi` : "Serbest sürüş" });
     const k = r.kwh, live = drv.st.e_batt / 3.6e6;
     const line = (lab, v, note) => h("div", { class: "drv-res-row" }, h("span", {}, lab), h("b", { class: "num" }, `${fmt(v, 2)} kWh`), note ? h("span", { class: "muted small" }, note) : null);
+    if (r.powertrain === "diesel") {
+      const liveL = live / (P.fuel_kwh_per_l || 9.9);
+      resultBox.replaceChildren(
+        h("div", { class: "drv-res-head" },
+          h("div", {}, h("div", { class: "drv-res-big" }, `${fmt(r.kpi.l_per_100km, 2)}`, h("span", {}, " l/100 km")),
+            h("div", { class: "small muted" }, `Model sonucu · ${fmt(r.kpi.distance_km, 2)} km · ${fmt(r.kpi.duration_min, 1)} dk · ${fmt(r.kpi.co2_g_per_km, 0)} g CO₂/km`)),
+          h("a", { class: "btn", href: `/report/${r.report_id}`, target: "_blank" }, "Tam rapor")),
+        h("div", { class: "drv-res-row" }, h("span", {}, "Yakıt"), h("b", { class: "num" }, `${fmt(r.kpi.fuel_l, 2)} l`), h("span", { class: "muted small" }, `canlı tahmin ${fmt(liveL, 2)} l`)),
+        h("div", { class: "drv-res-row" }, h("span", {}, "Rölantide"), h("b", { class: "num" }, `${fmt(r.kpi.idle_fuel_l, 2)} l`)),
+        line("Yakıt enerjisi (alt ısıl değer)", k.fuel_energy_kwh), line("Motor mili işi", k.engine_shaft_kwh), line("Motor kayıpları", k.engine_loss_kwh),
+        line("Kabin içi termal yönetim", k.hvac_kwh + k.heater_fuel_kwh), line("Yardımcı sistemler ve fan", k.auxiliary_kwh + k.fan_kwh),
+        h("div", { class: "sec-t", style: "margin-top:8px" }, "Tekerlekte nereye gitti"),
+        line("Yuvarlanma direnci (yüzey dahil)", k.rolling_kwh), line("Hava direnci", k.aero_kwh),
+        line("Eğim (net)", k.grade_kwh), line("Sürtünmeli fren", k.friction_brake_kwh), line("Motor freni", k.engine_brake_kwh),
+        line("Şanzıman + aks kayıpları", k.gearbox_loss_kwh + k.axle_loss_kwh),
+        r.warnings && r.warnings.length ? h("details", { class: "tele-warn" }, h("summary", {}, `${r.warnings.length} uyarı`), h("ul", {}, r.warnings.map(w => h("li", {}, w)))) : null);
+      return;
+    }
     resultBox.replaceChildren(
       h("div", { class: "drv-res-head" },
         h("div", {}, h("div", { class: "drv-res-big" }, `${fmt(r.kpi.kwh_per_km, 2)}`, h("span", {}, " kWh/km")),
@@ -330,8 +357,14 @@ export async function pageDrive(U) {
     S.dist.set(`${fmt(D.dist / 1000, 2)} km`);
     S.time.set(`${Math.floor(D.t / 60)}:${String(Math.floor(D.t % 60)).padStart(2, "0")}`);
     const kwh = D.e_batt / 3.6e6;
-    S.used.set(`${fmt(kwh, 2)} kWh`);
-    S.perkm.set(D.dist > 100 ? `${fmt(kwh / (D.dist / 1000), 2)} kWh/km` : "—");
+    if (P.powertrain === "diesel") {
+      const litres = kwh / (P.fuel_kwh_per_l || 9.9);
+      S.used.set(`${fmt(litres, 2)} l`);
+      S.perkm.set(D.dist > 100 ? `${fmt(litres / (D.dist / 1000) * 100, 1)} l/100 km` : "—");
+    } else {
+      S.used.set(`${fmt(kwh, 2)} kWh`);
+      S.perkm.set(D.dist > 100 ? `${fmt(kwh / (D.dist / 1000), 2)} kWh/km` : "—");
+    }
     if (mode === "test" && road) {
       const k = road.segIndex(D.s), sg = road.segs[k];
       S.seg.set(`${k + 1} / ${road.segs.length}`);
@@ -430,7 +463,9 @@ export async function pageDrive(U) {
         h("div", { class: "small muted" }, `${city.route.code} ${city.route.name} · ${Math.floor(D.t / 60)} dk ${Math.round(D.t % 60)} sn · ${fmt(D.dist / 1000, 2)} km`),
         h("div", { class: "drv-res-row" }, h("span", {}, "Hizmet verilen durak"), h("b", {}, `${served} / ${Mi.stops.length}`)),
         missed ? h("div", { class: "drv-res-row" }, h("span", {}, "Kaçırılan durak"), h("b", {}, String(missed))) : null,
-        h("div", { class: "drv-res-row" }, h("span", {}, "Harcanan enerji (canlı tahmin)"), h("b", { class: "num" }, `${fmt(kwh, 2)} kWh · ${fmt(kwh / Math.max(0.01, D.dist / 1000), 2)} kWh/km`)),
+        P.powertrain === "diesel"
+          ? h("div", { class: "drv-res-row" }, h("span", {}, "Yakıt (canlı tahmin)"), h("b", { class: "num" }, `${fmt(kwh / (P.fuel_kwh_per_l || 9.9), 2)} l · ${fmt(kwh / (P.fuel_kwh_per_l || 9.9) / Math.max(0.01, D.dist / 1000) * 100, 1)} l/100 km`))
+          : h("div", { class: "drv-res-row" }, h("span", {}, "Harcanan enerji (canlı tahmin)"), h("b", { class: "num" }, `${fmt(kwh, 2)} kWh · ${fmt(kwh / Math.max(0.01, D.dist / 1000), 2)} kWh/km`)),
         ...Object.entries(groups).map(([t, g]) => h("div", { class: "drv-res-row" }, h("span", {}, `${t} ×${g.n}`), h("b", { class: "num" }, `−${g.pts}`))),
         h("div", { class: "hint" }, "Kesin enerji için “Sürüşü modelde hesapla”: duraklarda değişen yolcu sayısı da modele gider.")));
     toast(`Hat tamamlandı: ${Mi.score()} / 100 puan`);

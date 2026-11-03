@@ -86,6 +86,13 @@ class Map2D:
         x = np.array([float(v) for v in rows[0][1:]])
         y = np.array([float(r[0]) for r in rows[1:]])
         z = np.array([[float(v) for v in r[1:]] for r in rows[1:]])
+        # The corner cell names the axes as "y_label / x_label"; keep the names
+        # so a loader can tell an rpm axis from a rad/s one.
+        corner = rows[0][0] if rows[0] else ""
+        if "/" in corner:
+            yl, xl = (p.strip() for p in corner.split("/", 1))
+            kw.setdefault("x_label", xl)
+            kw.setdefault("y_label", yl)
         return cls(x, y, z, name=name or path.stem,
                    source=source or f"csv:{path.name}", **kw)
 
@@ -97,6 +104,104 @@ class Map2D:
             w.writerow([f"{self.y_label} / {self.x_label}"] + [f"{v:g}" for v in self.x])
             for j, yv in enumerate(self.y):
                 w.writerow([f"{yv:g}"] + [f"{v:.5f}" for v in self.z[j]])
+
+
+@dataclass
+class LossMap:
+    """Torque loss of a gear stage, looked up on the input side, per gear.
+
+    This is the form VECTO certifies gearboxes and axles in: at an input speed
+    [rad/s] and input torque [Nm] (negative when the wheels drive the engine)
+    the stage loses ``loss`` Nm, so the input torque is ``T_out / i + loss``.
+    One ``Map2D`` per gear; an axle or a single-ratio stage has only gear 0.
+    Queries outside the measured grid clamp to its edge, like every other map.
+    """
+
+    gears: dict
+    name: str = ""
+    source: str = "unspecified"
+
+    def __post_init__(self) -> None:
+        self.gears = {int(k): v for k, v in self.gears.items()}
+        if not self.gears:
+            raise ValueError(f"loss map {self.name!r}: no gears")
+
+    def __call__(self, speed_rads, torque_nm, gear: int = 0) -> float:
+        m = self.gears.get(int(gear))
+        if m is None:
+            m = self.gears[min(self.gears)]
+        return float(m(speed_rads, torque_nm))
+
+    @property
+    def gear_numbers(self) -> list:
+        return sorted(self.gears)
+
+    @classmethod
+    def from_entries(cls, entries_by_gear: dict, *, speed_unit: str = "rpm",
+                     name: str = "", source: str = "") -> "LossMap":
+        """Build from ``{gear: [(speed, input_torque, loss), ...]}``.
+
+        VECTO maps are rectangular (every speed is measured at every torque);
+        if a cell is missing it is filled by interpolating along the torque axis
+        at that speed, which is how VECTO itself treats sparse maps.
+        """
+        from .units import RPM
+        k = RPM if speed_unit == "rpm" else 1.0
+        gears = {}
+        for g, entries in entries_by_gear.items():
+            arr = np.asarray(entries, dtype=float)
+            if arr.ndim != 2 or arr.shape[1] != 3 or arr.shape[0] < 4:
+                raise ValueError(f"loss map {name!r} gear {g}: need (speed, torque, loss) rows")
+            xs = np.unique(arr[:, 0]) * k
+            ys = np.unique(arr[:, 1])
+            z = np.full((ys.size, xs.size), np.nan)
+            xi = np.searchsorted(xs, arr[:, 0] * k)
+            yi = np.searchsorted(ys, arr[:, 1])
+            z[yi, xi] = arr[:, 2]
+            for i in range(xs.size):
+                col = z[:, i]
+                ok = np.isfinite(col)
+                if not ok.any():
+                    raise ValueError(f"loss map {name!r} gear {g}: no data at speed {xs[i]:.1f}")
+                if not ok.all():
+                    z[:, i] = np.interp(ys, ys[ok], col[ok])
+            gears[int(g)] = Map2D(xs, ys, z, name=f"{name}:g{g}", source=source,
+                                  x_label="input_speed_rad_s", y_label="input_torque_Nm")
+        return cls(gears, name=name, source=source)
+
+    @classmethod
+    def from_csv(cls, path, name: str = "", source: str = "") -> "LossMap":
+        """Long-format CSV: ``gear,input_speed_rpm,input_torque_nm,loss_nm``.
+        The gear column may be omitted for a single-ratio stage."""
+        path = pathlib.Path(path)
+        with path.open(newline="") as fh:
+            rows = [r for r in csv.reader(fh) if r and not r[0].lstrip().startswith("#")]
+        header = [h.strip().lower() for h in rows[0]]
+        has_gear = header and header[0].startswith("gear")
+        by_gear: dict = {}
+        for r in rows[1:]:
+            vals = [float(v) for v in r if v.strip() != ""]
+            if has_gear:
+                g, rest = int(vals[0]), vals[1:]
+            else:
+                g, rest = 0, vals
+            by_gear.setdefault(g, []).append(rest[:3])
+        unit = "rpm" if any("rpm" in h for h in header) else "rad_s"
+        return cls.from_entries(by_gear, speed_unit=unit, name=name or path.stem,
+                                source=source or f"csv:{path.name}")
+
+    def to_csv(self, path) -> None:
+        from .units import RPM
+        path = pathlib.Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(["gear", "input_speed_rpm", "input_torque_nm", "loss_nm"])
+            for g in self.gear_numbers:
+                m = self.gears[g]
+                for i, xv in enumerate(m.x):
+                    for j, yv in enumerate(m.y):
+                        w.writerow([g, f"{xv / RPM:.2f}", f"{yv:.2f}", f"{m.z[j, i]:.3f}"])
 
 
 @dataclass

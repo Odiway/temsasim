@@ -1,12 +1,12 @@
 """Command line interface.
 
     python -m temsasim list
-    python -m temsasim describe citybus_12m_be
-    python -m temsasim run --vehicle citybus_12m_be --cycle cbdbus --repeat 6 \
-        --ambient -10 --passengers 40 --report out/winter.html
-    python -m temsasim sweep --vehicle citybus_12m_be --cycle cbdbus --repeat 6
-    python -m temsasim compare --vehicles citybus_12m_be,citybus_12m_be_resistive \
-        --cycle cbdbus --repeat 6 --ambient -5
+    python -m temsasim describe maraton_13_dizel
+    python -m temsasim run --vehicle maraton_13_dizel --cycle hhddt65 --passengers 40 \
+        --ambient 35 --solar 800 --report out/yaz.html
+    python -m temsasim sweep --vehicle maraton_13_dizel --cycle wvuinter
+    python -m temsasim vecto-import "ARAÇ VERİLERİ/MARATON ÖRNEK ARAÇ" --name "Maraton 13 dizel"
+    python -m temsasim compare --vehicles maraton_13_dizel,citybus_12m_be --cycle cbdbus
 """
 
 from __future__ import annotations
@@ -20,7 +20,8 @@ import numpy as np
 from .cycle import Environment, Route
 from .library import Library, LibraryError
 from .report import write_report
-from .simulator import simulate
+from .report_diesel import write_diesel_report
+from .simulator import run, simulate
 from .validate import MeasuredLog, validate
 
 
@@ -85,14 +86,14 @@ def cmd_run(args):
     cyc = _load_cycle(lib, args, vehicle=veh)
     print(cyc.summary())
     print()
-    result = simulate(veh, cyc, _env(args), dt_s=args.dt, soh=args.soh)
+    result = run(veh, cyc, _env(args), dt_s=args.dt, soh=args.soh)
     print(result.summary())
     print()
     print("Energy balance (kWh):")
     for k, v in result.energy_balance().items():
-        print(f"  {k:32s} {v:8.3f}")
+        print(f"  {k:40s} {v:8.3f}")
     if args.report:
-        p = write_report(result, args.report)
+        p = (write_diesel_report if veh.is_diesel else write_report)(result, args.report)
         print(f"\nReport written to {p.resolve()}")
 
 
@@ -127,14 +128,19 @@ def cmd_compare(args):
     print(cyc.summary())
     print()
     env = _env(args)
-    print(f"{'vehicle':<34}  {'kWh/km':>8}  {'range km':>9}  {'HVAC kWh':>9}")
-    print("-" * 66)
+    print(f"{'vehicle':<34}  {'kWh/km':>8}  {'l/100km':>8}  {'range km':>9}  {'HVAC kWh':>9}")
+    print("-" * 76)
     for ref in refs:
         veh = lib.load_vehicle(ref)
-        r = simulate(veh, cyc, env, dt_s=args.dt, soh=args.soh)
+        r = run(veh, cyc, env, dt_s=args.dt, soh=args.soh)
         label = f"{veh.name} {veh.variant}".strip()[:34]
-        print(f"{label:<34}  {r.energy_per_km_kwh:>8.3f}  {r.range_km:>9.1f}  "
-              f"{r.totals['hvac_kwh']:>9.2f}")
+        if veh.is_diesel:
+            rng = veh.fuel_tank_l / max(r.fuel_l_per_100km, 1e-6) * 100
+            print(f"{label:<34}  {r.energy_per_km_kwh:>8.3f}  {r.fuel_l_per_100km:>8.2f}  {rng:>9.0f}  "
+                  f"{r.totals['hvac_kwh']:>9.2f}")
+        else:
+            print(f"{label:<34}  {r.energy_per_km_kwh:>8.3f}  {'-':>8}  {r.range_km:>9.1f}  "
+                  f"{r.totals['hvac_kwh']:>9.2f}")
 
 
 def cmd_validate(args):
@@ -179,6 +185,33 @@ def cmd_maraton(args):
         print(f"  {w:12s} {p['rate_pct_per_10k'][w]:5.2f} %/10k km  {p['life_km_to_20pct'][w]:9,.0f} km")
     for wmsg in f["warnings"] + p["warnings"]:
         print("  ! " + wmsg)
+
+
+def cmd_vecto_import(args):
+    """Build a diesel vehicle from a folder (or files) of VECTO declaration XML."""
+    from .vecto_import import plan_twin, read_bundle, read_folder, write_twin
+    src = [pathlib.Path(s) for s in args.source]
+    if len(src) == 1 and src[0].is_dir():
+        bundle = read_folder(src[0])
+    else:
+        bundle = read_bundle([(p.name, p.read_bytes()) for p in src])
+    plan = plan_twin(bundle)
+    for row in plan.summary()["rows"]:
+        print(f"  {row['label']:<22} {row['value']:<60} <- {row['source']}")
+    for w in plan.warnings:
+        print("  !", w)
+    if plan.missing:
+        print("missing:", "; ".join(plan.missing), file=sys.stderr)
+        return 2
+    if args.plan_only:
+        return 0
+    out = write_twin(Library(args.library), plan, name=args.name, stem=args.stem, variant=args.variant or "",
+                     overwrite=args.force, glazing_area_m2=args.glazing, notes=args.notes or "")
+    for k, v in out["written"].items():
+        print(f"  wrote {k:<13} {v}")
+    print()
+    print(out["describe"])
+    return 0
 
 
 def cmd_gui(args):
@@ -260,6 +293,17 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--kale", action="store_true", help="Kale radiator (else Raal)")
     sp.add_argument("--body", default="CD", choices=["CD", "ND"])
     sp.set_defaults(func=cmd_maraton)
+
+    sp = sub.add_parser("vecto-import", help="build a diesel vehicle from VECTO declaration XML files")
+    sp.add_argument("source", nargs="+", help="a folder, or XML / zip files")
+    sp.add_argument("--name", required=True, help="vehicle name, e.g. 'Maraton 13 dizel'")
+    sp.add_argument("--stem", default=None, help="file name under library/vehicle/")
+    sp.add_argument("--variant", default=None)
+    sp.add_argument("--glazing", type=float, default=None, help="total glazing area m2 (from CAD/CFD)")
+    sp.add_argument("--notes", default=None)
+    sp.add_argument("--force", action="store_true", help="overwrite existing files")
+    sp.add_argument("--plan-only", action="store_true", help="show what would be used and stop")
+    sp.set_defaults(func=cmd_vecto_import)
 
     sp = sub.add_parser("gui", help="open the web interface in a browser")
     sp.add_argument("--port", type=int, default=8765)

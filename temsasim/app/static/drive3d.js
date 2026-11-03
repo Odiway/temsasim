@@ -411,5 +411,6 @@ export function createDriveStage(host, { raster } = {}) {
   }
 
   return { setRoad, setCity, setEnv, frame, setSignText: t => bus.setSign(dotTexture(raster, t, { minCols: 40, pitch: 8 })), setCameraMode, setXray: m => xray.setMode(m), setSign: tex => bus.setSign(tex), dispose,
+           setPowertrain(kind) { bus.setPowertrain(kind); xray.setPowertrain(kind); },
            get mode() { return camMode; } };
 }

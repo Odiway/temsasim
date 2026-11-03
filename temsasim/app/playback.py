@@ -22,7 +22,7 @@ import numpy as np
 from ..cycle import DriveCycle, Route
 from ..messages import tr_num
 from ..simulator import SimulationResult
-from ..units import KWH
+from ..units import KWH, RPM
 
 
 def _stride(n: int, max_points: int) -> np.ndarray:
@@ -196,3 +196,86 @@ def profile_from_cycle(cycle: DriveCycle) -> dict:
     step = max(1, d.size // 1500)
     return {"d": np.round(d[::step], 1).tolist(), "elev": [0.0] * len(d[::step]),
             "stops": [round(x, 1) for x in stops], "length_m": float(d[-1]), "name": c.name}
+
+
+# ---------------------------------------------------------------- diesel
+def timeline_diesel(result, *, base_elevation_m: float = 0.0, max_points: int = 2400) -> dict:
+    """Timeline of a diesel run, in the same shape the 3D view already reads.
+
+    The battery keys are mapped to their diesel counterparts so the scene
+    needs no second code path: ``p_batt`` and ``p_motor`` carry engine shaft
+    power, ``soc`` the fuel left in the tank, ``regen_lost`` the friction
+    braking power (red discs), ``e_used`` litres burned. Diesel-only keys
+    (``rpm``, ``gear``, ``fuel_lph``, ``l100``) are added for the telemetry.
+    """
+    s = result.series
+    dt = result.dt_s
+    eng = result.vehicle.engine
+    elev = _elevation(result, base_elevation_m)
+    fuel_l = s["fuel_cum_g"] / eng.fuel_density_kg_per_m3
+    km = np.maximum(s["distance_m"] / 1000.0, 1e-6)
+    tank = max(float(result.vehicle.fuel_tank_l), 1.0)
+
+    def cum(arr_w):
+        return np.cumsum(np.asarray(arr_w, dtype=float)) * dt / KWH
+
+    cols = {
+        "t": s["time_s"], "d": s["distance_m"], "v": s["speed_mps"] * 3.6,
+        "grade": np.tan(s["grade_rad"]) * 100.0, "elev": elev,
+        "soc": np.clip((tank - fuel_l) / tank * 100.0, 0, 100),
+        "p_batt": s["p_engine_w"] / 1e3, "p_motor": s["p_engine_w"] / 1e3,
+        "p_hvac": s["p_hvac_w"] / 1e3, "p_aux": (s["p_aux_w"] + s["p_fan_w"]) / 1e3,
+        "p_thermal": np.zeros_like(s["time_s"]), "regen_lost": s["p_friction_brake_w"] / 1e3,
+        "cabin": s["cabin_c"], "pack": s["cabin_c"], "pax": s["passengers"], "doors": s["doors_open"],
+        "e_used": fuel_l, "e_trac": cum(np.clip(s["p_engine_w"], 0, None)),
+        "e_regen": np.zeros_like(s["time_s"]), "e_hvac": cum(s["p_hvac_w"]),
+        "e_aux": cum(s["p_aux_w"] + s["p_fan_w"]), "e_thermal": np.zeros_like(s["time_s"]),
+        "rpm": s["engine_speed_rads"] / RPM, "gear": s["gear"],
+        "fuel_lph": (s["fuel_g_per_s"] + s["heater_fuel_g_per_s"]) * 3600.0 / eng.fuel_density_kg_per_m3,
+        "l100": np.where(km > 0.2, fuel_l / km * 100.0, 0.0),
+        "e_brake": cum(s["p_friction_brake_w"]), "e_engbrake": cum(s["p_engine_brake_w"]),
+        "e_heater": np.cumsum(s["heater_fuel_g_per_s"]) * dt / eng.fuel_density_kg_per_m3,
+    }
+    idx = _stride(s["time_s"].size, max_points)
+    digits = {"t": 1, "d": 1, "doors": 0, "gear": 0}
+    return {k: np.round(v[idx], digits.get(k, 3)).tolist() for k, v in cols.items()}
+
+
+def events_diesel(result) -> list:
+    s = result.series
+    eng = result.vehicle.engine
+    t, d = s["time_s"], s["distance_m"]
+    ev: list = []
+    for k, (a, b) in enumerate(_runs(s["doors_open"] > 0.5), start=1):
+        dwell = t[b] - t[a] + result.dt_s
+        idle_l = float(np.sum(s["fuel_g_per_s"][a:b + 1]) * result.dt_s / eng.fuel_density_kg_per_m3)
+        ev.append({"t": float(t[a]), "d": float(d[a]), "kind": "stop", "title": f"Durak {k}",
+                   "text": f"{tr_num(dwell, 0)} s bekleme, {tr_num(s['passengers'][a], 0)} yolcu; "
+                           f"rölantide {tr_num(idle_l * 1000, 0)} ml yakıt"})
+    g = np.tan(s["grade_rad"]) * 100.0
+    for sign, kind, word in ((1, "climb", "Yokuş"), (-1, "descent", "İniş")):
+        for a, b in _runs(sign * g > 5.0):
+            if d[b] - d[a] < 60:
+                continue
+            peak = float(np.max(sign * g[a:b + 1]))
+            litres = float(np.sum(s["fuel_g_per_s"][a:b + 1]) * result.dt_s / eng.fuel_density_kg_per_m3)
+            gears = s["gear"][a:b + 1]
+            gear_min = int(np.min(gears[gears > 0])) if np.any(gears > 0) else 0
+            txt = (f"%{tr_num(peak, 1)} eğime kadar, {tr_num(d[b] - d[a], 0)} m; "
+                   + (f"{tr_num(litres, 2)} l yakıt, en düşük vites {gear_min}" if sign > 0
+                      else f"motor freni ve retarder; {tr_num(litres * 1000, 0)} ml yakıt"))
+            ev.append({"t": float(t[a]), "d": float(d[a]), "kind": kind, "title": f"{word} başladı", "text": txt})
+    for a, b in _runs(s["unmet"] > 0):
+        ev.append({"t": float(t[a]), "d": float(d[a]), "kind": "soc", "title": "Motor gücü yetmedi",
+                   "text": f"{tr_num(t[b] - t[a] + result.dt_s, 0)} s boyunca tam yük; hız profili takip edilemedi"})
+    meta = result.cycle.meta or {}
+    for e in meta.get("signal_stops", []):
+        wait = e["t_go"] - e["t0"]
+        ev.append({"t": float(e["t0"]), "d": float(e["d_line"]), "kind": "signal", "title": "Kırmızı ışık",
+                   "text": f"{tr_num(wait, 0)} s bekleme" + (f", önde {e['queue']} araç" if e.get("queue") else ", ilk sırada")})
+    for j in meta.get("jams", []):
+        ev.append({"t": float(j["t0"]), "d": float(j["d"]), "kind": "jam", "title": "Trafik sıkışıklığı",
+                   "text": f"{tr_num(j['d_end'] - j['d'], 0)} m dur-kalk: {len(j['halts'])} kez durdu, "
+                           f"{tr_num(j['t1'] - j['t0'], 0)} s sürdü"})
+    ev.sort(key=lambda e: e["t"])
+    return ev[:400]

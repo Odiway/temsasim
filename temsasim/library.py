@@ -27,6 +27,7 @@ mode for a tool people make decisions with.
 
 from __future__ import annotations
 
+import csv
 import dataclasses
 import pathlib
 from typing import Any
@@ -39,9 +40,11 @@ from .components.auxiliary import Auxiliaries
 from .components.battery import BatteryPack
 from .components.chassis import Chassis
 from .components.driveline import Driveline
+from .components.engine import Engine
 from .components.hvac import HVAC
 from .components.motor import Motor
-from .maps import Curve1D, Map2D
+from .components.transmission import Transmission
+from .maps import Curve1D, LossMap, Map2D
 from .units import KWH, MPH, RPM
 from .vehicle import ControlStrategy, Vehicle
 
@@ -68,6 +71,8 @@ KINDS: dict[str, type] = {
     "auxiliary": Auxiliaries,
     "auxiliaries": Auxiliaries,
     "aging": AgingModel,
+    "engine": Engine,
+    "transmission": Transmission,
     "control": ControlStrategy,
     "vehicle": Vehicle,
 }
@@ -80,6 +85,8 @@ VEHICLE_COMPONENT_FIELDS = {
     "hvac": "hvac",
     "auxiliaries": "auxiliary",
     "aging": "aging",
+    "engine": "engine",
+    "transmission": "transmission",
 }
 
 
@@ -127,11 +134,34 @@ def _coerce_curve(value: Any, base_dir: pathlib.Path, field_name: str,
         return Curve1D(arr[:, 0], arr[:, 1], name=field_name,
                        source=f"csv:{path.name}")
     if isinstance(value, dict):
+        if "path" in value:
+            # A CSV with named columns: {path, columns: [x, y], x_unit: rpm}.
+            # Lets one file (speed, max torque, drag torque) feed two curves,
+            # and keeps the file in the unit people read it in.
+            path = (base_dir / value["path"]).resolve()
+            if not path.exists():
+                raise LibraryError(f"{where}: curve file not found: {path}")
+            with path.open(newline="", encoding="utf-8") as fh:
+                rows = [r for r in csv.reader(fh) if r and not r[0].lstrip().startswith("#")]
+            header = [h.strip() for h in rows[0]]
+            cols = value.get("columns") or header[:2]
+            try:
+                ix, iy = header.index(cols[0]), header.index(cols[1])
+            except ValueError as exc:
+                raise LibraryError(f"{where}: {field_name}: column {exc} not in {path.name} "
+                                   f"(has {header})") from exc
+            arr = np.array([[float(r[ix]), float(r[iy])] for r in rows[1:]])
+            kx = RPM if (value.get("x_unit") == "rpm" or "rpm" in cols[0].lower()) else 1.0
+            return Curve1D(arr[:, 0] * kx, arr[:, 1] * float(value.get("y_scale", 1.0)),
+                           name=field_name, source=value.get("source", f"csv:{path.name}"))
         pairs = value.get("points") or value.get("pairs")
         src = value.get("source", "inline")
         if pairs is None:
             raise LibraryError(f"{where}: {field_name} needs 'points' or a CSV path")
-        return Curve1D.from_pairs(pairs, name=field_name, source=src)
+        c = Curve1D.from_pairs(pairs, name=field_name, source=src)
+        if value.get("x_unit") == "rpm":
+            c = Curve1D(c.x * RPM, c.y, name=c.name, source=c.source)
+        return c
     if isinstance(value, (list, tuple)):
         return Curve1D.from_pairs(value, name=field_name, source="inline")
     raise LibraryError(f"{where}: cannot read {field_name} as a curve")
@@ -145,18 +175,48 @@ def _coerce_map(value: Any, base_dir: pathlib.Path, field_name: str,
         path = (base_dir / value).resolve()
         if not path.exists():
             raise LibraryError(f"{where}: map file not found: {path}")
-        return Map2D.from_csv(path, name=field_name)
+        return _rpm_axis_to_si(Map2D.from_csv(path, name=field_name))
     if isinstance(value, dict):
         if "path" in value:
             path = (base_dir / value["path"]).resolve()
+            if not path.exists():
+                raise LibraryError(f"{where}: map file not found: {path}")
             m = Map2D.from_csv(path, name=field_name)
             if "source" in value:
                 m.source = value["source"]
-            return m
+            return _rpm_axis_to_si(m, force=value.get("x_unit") == "rpm")
         return Map2D(np.array(value["x"]), np.array(value["y"]),
                      np.array(value["z"]), name=field_name,
                      source=value.get("source", "inline"))
     raise LibraryError(f"{where}: cannot read {field_name} as a map")
+
+
+def _rpm_axis_to_si(m: Map2D, force: bool = False) -> Map2D:
+    """A grid whose corner label says the speed axis is in rpm is converted
+    to rad/s on the way in, so files stay readable and the solver stays SI."""
+    if force or "rpm" in (m.x_label or "").lower():
+        return Map2D(m.x * RPM, m.y, m.z, name=m.name, source=m.source,
+                     x_label="speed_rad_s", y_label=m.y_label)
+    return m
+
+
+def _coerce_lossmap(value: Any, base_dir: pathlib.Path, field_name: str,
+                    where: str) -> LossMap:
+    if isinstance(value, LossMap):
+        return value
+    if isinstance(value, dict) and "path" in value:
+        src, value = value.get("source"), value["path"]
+    else:
+        src = None
+    if isinstance(value, str):
+        path = (base_dir / value).resolve()
+        if not path.exists():
+            raise LibraryError(f"{where}: loss map file not found: {path}")
+        m = LossMap.from_csv(path, name=field_name)
+        if src:
+            m.source = src
+        return m
+    raise LibraryError(f"{where}: cannot read {field_name} as a loss map (give a CSV path)")
 
 
 def build(cls, data: dict, *, base_dir: pathlib.Path, where: str):
@@ -185,8 +245,12 @@ def build(cls, data: dict, *, base_dir: pathlib.Path, where: str):
         ftype = types[field_name]
         tname = ftype if isinstance(ftype, str) else getattr(ftype, "__name__", str(ftype))
 
-        if "Curve1D" in str(tname):
+        if value is None:
+            kwargs[field_name] = None
+        elif "Curve1D" in str(tname):
             kwargs[field_name] = _coerce_curve(value, base_dir, field_name, where)
+        elif "LossMap" in str(tname):
+            kwargs[field_name] = _coerce_lossmap(value, base_dir, field_name, where)
         elif "Map2D" in str(tname):
             kwargs[field_name] = _coerce_map(value, base_dir, field_name, where)
         elif isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -299,7 +363,7 @@ class Library:
     def catalogue(self) -> dict[str, list[str]]:
         return {k: self.list_kind(k) for k in
                 ("vehicle", "motor", "battery", "hvac", "driveline",
-                 "chassis", "auxiliary", "aging", "route")}
+                 "chassis", "auxiliary", "aging", "engine", "transmission", "route")}
 
     def load_cycle(self, ref: str):
         from .cycle import DriveCycle

@@ -39,7 +39,7 @@ import numpy as np
 import yaml
 
 from .cycle import Environment, Route
-from .simulator import simulate
+from .simulator import run, simulate
 from .traffic import LEVELS as TRAFFIC_LEVELS
 
 OCCUPANCY_TARGET = 0.85        # load factor above which a trip is "over target"
@@ -196,6 +196,7 @@ class BandResult:
     stop_denied: list[float]
     trips: int
     warnings: list[str] = field(default_factory=list)
+    fuel_l: float = 0.0
 
 
 @dataclass
@@ -222,6 +223,8 @@ class LineResult:
     traffic_loss_min_per_day: float
     occupancy_hist: dict
     peak_band_index: int
+    powertrain: str = "battery_electric"
+    fuel_l_per_day: float = 0.0
 
     def as_dict(self) -> dict:
         def band(b: BandResult) -> dict:
@@ -229,7 +232,7 @@ class LineResult:
                     "traffic": b.band.traffic, "demand": b.band.demand, "direction": b.direction,
                     "runtime_min": round(b.runtime_s / 60, 1), "free_runtime_min": round(b.free_runtime_s / 60, 1),
                     "distance_km": round(b.distance_km, 2), "kwh": round(b.kwh, 2), "kwh_per_km": round(b.kwh_per_km, 3),
-                    "soc_drop": round(b.soc_drop, 3), "peak_load": round(b.peak_load, 1), "mean_load": round(b.mean_load, 1),
+                    "soc_drop": round(b.soc_drop, 3), "fuel_l": round(b.fuel_l, 2), "peak_load": round(b.peak_load, 1), "mean_load": round(b.mean_load, 1),
                     "load_factor": round(b.load_factor, 3), "boardings": round(b.boardings, 1), "denied": round(b.denied, 1),
                     "pax_km": round(b.pax_km, 1), "trips": b.trips,
                     "stop_loads": [round(x, 1) for x in b.stop_loads], "stop_boardings": [round(x, 1) for x in b.stop_boardings],
@@ -244,7 +247,9 @@ class LineResult:
                 "kwh_per_bus_day": round(self.kwh_per_bus_day, 1), "kwh_per_pax": round(self.kwh_per_pax, 3),
                 "usable_kwh": round(self.usable_kwh, 1), "charge_sessions_per_bus": self.charge_sessions_per_bus,
                 "traffic_loss_min_per_day": round(self.traffic_loss_min_per_day, 1),
-                "occupancy_hist": self.occupancy_hist, "peak_band_index": self.peak_band_index}
+                "occupancy_hist": self.occupancy_hist, "peak_band_index": self.peak_band_index,
+                "powertrain": self.powertrain, "fuel_l_per_day": round(self.fuel_l_per_day, 1),
+                "fuel_l_per_100km": round(100 * self.fuel_l_per_day / self.vehicle_km, 2) if self.vehicle_km else 0.0}
 
 
 def simulate_line(line: Line, vehicle, env: Environment, *, headways: dict[int, float] | None = None,
@@ -260,7 +265,13 @@ def simulate_line(line: Line, vehicle, env: Environment, *, headways: dict[int, 
         hb = HourBand(b.start_h, b.end_h, (headways or {}).get(k, b.headway_min),
                       (traffic_override or {}).get(k, b.traffic), b.demand)
         bands.append(hb)
-    usable = float(vehicle.battery.usable_energy_kwh)
+    diesel = vehicle.is_diesel
+    if diesel:
+        # the tank, as fuel energy, plays the part of the usable pack: refuels per day
+        e = vehicle.engine
+        usable = float(vehicle.fuel_tank_l * e.fuel_density_kg_per_m3 / 1000.0 * e.fuel_lhv_j_per_kg / 3.6e6)
+    else:
+        usable = float(vehicle.battery.usable_energy_kwh)
     results: list[BandResult] = []
     free_cache: dict[str, float] = {}
     for k, hb in enumerate(bands):
@@ -280,7 +291,7 @@ def simulate_line(line: Line, vehicle, env: Environment, *, headways: dict[int, 
                 return float(_load[min(idx, len(_load) - 1)])
 
             cyc = route.to_cycle(vehicle=vehicle, occupancy=occupancy, traffic=hb.traffic)
-            res = simulate(vehicle, cyc, env)
+            res = run(vehicle, cyc, env)
             t = res.totals
             dist_km = float(t["distance_km"])
             seg = np.diff(np.concatenate([stops_m, [L]])) / 1000.0        # km from each stop to the next
@@ -291,9 +302,10 @@ def simulate_line(line: Line, vehicle, env: Environment, *, headways: dict[int, 
                 free_cache[free_key] = float(route.to_cycle(vehicle=vehicle, occupancy=occupancy, traffic="yok").duration_s)
             br = BandResult(band=hb, direction=direction, runtime_s=float(cyc.duration_s),
                             free_runtime_s=free_cache.get(free_key, float(cyc.duration_s)),
-                            distance_km=dist_km, kwh=float(t["battery_energy_kwh"]),
+                            distance_km=dist_km, kwh=float(t["fuel_energy_kwh"] if diesel else t["battery_energy_kwh"]),
                             kwh_per_km=float(res.energy_per_km_kwh),
-                            soc_drop=float(res.initial_soc - res.series["soc"][-1]),
+                            soc_drop=0.0 if diesel else float(res.initial_soc - res.series["soc"][-1]),
+                            fuel_l=float(t["fuel_total_l"]) if diesel else 0.0,
                             peak_load=float(load.max()) if len(load) else 0.0,
                             mean_load=float(pax_km / max(dist_km, 1e-6)),
                             load_factor=float(load.max() / cap) if cap else 0.0,
@@ -344,7 +356,8 @@ def simulate_line(line: Line, vehicle, env: Environment, *, headways: dict[int, 
                       pax_km_per_day=pax_km, mean_wait_min=mean_wait, kwh_per_day=kwh, kwh_per_bus_day=kwh_bus,
                       kwh_per_pax=(kwh / pax if pax > 0 else 0.0), usable_kwh=usable,
                       charge_sessions_per_bus=sessions, traffic_loss_min_per_day=loss, occupancy_hist=hist,
-                      peak_band_index=peak_idx)
+                      peak_band_index=peak_idx, powertrain=vehicle.powertrain,
+                      fuel_l_per_day=sum(r.trips * r.fuel_l for r in results))
 
 
 def list_lines(library_root: pathlib.Path) -> list[pathlib.Path]:

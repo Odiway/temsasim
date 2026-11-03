@@ -61,6 +61,7 @@ class Driveline:
 
     source: str = "unspecified"
     validated: bool = False
+    notes: str = ""
 
     # ----------------------------------------------------------------------
     def gear_for_speed(self, speed_mps: float, current_gear: int = 0) -> int:

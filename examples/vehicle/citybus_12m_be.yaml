@@ -1,0 +1,35 @@
+kind: vehicle
+name: City Bus 12m BE
+variant: 350 kWh / heat pump
+description: >
+  Reference battery-electric 12 m city bus, assembled entirely from PLACEHOLDER
+  components. This file exists to demonstrate the toolchain and to be the thing
+  you replace first: swap each referenced component for a measured one and the
+  warnings in the report will clear themselves one by one.
+
+chassis: chassis/citybus_12m.yaml
+driveline: driveline/direct_drive_6r2.yaml
+motor: motor/central_250kw_pmsm.yaml
+battery: battery/nmc_350kwh.yaml
+hvac: hvac/heatpump_30kw.yaml
+auxiliaries: auxiliary/citybus_standard.yaml
+aging: aging/generic_nmc.yaml
+
+seats: 28
+standees: 60
+
+control:
+  regen_enabled: true
+  max_regen_decel_mps2: 1.2
+  regen_blend_fraction: 0.95
+  min_regen_speed_mps: 1.4
+  coast_regen_fraction: 0.15
+  soc_start: 0.95
+  soc_target_min: 0.20
+  cabin_preconditioned: true     # brought to setpoint on depot power
+  pack_preconditioned: false
+
+notes: >
+  To create a variant, copy this file and override one reference. A
+  resistive-heating comparison is simply hvac/resistive_30kw.yaml in place of
+  the heat pump, with everything else identical.

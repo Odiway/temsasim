@@ -197,7 +197,8 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--rule);
   <a href="#tamlik"><b>6</b>Veri tamlığı</a>
   <a href="#uygulama"><b>7</b>Uygulama</a>
   <a href="#surus"><b>8</b>Serbest sürüş</a>
-  <a href="#sinir"><b>9</b>Basitleştirmeler</a>
+  <a href="#dizel"><b>9</b>Dizel güç aktarma</a>
+  <a href="#sinir"><b>10</b>Basitleştirmeler</a>
 </nav>
 
 <!-- =============================================================== 1 -->
@@ -1163,8 +1164,81 @@ SOH = 1 − (Q_t + Q_ç)       ömür sonu: SOH &lt; 0,80</div>
 </section>
 
 <!-- =============================================================== 9 -->
+<section id="dizel">
+  <div class="shead"><span class="num">9</span><h2>Dizel güç aktarma: tekerlekten yakıta</h2><p>Dizel araç (<code>powertrain: diesel</code>) aynı yol yükü ve kabin modelini kullanır; çözücü <code>diesel.py</code> tekerlekten motora geri iner ve yakıtı sertifikalı haritadan okur. Bileşen verisi VECTO beyan dosyalarından içe aktarılır (<code>vecto_xml.py</code>, <code>vecto_import.py</code>); sayılar elle yazılmaz.</p></div>
+  <div class="cards">
+    <div class="card"><h3>9.1 Dizel motor <span class="tag mech">mekanik</span></h3>
+      <div class="eq">T_max(ω) = tam yük eğrisi        (sertifika)
+T_sür(ω) = sürükleme eğrisi      (negatif)
+ṁ_yakıt  = harita(ω, T) · k_düzeltme   [g/h]
+T &lt; 0 → harita 0 verir (yakıt kesme)
+E_yakıt  = m_yakıt · 42,7 MJ/kg
+CO₂      = m_yakıt · 3,13
+litre    = m_yakıt / 836 kg/m³
+J_motor  = 1,3 + 0,41 + 270·V[m³]   (VECTO)</div>
+      <p class="defs"><b>Maraton:</b> DAF MX-11 H5 330 · 10,8 l · 330 kW @ 1600 rpm · 2358 Nm · rölanti 550 rpm, 1,14 l/h</p>
+      <p>Harita VECTO sertifikasının 178 ölçüm noktasından 14×49 ızgaraya yeniden örneklenir; her devirde tork boyunca doğrusal ara değer. Harita yoksa Willans doğrusu (%42) ile sentetik harita kurulur ve bileşen doğrulanmamış sayılır.</p>
+      <div class="src">engine.py · vecto_import.py _fuel_grid</div></div>
+
+    <div class="card"><h3>9.2 Şanzıman, aks, retarder <span class="tag mech">mekanik</span></h3>
+      <div class="eq">aks:      ω_p = ω_tek · i_aks
+          T_p = T_tek / i_aks + kayıp_aks(ω_p, T_p)   (3 sabit nokta adımı)
+retarder: T_ret = kayıp_ret(ω_p · i_ret) · i_ret         (boşta sürükleme)
+şanzıman: ω_m = ω_p · i_vites
+          T_m = (T_p + T_ret) / i_vites + kayıp_vites(ω_m, T_m)
+debriyaj: ω_motor = max(ω_m, ω_rölanti); kayma kaybı = T_m·(ω_motor − ω_m)
+J_yansıyan = (J_motor + J_şanzıman) · (i_vites · i_aks)²</div>
+      <p>Kayıp haritaları VECTO biçimindedir: giriş devri ve giriş torkuna göre giriş milindeki kayıp torku, vites başına bir harita; negatif torkta (motor freni) da tanımlıdır. Harita yoksa sabit verim (0,96 · 0,96).</p>
+      <div class="src">transmission.py axle_input, gearbox_input, retarder_drag_nm · maps.py LossMap</div></div>
+
+    <div class="card"><h3>9.3 Vites stratejisi (AMT) <span class="tag data">karar</span></h3>
+      <div class="eq">pencere: n_alt ≤ ω_motor ≤ n_üst
+         n_alt = max(1,45·rölanti, 0,5·anma) ≈ 800 rpm
+         n_üst = 0,95·anma ≈ 1520 rpm
+aday vites: penceredeki ve T_m ≤ (1 − 0,10)·T_max olan en yüksek vites
+kalkış (v &lt; 2,2 m/s): kalkış hızında n ≥ n_alt olan en yüksek vites
+koruma: mevcut vites uygunsa 2 s içinde değişmez;
+        pencerenin alt %10'una vites büyütülmez
+yetersiz tork: penceredeki en düşük vites, o da yetmezse bir alt</div>
+      <p>VECTO AMT stratejisinin yapısı, ayar sabitleri alan olarak açık. Ölçülmüş devir iziyle kalibre edilmeli; yokuşlu güzergâhta cevabın büyük kısmı vites seçimidir.</p>
+      <div class="src">transmission.py choose_gear</div></div>
+
+    <div class="card"><h3>9.4 Motor denklemi ve yardımcılar <span class="tag mech">mekanik</span></h3>
+      <div class="eq">P_yard = (sabit + aydınlatma)/0,70 + direksiyon + kompresör
+P_klima = soğutmada |Q|/COP + fanlar; ısıtmada yalnız fan
+T_istek = T_m + (P_yard + P_klima + P_fan)/ω_motor
+T_istek &gt; T_max → T = T_max, karşılanamayan = (T_istek − T_max)·ω
+T_istek &lt; T_sür → T = T_sür, sürtünmeli fren = (T_sür − T_istek)·ω
+duruşta: ω = rölanti, T = T_yard → rölanti yakıtı
+ısıtma: Q_motor = min(Q_kabin, 0,28·P_yakıt); kalan → yakıtlı ısıtıcı (η 0,85)</div>
+      <p class="defs"><b>Kabul:</b> alternatör verimi 0,70 · soğutma suyuna giden yakıt enerjisi %28 · fan ortalama 600 W</p>
+      <div class="src">diesel.py simulate_diesel</div></div>
+
+    <div class="card"><h3>9.5 Şasi: VECTO aks tablosu <span class="tag mech">mekanik</span></h3>
+      <div class="eq">c_r(m) = Σ_aks pay · RRC_ISO · (F_z / F_z,ISO)^(0,9 − 1)
+F_z = pay · m · g / tekerlek sayısı   (çift lastik: 4)
+F_hava = ½·ρ·CdxA·v²   (CdxA doğrudan beyan)
+J_tek = Σ tekerlek sayısı · J_tekerlek   (VECTO Wheels.csv)
+r_dyn = çap · 3,05 / 2π</div>
+      <p class="defs"><b>Maraton:</b> 13 500 / 19 000 kg · CdxA 3,40 m² · 295/80 R22.5 RRC 0,0048 · paylar %37,5 / %62,5 (VECTO segment tablosu)</p>
+      <p>Yüklü araçta katsayı hafif düşer; VECTO ile aynı düzeltme. Elektrikli araçta olduğu gibi coast-down ölçümü varsa o kazanır.</p>
+      <div class="src">chassis.py rolling_coefficient, drag_area_m2</div></div>
+
+    <div class="card"><h3>9.6 Enerji dengesi (yakıttan tekerleğe) <span class="tag data">veri tamlığı</span></h3>
+      <div class="eq">E_yakıt(LHV) = motor kayıpları + ısıtıcı yakıtı
+   + yuvarlanma + hava + eğim + atalet
+   + sürtünmeli fren + motor freni
+   + aks + şanzıman + retarder + debriyaj
+   + yardımcılar + fan + klima − karşılanamayan
+motor kayıpları = E_yakıt,çekiş − mil işi(+)
+artık ≈ 0 (rapor gösterir)</div>
+      <p>Çıktılar: l/100 km, g CO₂/km, rölanti yakıtı ve süresi, ortalama devir, vites sayısı ve vites payları, motor çalışma noktaları haritası. Rapor <code>report_diesel.py</code>, oynatma <code>playback.timeline_diesel</code>.</p>
+      <div class="src">diesel.py totals, energy_balance</div></div>
+  </div>
+</section>
+
 <section id="sinir">
-  <div class="shead"><span class="num">9</span><h2>Kodda bulunan basitleştirmeler</h2><p>Kodu okurken görülen, sonucu etkileyebilecek noktalar. Bunlar hata olmak zorunda değil; çoğu bilinçli bir sadeleştirme. Ama sonucu yorumlarken bilinmeleri gerekir.</p></div>
+  <div class="shead"><span class="num">10</span><h2>Kodda bulunan basitleştirmeler</h2><p>Kodu okurken görülen, sonucu etkileyebilecek noktalar. Bunlar hata olmak zorunda değil; çoğu bilinçli bir sadeleştirme. Ama sonucu yorumlarken bilinmeleri gerekir.</p></div>
   <div class="limits">
     <div class="lim"><b>SOH koşu boyunca sabit</b><p>Yaşlanma modeli çözücünün içinde çalışmaz; SOH bir girdidir (varsayılan 1,0). Rapordaki ömür projeksiyonu simülasyonun ortalama SOC'si yerine depo SOC'si 0,70 ve dış sıcaklık yerine yıllık 15 °C kullanır.</p><span class="src">simulator.py L137 · report.py L112–120</span></div>
     <div class="lim"><b>Isı pompası COP'u yalnız dış sıcaklığa bağlı</b><p>Kabin sıcaklığı COP'a girmez. Isıtma kapasitesi her sıcaklıkta 30 kW'tır, soğukta düşmez. −12 °C altında ısı pompalı sistem sessizce dirençli ısıtıcı gibi hesaplanır.</p><span class="src">hvac.py L141–152, L289–301</span></div>

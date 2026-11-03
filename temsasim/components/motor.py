@@ -60,6 +60,7 @@ class Motor:
 
     source: str = "unspecified"
     validated: bool = False
+    notes: str = ""
 
     # ----------------------------------------------------------------------
     def __post_init__(self) -> None:

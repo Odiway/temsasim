@@ -13,8 +13,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="module")
-def lib():
-    return Library(ROOT / "library")
+def lib(demo_library):
+    return Library(demo_library)
 
 
 @pytest.fixture(scope="module")
