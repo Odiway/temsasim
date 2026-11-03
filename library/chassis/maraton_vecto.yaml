@@ -1,0 +1,39 @@
+# VECTO beyan dosyalarından temsasim içe aktarıcısıyla üretildi. Elle düzenlenebilir;
+# birim ekleri: _rpm = rpm, _kw = kW, diğer her şey SI.
+kind: chassis
+name: MARATON (VECTO)
+description: 'VECTO araç dosyalarından içe aktarıldı. Kütle: S00-MR3C00D103106103103102000-S00.xml
+  (tamamlanmış araç dosyası). CdxA: ANSA CFD çalışması (CdAx 3.528 m²); örnek tamamlanmış
+  araç dosyasındaki 3,40 m² kullanılmadı. Lastikler: sertifikalı lastik dosyası; aks
+  yük payları VECTO segment tablosundan (37.5/62.5 %). Dinamik lastik yarıçapı ve
+  tekerlek ataleti VECTO tekerlek tablosundan.'
+kerb_mass_kg: 13500.0
+gross_mass_kg: 19000.0
+passenger_mass_kg: 68.0
+cda_m2: 3.528
+frontal_area_m2: 9.397
+drag_coefficient: 0.3754
+tyre_dynamic_radius_m: 0.5068
+axles:
+- number: 1
+  share: 0.375
+  rrc_iso: 0.0048
+  fz_iso: 31274.0
+  twin_tyres: false
+  driven: false
+  wheel_inertia_kgm2: 15.5
+  tyre: BRIDGESTONE C-AP 001 295/80 R22.5
+  source: sertifikalı lastik dosyası
+- number: 2
+  share: 0.625
+  rrc_iso: 0.0048
+  fz_iso: 31274.0
+  twin_tyres: true
+  driven: true
+  wheel_inertia_kgm2: 15.5
+  tyre: BRIDGESTONE C-AP 001 295/80 R22.5
+  source: sertifikalı lastik dosyası
+validated: false
+notes: Bileşen sertifikaları ölçülmüş; aks yük payları VECTO segment tablosundan varsayım.
+  Araç seviyesi dosyalar örnek olarak paylaşıldıysa kütle ve CdxA'yı gerçek araçla
+  doğrulayın.

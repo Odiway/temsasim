@@ -1,0 +1,31 @@
+# VECTO beyan dosyalarından temsasim içe aktarıcısıyla üretildi. Elle düzenlenebilir;
+# birim ekleri: _rpm = rpm, _kw = kW, diğer her şey SI.
+kind: hvac
+name: MARATON kabin
+description: 'Tamamlanmış araç dosyasındaki donanımdan (S00-MR3C00D103106103103102000-S00.xml
+  (tamamlanmış araç dosyası)): yardımcı ısıtıcı 32 kW, tek cam. Kabin geometrisi araç
+  boyutlarından; cam alanı CFD/CAD ölçümünden.'
+system_type: fuel_fired
+backup_heat_source: fuel_fired
+cabin_volume_m3: 55.7
+glazing_area_m2: 28.581
+opaque_area_m2: 120.2
+u_glazing_w_per_m2k: 5.4
+u_opaque_w_per_m2k: 1.1
+fresh_air_m3_per_h_per_passenger: 10.0
+fresh_air_minimum_m3_per_h: 300.0
+door_count: 2
+door_width_m: 0.9
+door_height_m: 1.95
+door_discharge_coefficient: 0.5
+heating_capacity_kw: 32.0
+cooling_capacity_kw: 32.0
+fuel_fired_efficiency: 0.85
+fuel_fired_parasitic_w: 300.0
+blower_power_w: 1200.0
+condenser_fan_power_w: 900.0
+setpoint_heating_c: 20.0
+setpoint_cooling_c: 24.0
+validated: false
+notes: Soğutma kapasitesi ve COP tedarikçi verisiyle değiştirilmeli; ısıtma motor
+  soğutma suyundan, yetmezse yakıtlı ısıtıcıdan.

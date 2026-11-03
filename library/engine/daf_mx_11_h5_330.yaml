@@ -1,0 +1,41 @@
+# VECTO beyan dosyalarından temsasim içe aktarıcısıyla üretildi. Elle düzenlenebilir;
+# birim ekleri: _rpm = rpm, _kw = kW, diğer her şey SI.
+kind: engine
+name: DAF TRUCKS N.V. MX-11 H5 330
+description: VECTO motor sertifikasından içe aktarıldı (DAF TRUCKS N.V._MX-11 330
+  H5.xml (sertifikalı bileşen dosyası)). Sertifika e4*2017/2400*2019/318*E*0865*02,
+  tarih 2022-04-29. Yakıt haritası 178 ölçüm noktasından 14×49 ızgaraya yeniden örneklendi.
+manufacturer: DAF TRUCKS N.V.
+model: MX-11 H5 330
+certification_number: e4*2017/2400*2019/318*E*0865*02
+fuel_type: diesel
+displacement_cm3: 10800.0
+idle_speed_rpm: 550.0
+rated_speed_rpm: 1600.0
+rated_power_kw: 330.0
+max_torque_nm: 2358.0
+fuel_map:
+  path: maps/daf_mx_11_h5_330_yakit.csv
+  x_unit: rpm
+  source: VECTO sertifikası e4*2017/2400*2019/318*E*0865*02
+full_load_curve:
+  path: maps/daf_mx_11_h5_330_tam_yuk.csv
+  columns:
+  - speed_rpm
+  - max_torque_nm
+  x_unit: rpm
+drag_curve:
+  path: maps/daf_mx_11_h5_330_tam_yuk.csv
+  columns:
+  - speed_rpm
+  - drag_torque_nm
+  x_unit: rpm
+inertia_kgm2: 4.626
+whtc_urban: 1.0943
+whtc_rural: 1.036
+whtc_motorway: 1.006
+cold_hot_factor: 1.0034
+regper_factor: 1.0
+validated: true
+notes: Ölçülmüş sertifika verisi. Atalet VECTO'nun hacme dayalı jenerik formülüyle
+  hesaplandı.

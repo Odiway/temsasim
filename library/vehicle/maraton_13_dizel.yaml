@@ -1,0 +1,21 @@
+# VECTO beyan dosyalarından temsasim içe aktarıcısıyla üretildi.
+kind: vehicle
+name: Maraton 13 dizel
+variant: 13,1 m · 55 koltuk · DAF MX-11 330 · ZF TraXon 12
+powertrain: diesel
+description: 'Cam alanları ANSA CFD raporundan: Rear_Window 1.358 m², Windshield 4.001
+  m², First_Door_Window 0.706 m², Panarama_Window 0.550 m², Driver_Window 0.564 m²,
+  Side_Windows 21.401 m² (toplam 28.581 m²). VECTO beyan dosyalarından kurulan dijital
+  ikiz. Üretici: TEMSA SKODA SABANCI ULASIM ARACLARI ANONIM SIRKETI. Kaynaklar: motor
+  DAF TRUCKS N.V._MX-11 330 H5.xml (sertifikalı bileşen dosyası); şanzıman 12 TX2
+  2210 TD.xml (sertifikalı bileşen dosyası); aks 203.00_measured_v00_a_133 -2.00.xml
+  (sertifikalı bileşen dosyası); kütle S00-MR3C00D103106103103102000-S00.xml (tamamlanmış
+  araç dosyası).'
+chassis: chassis/maraton_vecto.yaml
+transmission: transmission/zf_12_tx_2210_td_a_133_203.yaml
+engine: engine/daf_mx_11_h5_330.yaml
+hvac: hvac/maraton_kabin.yaml
+auxiliaries: auxiliary/maraton_yardimci.yaml
+seats: 55
+standees: 0
+fuel_tank_l: 400.0

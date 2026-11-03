@@ -1,0 +1,20 @@
+# VECTO beyan dosyalarından temsasim içe aktarıcısıyla üretildi. Elle düzenlenebilir;
+# birim ekleri: _rpm = rpm, _kw = kW, diğer her şey SI.
+kind: auxiliary
+name: MARATON yardımcı tüketiciler
+description: 'Birincil araç dosyasındaki teknoloji seçimlerinden: alternatör conventional,
+  direksiyon Fixed displacement, hava Large Supply 2-stage (mechanically), fan Belt
+  driven or driven via transm. - On/off clutch. Güç değerleri VECTO''nun otobüs yardımcı
+  tablolarına yakın KABUL değerleri.'
+constant_w: 1000.0
+lighting_w: 400.0
+lighting_night_w: 900.0
+steering_pump_w: 1500.0
+steering_speed_factor: 0.6
+air_compressor_w: 4000.0
+air_compressor_duty_base: 0.08
+air_per_stop_j: 60000.0
+dcdc_efficiency: 1.0
+validated: false
+notes: 24 V yükleri alternatör verimi 0,70 ile mekanik güce çevrilir (dizel çözücü).
+  Ölçümle değiştirin.
