@@ -27,3 +27,6 @@ ARAÇ VERİLERİ/
 
 # per-machine Python environment made by baslat.bat
 .venv/
+
+# raw test-team exports (xlsx/docx); the library keeps compact CSV copies + meta.yaml
+tEST VERİ/

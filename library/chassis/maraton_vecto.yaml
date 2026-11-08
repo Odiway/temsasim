@@ -13,7 +13,7 @@ passenger_mass_kg: 68.0
 cda_m2: 3.528
 frontal_area_m2: 9.397
 drag_coefficient: 0.3754
-tyre_dynamic_radius_m: 0.5068
+tyre_dynamic_radius_m: 0.515   # VECTO tablosu 0,507; Mersin testinde 12. viteste 1010 rpm @ 98 km/h (GPS) → 0,515
 axles:
 - number: 1
   share: 0.375

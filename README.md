@@ -41,7 +41,7 @@ bilgisayarda çalışır, şirket ağına açılmaz. İnternet gerekmez.
 | **Veri yükle** | **VECTO dosyaları:** homologasyonun motor, şanzıman, aks, lastik ve araç XML dosyalarını (klasörü olduğu gibi) bırakın; dizel dijital ikiz kurulur, her değerin hangi dosyadan geldiği gösterilir. Ayrıca motor verim haritası, güzergâh (GPX / tablo), batarya ve klima eğrileri. Dosyayı olduğu gibi bırakın: Excel ya da CSV, `;` ya da `,`, ondalık virgül, ızgara ya da uzun liste, rpm ya da rad/s, verim % / kesir ya da kayıp kW, hepsi otomatik algılanır. Önizlemede yanlış görünen bir ayarı tek tıkla değiştirirsiniz; onaylamadan hiçbir şey kaydedilmez. |
 | **Araç kur** | Bileşenleri açılır listelerden seçerek araç ya da varyant oluşturma. Güç aktarma tipi seçilir: bataryalı elektrikli (şasi, aktarma, motor, batarya, klima, yardımcılar, yaşlanma) ya da dizel (şasi, şanzıman+aks+retarder, dizel motor, klima, yardımcılar). |
 | **Simülasyon** | Tam ekran 3B sahne: otobüs güzergâhta ilerler; sağda canlı hız/SOC göstergeleri, güç akışı, harcanan enerji ve olay akışı; altta sürüklenebilir rakım zaman çizelgesi. Kış/yaz/gece koşula göre değişir. Ayrıca Türkçe tam rapor ve −15…+40 °C sıcaklık taraması. |
-| **Doğrulama** | Gerçek otobüsün CAN/telematik logunu yükleyin; sütunlar (Türkçe başlıklar dahil) otomatik eşleşir, güç yoksa gerilim × akımdan hesaplanır. Model ile ölçüm karşılaştırılır ve fark varsa hangi bileşene bakılacağı söylenir. |
+| **Doğrulama** | **Dizel yakıt testi:** test ekibinin CAN kayıtları (`library/testlog/<kampanya>/`) tek tıkla modelden geçer; litre, l/100 km, evre payları, devir ve vites ölçümle yan yana, koşu başına izler üst üste. Tek bir Dewesoft/CAN dosyası da yüklenebilir (kütle, hava, rüzgâr, güzergâh, klima kapalı). **Elektrikli araç logu:** batarya gücü/SOC ile karşılaştırma, fark varsa hangi bileşene bakılacağı söylenir. |
 
 **Trafik:** Güzergâh seçildiğinde trafik seviyesi (Yok / Akıcı / Orta / Yoğun /
 Sıkışık) seçilebilir. Model trafik ışıklarını gerçek faz zamanlamasıyla işler
@@ -111,6 +111,13 @@ trafik karşılaştırması dizel aracı da kabul eder. Bileşenler
 `library/engine/`, `library/transmission/` altındadır; kurulumu
 `docs/vecto_dosyalarindan_dijital_ikiz.md` anlatır.
 
+**Test ile karşılaştırma (dizel):** `python -m temsasim correlate --campaign mersin_adana_2026_09`
+Mersin–Adana otoyol testinin 9 koşusunu (18 t, 100 km/h, 44,3 km, klima kapalı, gece/gündüz)
+modelden geçirir. Sonuç: yakıt cihazına göre her koşu −6…+1 %, toplam −2,8 %; CAN'a göre
++7 % (cihaz CAN'dan %10 yüksek okur). Bulgular ve açık noktalar `docs/mersin_adana_korelasyon.md`.
+Testten gelen düzeltmeler: rölanti 600 rpm, yardımcı yükler, "Klima kapalı" koşulu
+(`--hvac-off`, arayüzde kutu), lastik yarıçapı 0,515 m, koşu başına rüzgâr.
+
 **VECTO köprüsü:** `temsasim/vecto.py` yerel VECTO sürümünü (depoya dahil değil,
 `2026_09_03-VECTO-5.1.4/` klasöründe) başsız çalıştırır, `.vmod` / `.vsum`
 çıktısını okur, güzergâhı `.vdri` olarak yazar ve VECTO'nun sürdüğü izi bizim
@@ -152,7 +159,10 @@ python -m temsasim compare --route demo_hilly_city --ambient -7 --occupancy-prof
 python -m temsasim validate --vehicle citybus_12m_be --log logs/bus_1042_2026-01-14.csv \
     --overlay out/bus_1042_overlay.csv
 
-python -m pytest tests                                   # 145 tests
+python -m temsasim correlate                             # list test campaigns
+python -m temsasim correlate --campaign mersin_adana_2026_09 --overlay out/mersin
+
+python -m pytest tests                                   # 152 tests
 python -m temsasim gui                                   # the web interface
 ```
 
@@ -289,9 +299,10 @@ temsasim/            solver package
   vecto_xml.py       reader for VECTO declaration XML (engine, gearbox, axle, tyre, vehicle)
   vecto_import.py    VECTO bundle -> library components and vehicle, with sources
   vecto.py           bridge to a local VECTO release (runs it, reads .vmod/.vsum)
+  testlog.py         test-team CAN logs: reader, replay through the diesel model, campaign table
   schema.py          forms generated from the component dataclasses
   app/               local web interface (Flask + one static page, offline)
-library/             TEMSA data: the Maraton twin, Maraton coast-down chassis, cycles, routes, lines
+library/             TEMSA data: the Maraton twin, coast-down chassis, cycles, routes, lines, test logs (see library/README.md)
 examples/            placeholder battery-electric buses (merged in by the tests only)
 docs/                calculation map, VECTO analyses, how a VECTO twin is built
 tests/               physics, importer, interface, line, VECTO and diesel tests

@@ -62,6 +62,7 @@ def _env(args) -> Environment:
         solar_irradiance_w_per_m2=args.solar,
         headwind_mps=args.headwind,
         night=args.night,
+        hvac_enabled=not getattr(args, "hvac_off", False),
         label=args.label or f"{args.ambient:+.0f} degC",
     )
 
@@ -214,6 +215,48 @@ def cmd_vecto_import(args):
     return 0
 
 
+def cmd_correlate(args):
+    """Replay a test campaign's CAN logs through the diesel model and print the table."""
+    from .testlog import list_campaigns, run_campaign
+    lib = Library(args.library)
+    if not args.campaign:
+        for c in list_campaigns(lib.root):
+            print(f"{c['name']:<28} {c['campaign']} ({c['runs']} koşu, {c['vehicle']}, {c['dates']})")
+        return 0
+    out = run_campaign(lib, args.campaign, vehicle=args.vehicle, runs=args.runs.split(",") if args.runs else None)
+    print(f"{out['meta'].get('campaign', args.campaign)} · araç {out['vehicle']} · güzergâh {'var' if out['route_found'] else 'YOK (düz)'}")
+    print(f"{'koşu':<16} {'CAN l':>7} {'cihaz l':>8} {'sim l':>7} {'vs CAN':>7} {'vs cihaz':>9} | {'seyir l/h ölç/sim':>18} | {'rölanti':>11} | {'rpm ölç/sim':>12} | vites")
+    for r in out["rows"]:
+        dev = f"{r['fuel_device_l']:8.3f}" if r["fuel_device_l"] else f"{'-':>8}"
+        ed = f"{100 * r['err_device']:+8.1f}%" if r.get("err_device") is not None else f"{'-':>9}"
+        print(f"{r['key']:<16} {r['fuel_can_l']:7.3f} {dev} {r['fuel_sim_l']:7.3f} {100 * r['err_can']:+6.1f}% {ed} | "
+              f"{r['cruise_lph_meas']:7.2f} / {r['cruise_lph_sim']:7.2f}  | {r['idle_lph_meas']:4.2f}/{r['idle_lph_sim']:4.2f}   | "
+              f"{r['rpm_cruise_meas']:5.0f}/{r['rpm_cruise_sim']:5.0f}  | {100 * (r['gear_agreement'] or 0):3.0f}%")
+    s = out["summary"]
+    print(f"TOPLAM  CAN {s['fuel_can_l']:.2f} l · cihaz {s['fuel_device_l'] or 0:.2f} l · sim {s['fuel_sim_l']:.2f} l → "
+          f"vs CAN {100 * s['err_can']:+.1f}%" + (f", vs cihaz {100 * s['err_device']:+.1f}% (ortalama mutlak {100 * s['mean_abs_err_device']:.1f}%)" if s.get("err_device") is not None else ""))
+    if args.overlay:
+        import csv
+        for cr in out["runs"]:
+            c = cr.correlation; s_ = c.result.series; t_ = s_["time_s"]; t0 = cr.log.time_s - cr.log.time_s[0]
+            eng = c.result.vehicle.engine
+            mr = np.interp(t_, t0, np.nan_to_num(cr.log.fuel_rate_lps)) * 3600 if cr.log.fuel_rate_lps is not None else None
+            mrpm = np.interp(t_, t0, np.nan_to_num(cr.log.engine_rpm)) if cr.log.engine_rpm is not None else np.zeros_like(t_)
+            mg = np.interp(t_, t0, np.nan_to_num(cr.log.gear)) if cr.log.gear is not None else np.zeros_like(t_)
+            pth = pathlib.Path(args.overlay) / f"{cr.key}_overlay.csv"
+            pth.parent.mkdir(parents=True, exist_ok=True)
+            with pth.open("w", newline="") as fh:
+                w = csv.writer(fh)
+                w.writerow(["time_s", "distance_m", "speed_kmh", "grade_pct", "meas_fuel_lph", "sim_fuel_lph", "meas_rpm", "sim_rpm", "meas_gear", "sim_gear"])
+                for i in range(t_.size):
+                    w.writerow([f"{t_[i]:.0f}", f"{s_['distance_m'][i]:.0f}", f"{s_['speed_mps'][i] * 3.6:.1f}", f"{np.tan(s_['grade_rad'][i]) * 100:.2f}",
+                                f"{mr[i]:.2f}" if mr is not None else "",
+                                f"{(s_['fuel_g_per_s'][i] + s_['heater_fuel_g_per_s'][i]) / eng.fuel_density_kg_per_m3 * 3600:.2f}",
+                                f"{mrpm[i]:.0f}", f"{s_['engine_speed_rads'][i] * 60 / (2 * np.pi):.0f}", f"{mg[i]:.0f}", f"{s_['gear'][i]:.0f}"])
+        print(f"overlay CSV'leri {args.overlay} klasörüne yazıldı")
+    return 0
+
+
 def cmd_gui(args):
     from .app.server import serve
     serve(args.library, port=args.port, open_browser=not args.no_browser)
@@ -239,6 +282,7 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--solar", type=float, default=0.0, help="W/m2")
         sp.add_argument("--headwind", type=float, default=0.0, help="m/s")
         sp.add_argument("--night", action="store_true")
+        sp.add_argument("--hvac-off", action="store_true", help="all consumers off, as in a fuel test")
         sp.add_argument("--label", default=None)
         sp.add_argument("--traffic", default="yok",
                         choices=["yok", "akici", "orta", "yogun", "sikisik"],
@@ -304,6 +348,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--force", action="store_true", help="overwrite existing files")
     sp.add_argument("--plan-only", action="store_true", help="show what would be used and stop")
     sp.set_defaults(func=cmd_vecto_import)
+
+    sp = sub.add_parser("correlate", help="compare the diesel model with a test campaign's CAN logs")
+    sp.add_argument("--campaign", default=None, help="folder name under library/testlog (omit to list)")
+    sp.add_argument("--vehicle", default=None, help="override the campaign's vehicle")
+    sp.add_argument("--runs", default=None, help="comma-separated run keys")
+    sp.add_argument("--overlay", default=None, help="write per-run measured/simulated CSVs into this folder")
+    sp.set_defaults(func=cmd_correlate)
 
     sp = sub.add_parser("gui", help="open the web interface in a browser")
     sp.add_argument("--port", type=int, default=8765)

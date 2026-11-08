@@ -197,13 +197,14 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--rule);
   <a href="#tamlik"><b>6</b>Veri tamlığı</a>
   <a href="#uygulama"><b>7</b>Uygulama</a>
   <a href="#surus"><b>8</b>Serbest sürüş</a>
-  <a href="#dizel"><b>9</b>Dizel güç aktarma</a>
-  <a href="#sinir"><b>10</b>Basitleştirmeler</a>
+  <a href="#dizel"><b>9</b>B · Dizel çözücü</a>
+  <a href="#test"><b>10</b>Test ile karşılaştırma</a>
+  <a href="#sinir"><b>11</b>Basitleştirmeler</a>
 </nav>
 
 <!-- =============================================================== 1 -->
 <section id="genel">
-  <div class="shead"><span class="num">1</span><h2>Genel akış</h2><p>Her hesap aynı boru hattından geçer: araç ve görev tek bir zaman serisine (DriveCycle) dönüşür, çözücü bu seriyi saniye saniye yürür, sonuçlar rapora, oynatmaya ve karşılaştırmalara dağılır.</p></div>
+  <div class="shead"><span class="num">1</span><h2>Genel akış: iki ayrı çözücü</h2><p>Araç ve görev tek bir zaman serisine (DriveCycle) dönüşür; sonra <b>güç aktarma tipine göre iki ayrı çözücüden biri</b> çalışır. <b>A — Bataryalı elektrikli</b> (<code>simulator.py</code>, bölüm 4–6): tekerlekten motora, invertöre ve bataryaya; çıktı kWh, SOC, menzil. <b>B — Dizel</b> (<code>diesel.py</code>, bölüm 9): tekerlekten aksa, şanzımana ve motora; çıktı litre, l/100 km, CO₂. İkisi yol yükü ve kabin modelini paylaşır; motor, enerji deposu, kayıplar ve enerji dengesi ayrıdır. Hangi çözücünün koştuğu araç dosyasındaki <code>powertrain</code> alanından gelir (<code>simulator.run</code>); arayüzün hiçbir sayfası ikisini karıştırmaz.</p></div>
   <figure class="w-xl"><div class="scroll">
   <svg viewBox="0 0 1180 640" role="img" aria-label="Girdiler araç kurulumu ve görev üretiminden geçerek DriveCycle'a dönüşür; çözücü bunu işler; çıktılar rapor, oynatma, tarama, trafik karşılaştırması ve doğrulamadır. Maraton modeli çözücüyü kullanmaz.">
     <defs>
@@ -511,7 +512,7 @@ pack_preconditioned    false</div>
 
 <!-- =============================================================== 4 -->
 <section id="adim">
-  <div class="shead"><span class="num">4</span><h2>Çözücünün bir zaman adımı</h2><p>Çözücü görevi 1 saniyelik ızgaraya çevirir ve her saniye aşağıdaki zinciri yürür. Mekanik kol tekerlekten motora iner, elektrik kolu motordan bataryaya, ısıl kol kabin ve paket sıcaklığını ilerletir. Dört değer bir sonraki saniyeye taşınır: SOC, paket sıcaklığı, kabin sıcaklığı ve vites.</p></div>
+  <div class="shead"><span class="num">4</span><h2>A · Elektrikli çözücünün bir zaman adımı</h2><p>Çözücü görevi 1 saniyelik ızgaraya çevirir ve her saniye aşağıdaki zinciri yürür. Mekanik kol tekerlekten motora iner, elektrik kolu motordan bataryaya, ısıl kol kabin ve paket sıcaklığını ilerletir. Dört değer bir sonraki saniyeye taşınır: SOC, paket sıcaklığı, kabin sıcaklığı ve vites.</p></div>
   <figure class="w-xl"><div class="scroll">
   <svg viewBox="0 0 1180 1340" role="img" aria-label="Bir zaman adımı: kütle, yol yükü, tekerlek talebi, fren paylaştırma ve aktarma organı mekanik kolda; motor tork zarfı, motor elektrik gücü, batarya talebi ve çözümü elektrik kolunda; yardımcılar, kabin içi termal yönetim ve paket termal yönetimi ısıl kolda. SOC, paket ve kabin sıcaklığı ile vites sonraki adıma taşınır.">
     <defs>
@@ -824,7 +825,7 @@ pack_preconditioned    false</div>
 
 <!-- =============================================================== 5 -->
 <section id="alt">
-  <div class="shead"><span class="num">5</span><h2>Alt modellerin denklemleri</h2><p>Her kart bir bileşenin tam hesabını ve varsayılan değerlerini verir. Varsayılanlar, kütüphanedeki dosya ilgili alanı vermezse geçerlidir.</p></div>
+  <div class="shead"><span class="num">5</span><h2>A · Elektrikli alt modellerin denklemleri</h2><p>Her kart bir bileşenin tam hesabını ve varsayılan değerlerini verir. Varsayılanlar, kütüphanedeki dosya ilgili alanı vermezse geçerlidir.</p></div>
   <div class="cards">
     <div class="card"><h3>5.1 Şasi ve yol yükü <span class="tag mech">mekanik</span></h3>
       <div class="eq">Fiziksel:
@@ -1165,7 +1166,7 @@ SOH = 1 − (Q_t + Q_ç)       ömür sonu: SOH &lt; 0,80</div>
 
 <!-- =============================================================== 9 -->
 <section id="dizel">
-  <div class="shead"><span class="num">9</span><h2>Dizel güç aktarma: tekerlekten yakıta</h2><p>Dizel araç (<code>powertrain: diesel</code>) aynı yol yükü ve kabin modelini kullanır; çözücü <code>diesel.py</code> tekerlekten motora geri iner ve yakıtı sertifikalı haritadan okur. Bileşen verisi VECTO beyan dosyalarından içe aktarılır (<code>vecto_xml.py</code>, <code>vecto_import.py</code>); sayılar elle yazılmaz.</p></div>
+  <div class="shead"><span class="num">9</span><h2>B · Dizel çözücü: tekerlekten yakıta</h2><p>Dizel araç (<code>powertrain: diesel</code>) aynı yol yükü ve kabin modelini kullanır; çözücü <code>diesel.py</code> tekerlekten motora geri iner ve yakıtı sertifikalı haritadan okur. Bileşen verisi VECTO beyan dosyalarından içe aktarılır (<code>vecto_xml.py</code>, <code>vecto_import.py</code>); sayılar elle yazılmaz.</p></div>
   <div class="cards">
     <div class="card"><h3>9.1 Dizel motor <span class="tag mech">mekanik</span></h3>
       <div class="eq">T_max(ω) = tam yük eğrisi        (sertifika)
@@ -1237,8 +1238,42 @@ artık ≈ 0 (rapor gösterir)</div>
   </div>
 </section>
 
+<section id="test">
+  <div class="shead"><span class="num">10</span><h2>Test ile karşılaştırma: Mersin–Adana yakıt testi</h2><p>Test ekibinin CAN kayıtları (Dewesoft, 1 Hz) modelden aynı hız iziyle geçirilir; litre, l/100 km, evre payları, devir ve vites yan yana konur (<code>testlog.py</code>, arayüzde Doğrulama → Dizel yakıt testi, komut satırında <code>correlate</code>). Hiçbir uydurma çarpanı yoktur: fark görünür, kaynağı adlandırılır.</p></div>
+  <div class="cards">
+    <div class="card"><h3>10.1 Log → görev <span class="tag data">veri</span></h3>
+      <div class="eq">hız izi:   WheelBasedVehicleSpeed · (44,3 km / ∫v dt)   (CAN %1 fazla okur)
+kütle:     tartı (ön + arka aks) → boş kütle yerine
+eğim:      güzergâh dosyasından, kat edilen mesafeye göre (dönüşte ters)
+rüzgâr:    koşu başına, gidişte karşıdan (+), dönüşte arkadan (−)
+klima:     kapalı (test yöntemi: bütün alıcılar kapalı)
+gece:      kısa farlar</div>
+      <p>Rakım OpenStreetMap yol geometrisi + SRTM 30 m, 700 m yumuşatma. VBox GPS yüksekliği gelirse profil onunla değiştirilir.</p>
+      <div class="src">testlog.py read_can_log, grade_along, run_campaign · library/testlog/&lt;kampanya&gt;/meta.yaml</div></div>
+
+    <div class="card"><h3>10.2 Ölçüt ve evreler <span class="tag data">veri</span></h3>
+      <div class="eq">hata = (L_model − L_ölçüm) / L_ölçüm      (CAN ve yakıt cihazı ayrı)
+evreler: rölanti v&lt;0,5 · seyir v&gt;25 m/s, |a|&lt;0,15 · hızlanma a≥0,15 · yavaşlama a≤−0,15
+her evre: litre ölçüm/model, ortalama l/h
+devir:   seyir ortalaması ölçüm/model, RMS
+vites:   aynı anda aynı vites payı</div>
+      <p>Farkın yeri modelin hangi parçasını gösterir: rölanti → rölanti devri ve duruştaki yardımcı yük; seyir → yol yükü (eğim, CdxA, yuvarlanma) ve aktarma kayıpları; hızlanma → vites stratejisi; devir → lastik yarıçapı, aks oranı.</p>
+      <div class="src">testlog.py correlate_diesel</div></div>
+
+    <div class="card"><h3>10.3 Sonuç ve testten gelen düzeltmeler <span class="tag mech">mekanik</span></h3>
+      <div class="eq">9 koşu, 18 t, 100 km/h, 44,3 km, klima kapalı
+yakıt cihazına göre: her koşu −6 … +1 %, toplam −2,8 %
+CAN'a göre:          +0 … +12 %, toplam +7 %  (cihaz CAN'dan %10 yüksek)
+gidiş/dönüş asimetrisi: ölçüm %7, model %8
+seyir devri: model +10…+40 rpm · vites uyumu %80</div>
+      <p class="defs"><b>Düzeltildi:</b> rölanti 600 rpm (sertifika 550) · yardımcı yük duruşta ~0,6 kW · klima kapalı koşulu · r_dyn 0,515 m · rüzgâr koşu başına</p>
+      <p><b>Açık:</b> rüzgâr notasyonu "D&gt;B" teyit edilmeli (koşu başına ±1,5 l/h); referans ölçüm cihaz mı CAN mı; VBox yükseklik ve GPS hız; gece koşularında kalan −4 %.</p>
+      <div class="src">docs/mersin_adana_korelasyon.md · library/testlog/mersin_adana_2026_09</div></div>
+  </div>
+</section>
+
 <section id="sinir">
-  <div class="shead"><span class="num">10</span><h2>Kodda bulunan basitleştirmeler</h2><p>Kodu okurken görülen, sonucu etkileyebilecek noktalar. Bunlar hata olmak zorunda değil; çoğu bilinçli bir sadeleştirme. Ama sonucu yorumlarken bilinmeleri gerekir.</p></div>
+  <div class="shead"><span class="num">11</span><h2>Kodda bulunan basitleştirmeler</h2><p>Kodu okurken görülen, sonucu etkileyebilecek noktalar. Bunlar hata olmak zorunda değil; çoğu bilinçli bir sadeleştirme. Ama sonucu yorumlarken bilinmeleri gerekir.</p></div>
   <div class="limits">
     <div class="lim"><b>SOH koşu boyunca sabit</b><p>Yaşlanma modeli çözücünün içinde çalışmaz; SOH bir girdidir (varsayılan 1,0). Rapordaki ömür projeksiyonu simülasyonun ortalama SOC'si yerine depo SOC'si 0,70 ve dış sıcaklık yerine yıllık 15 °C kullanır.</p><span class="src">simulator.py L137 · report.py L112–120</span></div>
     <div class="lim"><b>Isı pompası COP'u yalnız dış sıcaklığa bağlı</b><p>Kabin sıcaklığı COP'a girmez. Isıtma kapasitesi her sıcaklıkta 30 kW'tır, soğukta düşmez. −12 °C altında ısı pompalı sistem sessizce dirençli ısıtıcı gibi hesaplanır.</p><span class="src">hvac.py L141–152, L289–301</span></div>

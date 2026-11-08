@@ -1193,6 +1193,7 @@ async function pageSim() {
   let occMode = store.get("simOcc", "profile");
   const night = h("input", { type: "checkbox" });
   night.addEventListener("change", () => { if (stage && !S.play) stage.setEnv({ night: night.checked }); });
+  const hvacOff = h("input", { type: "checkbox", checked: store.get("simHvacOff", false) ? true : null });
   const daily = numInput(200, { unit: "km/gün" });
   const cmpSel = select([["", "— yok —"], ...vehicles.map(v => [v.stem, `${v.name} — ${v.variant}`])], "");
 
@@ -1206,6 +1207,7 @@ async function pageSim() {
       tune: Number.isNaN(rollV) || !rollV ? {} : { rolling_c0: rollV },
       repeat: parseNum($("input", repeat).value) || 1, ambient: +amb.value, solar: +sol.value,
       passengers: parseNum($("input", pax).value) || 0, occupancy_mode: occMode, night: night.checked,
+      hvac_off: (store.set("simHvacOff", hvacOff.checked), hvacOff.checked),
       daily_km: parseNum($("input", daily).value) || 200,
       traffic: dutyKind === "route" ? trafficLevel : "yok" };
   };
@@ -1226,6 +1228,7 @@ async function pageSim() {
       h("div", {}, field("Yolcu", pax), h("div", { style: "margin-top:6px" }, seg([["profile", "Yol boyunca değişken"], ["constant", "Sabit"]], occMode, v => (occMode = v)))),
       h("div", {}, field("Lastik yuvarlanma katsayısı", roll), rollHint),
       h("label", { class: "check" }, night, h("span", {}, "Gece (aydınlatma ve farlar açık)")),
+      h("label", { class: "check" }, hvacOff, h("span", {}, "Klima kapalı (yakıt testi koşulu: bütün alıcılar kapalı)")),
       h("details", { class: "simx-more" }, h("summary", {}, "Diğer ayarlar, sıcaklık taraması"),
         h("div", { class: "stack", style: "margin-top:10px" },
           field("Tekrar", repeat, { hint: "Görevi arka arkaya kaç kez koşacağı." }),
@@ -1759,14 +1762,127 @@ async function openSweep(p) {
 function kpi(k, v, u) { return h("div", {}, h("div", { class: "k" }, k), h("div", { class: "v" }, v, u ? h("small", {}, u) : null)); }
 
 /* ================================================================ validation */
-async function pageValidate() {
+async function pageValidate(which) {
   const ov = await overview(true);
   const root = h("div", {});
   root.append(pageHead("Doğrulama", "Modeli gerçek otobüsle karşılaştırın",
-    "Bir sürüşün CAN/telematik kaydını yükleyin. Model aynı hız profilini koşar ve batarya enerjisini ölçülenle karşılaştırır. Fark varsa, hangi bileşene bakmanız gerektiğini söyler."));
+    "Elektrikli araçta CAN/telematik kaydı batarya enerjisiyle, dizel araçta test ekibinin yakıt testi kaydı litre ve l/100 km ile karşılaştırılır. Fark varsa, hangi bileşene bakmanız gerektiğini söyler."));
+  const hasDiesel = ov.vehicles.some(v => v.powertrain === "diesel");
+  let mode = which || store.get("valMode", hasDiesel ? "dizel" : "elektrik");
+  const modeSeg = seg([["dizel", "Dizel yakıt testi (CAN logu)"], ["elektrik", "Elektrikli araç logu (batarya)"]], mode, v => { mode = v; store.set("valMode", v); draw(); });
+  root.append(h("div", { class: "panel", style: "margin-bottom:16px" }, modeSeg));
   const area = h("div", {});
   root.append(area);
   let up = null;
+  const draw = () => { if (mode === "dizel") dieselHome(); else s1(); };
+
+  /* ---------------- diesel: test campaigns and single logs ---------------- */
+  const dieselVehicles = ov.vehicles.filter(v => !v.error && v.powertrain === "diesel");
+  const PH_TR = { idle: "Rölanti", cruise: "Seyir", accel: "Hızlanma", decel: "Yavaşlama", other: "Düşük hız" };
+  async function dieselHome() {
+    const { campaigns } = await api.get("/api/campaigns");
+    const list = h("div", { class: "stack" });
+    if (!campaigns.length) list.append(h("p", { class: "muted" }, "Kütüphanede test kampanyası yok (library/testlog/)."));
+    campaigns.forEach(c => {
+      const btn = h("button", { class: "primary", type: "button" }, "Bütün koşuları karşılaştır");
+      btn.addEventListener("click", () => busy(btn, async () => { const r = await api.post(`/api/campaign/${encodeURIComponent(c.name)}/run`, {}); campaignView(c, r); }));
+      list.append(h("div", { class: "panel" },
+        h("div", { class: "row" }, h("div", {}, h("h3", {}, c.campaign), h("div", { class: "small muted" }, `${c.report || ""} · ${c.dates} · ${c.runs} koşu · araç ${c.vehicle} · test kütlesi ${fmt(c.test_mass_kg, 0)} kg`)), h("span", { class: "spacer" }), btn),
+        c.summary_l100 ? h("div", { class: "small", style: "margin-top:6px" }, "Rapordaki ortalamalar: ",
+          Object.entries(c.summary_l100).map(([k, v]) => `${k}: gösterge ${fmt(v.display, 1)} · Dewesoft ${fmt(v.dewesoft, 1)} · yakıt cihazı ${fmt(v.fuel_device, 1)} l/100 km`).join(" — ")) : null));
+    });
+    area.replaceChildren(h("div", { class: "stack" },
+      h("h2", {}, "Test kampanyaları"),
+      h("p", { class: "small muted", style: "margin:0" }, "Test ekibinin CAN kayıtları ve koşulları (kütle, hava, rüzgâr, klima kapalı) kütüphanede. Her koşu aynı hız iziyle modelden geçer; litre, l/100 km, evre payları, devir ve vites yan yana gelir."),
+      list,
+      h("h2", { style: "margin-top:16px" }, "Tek bir CAN logu yükle"), singleLogForm()));
+  }
+
+  function singleLogForm() {
+    const vSel = select(dieselVehicles.map(v => [v.stem, `${v.name} — ${v.variant}`]), store.get("vehicle", dieselVehicles[0] && dieselVehicles[0].stem));
+    const mass = numInput(18000, { unit: "kg" }); const amb = numInput(25, { unit: "°C" }); const wind = numInput(0, { unit: "m/s" });
+    const dist = numInput("", { unit: "km", placeholder: "logdan" }); const dev = numInput("", { unit: "l", placeholder: "varsa" });
+    const routeSel = select([["", "— düz yol —"], ...ov.routes.map(r => [r, r])], "mersin_adana_otoyol_gidis");
+    const dirSeg = h("div", {}); let dir = "gidis"; dirSeg.append(seg([["gidis", "Gidiş (dosya yönünde)"], ["donus", "Dönüş (ters)"]], dir, v => (dir = v)));
+    const night = h("input", { type: "checkbox" }); const hvacOff = h("input", { type: "checkbox", checked: true });
+    let file = null; const fname = h("span", { class: "small muted" }, "dosya seçilmedi");
+    const runBtn = h("button", { class: "primary", type: "button" }, "Modelle karşılaştır");
+    runBtn.addEventListener("click", () => busy(runBtn, async () => {
+      if (!file) throw new Error("Önce bir CAN log dosyası seçin.");
+      const r = await api.upload("/api/correlate", file, { vehicle: vSel.value, mass_kg: parseNum($("input", mass).value) || "", ambient: parseNum($("input", amb).value) || 20,
+        headwind: parseNum($("input", wind).value) || 0, night: night.checked ? "1" : "", hvac_off: hvacOff.checked ? "1" : "", route: routeSel.value, direction: dir,
+        distance_km: parseNum($("input", dist).value) || "", fuel_device_l: parseNum($("input", dev).value) || "" });
+      singleView(r);
+    }));
+    return h("div", { class: "panel stack" },
+      dropZone({ compact: true, accept: ".xlsx,.csv,.txt", title: "Dewesoft / CAN dışa aktarımı", sub: "Time, WheelBasedVehicleSpeed, EngSpeed, TransCurrentGear, HighResolutionEngFuelRate… (xlsx ya da CSV)",
+        onFile: f => { file = f; fname.textContent = f.name; } }), fname,
+      h("div", { class: "formgrid" }, field("Araç", vSel), field("Test kütlesi", mass), field("Dış sıcaklık", amb),
+        field("Rüzgâr (karşıdan +)", wind, { hint: "Gidiş yönünde karşı rüzgâr pozitif." }), field("Güzergâh (eğim için)", routeSel), h("div", { class: "field" }, h("div", { class: "lab" }, "Yön"), dirSeg),
+        field("Parkur uzunluğu", dist, { hint: "Verilirse CAN hızı bu mesafeye ölçeklenir." }), field("Yakıt cihazı okuması", dev),
+        h("label", { class: "check" }, night, h("span", {}, "Gece")), h("label", { class: "check" }, hvacOff, h("span", {}, "Klima kapalı (test koşulu)"))),
+      h("div", {}, runBtn));
+  }
+
+  const pct = (x, d = 1) => x == null ? "—" : `${x > 0 ? "+" : ""}${fmt(100 * x, d)} %`;
+  function campaignView(c, r) {
+    const rows = r.rows; const s = r.summary;
+    let sel = rows[0] && rows[0].key;
+    const detail = h("div", {});
+    const drawDetail = () => {
+      const row = rows.find(x => x.key === sel); if (!row) return;
+      detail.replaceChildren(runDetail(row, r.overlays[sel], row.notes));
+    };
+    const table = h("table", { class: "data" },
+      h("thead", {}, h("tr", {}, ["Koşu", "Koşul", "CAN l", "Cihaz l", "Model l", "Model vs CAN", "Model vs cihaz", "Seyir l/h ölç/model", "Rölanti l/h", "Devir ölç/model", "Vites uyumu"].map(x => h("th", {}, x)))),
+      h("tbody", {}, rows.map(x => {
+        const tr = h("tr", { class: x.key === sel ? "sel" : "", style: "cursor:pointer", onclick: () => { sel = x.key; $$("tr", table).forEach(e => e.classList.toggle("sel", e.dataset.k === sel)); drawDetail(); }, "data-k": x.key },
+          h("td", {}, h("b", {}, x.key)), h("td", { class: "small" }, `${x.direction} · ${x.night ? "gece" : "gündüz"} · ${fmt(x.ambient_c, 1)} °C · rüzgâr ${fmt(x.wind_mps, 1)} m/s`),
+          h("td", { class: "n" }, fmt(x.fuel_can_l, 3)), h("td", { class: "n" }, x.fuel_device_l ? fmt(x.fuel_device_l, 3) : "—"), h("td", { class: "n" }, fmt(x.fuel_sim_l, 3)),
+          h("td", { class: "n" }, pct(x.err_can)), h("td", { class: "n", style: x.err_device != null && Math.abs(x.err_device) <= 0.05 ? "color:var(--ok);font-weight:600" : "" }, pct(x.err_device)),
+          h("td", { class: "n" }, `${fmt(x.cruise_lph_meas, 1)} / ${fmt(x.cruise_lph_sim, 1)}`), h("td", { class: "n" }, `${fmt(x.idle_lph_meas, 2)} / ${fmt(x.idle_lph_sim, 2)}`),
+          h("td", { class: "n" }, `${fmt(x.rpm_cruise_meas, 0)} / ${fmt(x.rpm_cruise_sim, 0)}`), h("td", { class: "n" }, x.gear_agreement != null ? `%${fmt(100 * x.gear_agreement, 0)}` : "—"));
+        return tr;
+      })));
+    area.replaceChildren(h("div", { class: "stack" },
+      h("div", { class: "row" }, h("button", { type: "button", class: "ghost", onclick: dieselHome }, "← Kampanyalar"), h("h2", { style: "margin:0" }, c.campaign), h("span", { class: "muted small" }, `${r.vehicle} · test kütlesi ${fmt(r.meta.test_mass_kg, 0)} kg · klima ${(r.meta.hvac === "off" || r.meta.hvac === false) ? "kapalı (test koşulu)" : "açık"} · eğim ${r.route_found ? "güzergâhtan" : "YOK (düz)"}`)),
+      h("div", { class: "kpis" },
+        kpi("Ölçülen (CAN)", fmt(s.fuel_can_l, 2), "l"), s.fuel_device_l ? kpi("Ölçülen (yakıt cihazı)", fmt(s.fuel_device_l, 2), "l") : null, kpi("Model", fmt(s.fuel_sim_l, 2), "l"),
+        kpi("Model vs CAN", pct(s.err_can), ""), s.err_device != null ? kpi("Model vs cihaz", pct(s.err_device), "") : null,
+        s.mean_abs_err_device != null ? kpi("Koşu başına ort. mutlak fark", `%${fmt(100 * s.mean_abs_err_device, 1)}`, "cihaza göre") : null,
+        kpi("Vites uyumu", `%${fmt(100 * (s.mean_gear_agreement || 0), 0)}`, "")),
+      notice("", "Nasıl okunmalı", ["Yakıt cihazı (harici debimetre) CAN'dan yaklaşık %10 yüksek okur; iki sütun da verilir, referansın hangisi olacağı test ekibiyle netleşmeli.",
+        "Satıra tıklayınca o koşunun yakıt debisi, devir ve vites izleri ölçümle üst üste gelir.", "Eğim OpenStreetMap + SRTM'den; VBox yükseklik verisi gelince profil değiştirilmeli."]),
+      h("div", { class: "panel scrollx" }, table),
+      detail));
+    drawDetail();
+  }
+
+  function singleView(r) {
+    const m = r.metrics;
+    area.replaceChildren(h("div", { class: "stack" },
+      h("div", { class: "row" }, h("button", { type: "button", class: "ghost", onclick: dieselHome }, "← Geri"), h("h2", { style: "margin:0" }, r.log.name), h("span", { class: "muted small" }, `${fmt(r.log.duration_min, 1)} dk · ${fmt(r.log.distance_km, 2)} km (CAN) · ${Object.keys(r.log.columns).length} sinyal tanındı`)),
+      h("div", { class: "kpis" }, kpi("Ölçülen (CAN)", fmt(m.fuel_meas_l, 3), "l"), m.fuel_meas_device_l ? kpi("Yakıt cihazı", fmt(m.fuel_meas_device_l, 3), "l") : null, kpi("Model", fmt(m.fuel_sim_l, 3), "l"),
+        kpi("Model vs CAN", pct(m.fuel_error), ""), m.fuel_error_device != null ? kpi("Model vs cihaz", pct(m.fuel_error_device), "") : null, kpi("l/100 km", `${fmt(m.l100_meas, 2)} / ${fmt(m.l100_sim, 2)}`, "ölçüm / model")),
+      runDetail({ by_phase: r.by_phase, rpm_cruise_meas: m.rpm_cruise_meas, rpm_cruise_sim: m.rpm_cruise_sim, gear_agreement: m.gear_agreement, idle_lph_meas: m.idle_lph_meas, idle_lph_sim: m.idle_lph_sim }, r.overlay, r.notes.concat(r.log.notes))));
+  }
+
+  function runDetail(row, ov2, notes) {
+    const x = ov2.distance_km;
+    const byPhase = row.by_phase || {};
+    return h("div", { class: "stack" },
+      notes && notes.length ? notice("warn", "Fark nereyi gösteriyor", notes) : null,
+      ov2.meas_fuel_lph ? h("div", { class: "panel" }, lineChart({ x, series: [{ label: "Ölçülen (CAN)", color: css("--s2"), y: ov2.meas_fuel_lph }, { label: "Model", color: css("--s1"), y: ov2.sim_fuel_lph }], xLabel: "mesafe (km)", yLabel: "Yakıt debisi (l/h)", yFmt: v => fmt(v, 1), height: 220 })) : null,
+      ov2.meas_fuel_cum_l ? h("div", { class: "panel" }, lineChart({ x, series: [{ label: "Ölçülen (CAN)", color: css("--s2"), y: ov2.meas_fuel_cum_l }, { label: "Model", color: css("--s1"), y: ov2.sim_fuel_cum_l }], xLabel: "mesafe (km)", yLabel: "Toplam yakıt (l)", yFmt: v => fmt(v, 2), height: 200 })) : null,
+      h("div", { class: "grid-2" },
+        ov2.meas_rpm ? h("div", { class: "panel" }, lineChart({ x, series: [{ label: "Ölçülen", color: css("--s2"), y: ov2.meas_rpm }, { label: "Model", color: css("--s1"), y: ov2.sim_rpm }], xLabel: "mesafe (km)", yLabel: "Motor devri (rpm)", yFmt: v => fmt(v, 0), height: 200 })) : null,
+        ov2.meas_gear ? h("div", { class: "panel" }, lineChart({ x, series: [{ label: "Ölçülen", color: css("--s2"), y: ov2.meas_gear }, { label: "Model", color: css("--s1"), y: ov2.sim_gear }], xLabel: "mesafe (km)", yLabel: "Vites", yFmt: v => fmt(v, 0), height: 200 })) : null),
+      h("div", { class: "panel" }, lineChart({ x, series: [{ label: "Hız", color: css("--s4"), y: ov2.speed_kmh }, { label: "Eğim ×10", color: css("--s5"), y: ov2.grade_pct.map(g => g * 10) }], xLabel: "mesafe (km)", yLabel: "km/h · eğim %×10", yFmt: v => fmt(v, 0), height: 180 })),
+      Object.keys(byPhase).length ? h("div", { class: "panel" }, h("h3", {}, "Evrelere göre yakıt"),
+        h("table", { class: "data", style: "margin-top:8px" }, h("thead", {}, h("tr", {}, ["Evre", "Süre payı", "Ölçülen l", "Model l", "Fark l", "Ölç. l/h", "Model l/h"].map(c => h("th", {}, c)))),
+          h("tbody", {}, Object.entries(byPhase).map(([k, v]) => h("tr", {}, h("td", {}, PH_TR[k] || k), h("td", { class: "n" }, `%${fmt(100 * v.share_time, 0)}`), h("td", { class: "n" }, fmt(v.meas_l, 3)), h("td", { class: "n" }, fmt(v.sim_l, 3)),
+            h("td", { class: "n", style: Math.abs(v.sim_l - v.meas_l) > 0.3 ? "color:var(--err)" : "" }, `${v.sim_l - v.meas_l > 0 ? "+" : ""}${fmt(v.sim_l - v.meas_l, 3)}`), h("td", { class: "n" }, fmt(v.mean_lph_meas, 2)), h("td", { class: "n" }, fmt(v.mean_lph_sim, 2))))))) : null);
+  }
 
   const s1 = () => area.replaceChildren(steps(["Log dosyası", "Sütunlar", "Sonuç"], 0), h("div", { class: "stack" },
     dropZone({ accept: ".csv,.txt,.xlsx,.xlsm,.tsv", title: "Log dosyasını bırakın ya da seçin",
@@ -1842,7 +1958,7 @@ async function pageValidate() {
         h("p", { class: "small muted", style: "margin:8px 0 0" }, "Her evrede aynı ortalama güç farkı: sabit bir yük eksik/fazla (yardımcılar, klima). Fark frenlemede toplanıyorsa: rejenerasyon sınırları. Sürüşte toplanıyorsa: yol direnci ya da motor haritası.")) : null,
       h("div", { class: "row" }, h("button", { type: "button", onclick: s2 }, "← Sütunlara dön"), h("button", { type: "button", class: "ghost", onclick: s1 }, "Yeni log"))));
   };
-  s1();
+  draw();
   return root;
 }
 

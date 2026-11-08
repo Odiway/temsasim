@@ -267,7 +267,7 @@ def test_calculation_map_is_served_offline(client):
     r = client.get("/static/hesap-haritasi.html")
     assert r.status_code == 200
     html = r.get_data(as_text=True)
-    assert "Çözücünün bir zaman adımı" in html
+    assert "Elektrikli çözücünün bir zaman adımı" in html and "Dizel çözücü" in html and "Test ile karşılaştırma" in html
     assert "googleapis" not in html and "http://" not in html.replace("http://www.w3.org", "")
 
 

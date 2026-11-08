@@ -1,0 +1,36 @@
+# Test ekibinin Mersin-Adana otoyolu yakit tuketim testi. Kaynak: TRM-150-006-03,
+# "OA20173 Maraton Karma Yakit Tuketim Testi (Mersin)", AR-GE Test Merkezi, 17-19.09.2026.
+# CAN kayitlari (Dewesoft, 1 Hz) bu klasordeki CSV dosyalarinda; asil xlsx'ler depoya girmez.
+campaign: Mersin–Adana otoyolu karma yakıt tüketim testi
+report: TRM-150-006-03
+dates: 2026-09-17 .. 2026-09-19
+vehicle: maraton_13_dizel
+vehicle_id: OA20173
+route: mersin_adana_otoyol_gidis            # library/route/; dönüş için ters yön
+route_length_km: 44.3                       # sabit parkur, l/100 km bu mesafeyle hesaplanır
+test_mass_kg: 18000                          # ön aks 7000 + arka aks 11000, yüklü
+hvac: "off"                                  # bütün alıcılar ve camlar kapalı, yalnızca kısa farlar
+driving: cruise control 100 km/h (GPS 98), ekonomi modu; 12. vites ~1010 rpm
+wind_convention: headwind_on_gidis           # "D>B" rüzgârı gidişte (doğu→batı) karşıdan esiyor kabul edildi: ölçümle ancak böyle uyuyor; test ekibine teyit ettirilmeli
+stops:
+  - {name: Yenice, idle_min: 5}
+  - {name: Akgedik, idle_min: 5, note: hava ölçümü için ön kapı bir kez açılır}
+  - {name: Öztürkler, idle_min: 7.5, note: "2,5 dk bekleme, kick-down'sız tam gaz 50 km/h, fren; üç kez"}
+measurement:
+  can_fuel: HighResolutionEngFuelRate / EngTripFuel (ECU tahmini)
+  fuel_device: harici yakıt ölçüm cihazı; CAN'dan ortalama %10 yüksek okur
+  speed: WheelBasedVehicleSpeed (VBox GPS'e göre %1-2 fazla okur)
+  gradient: yok (VBox rakım verisi istendi)
+runs:
+  gunduz_gidis_1: {direction: gidis, ambient_c: 33.5, wind_mps: 1.1, wind_dir: D>B, humidity_pct: 43.5, pressure_hpa: 1004.4, fuel_device_l: 10.546, display_l100: 21.6}
+  gunduz_gidis_2: {direction: gidis, ambient_c: 34.1, wind_mps: 2.5, wind_dir: D>B, humidity_pct: 44.1, pressure_hpa: 1004.5, fuel_device_l: 10.501, display_l100: 21.4}
+  gunduz_gidis_3: {direction: gidis, ambient_c: 27.5, wind_mps: 1.1, wind_dir: D>B, humidity_pct: 49.5, pressure_hpa: 1003.6, fuel_device_l: 10.533, display_l100: 21.5}
+  gunduz_donus_1: {direction: donus, ambient_c: 34.4, wind_mps: 1.9, wind_dir: D>B, humidity_pct: 49.7, pressure_hpa: 1003.8, fuel_device_l: 9.773, display_l100: 19.7}
+  gunduz_donus_2: {direction: donus, ambient_c: 34.1, wind_mps: 1.9, wind_dir: D>B, humidity_pct: 31.2, pressure_hpa: 1002.3, fuel_device_l: 9.693, display_l100: 19.5}
+  gunduz_donus_3: {direction: donus, ambient_c: 27.9, wind_mps: 1.6, wind_dir: D>B, humidity_pct: 53.2, pressure_hpa: 1002.8, fuel_device_l: 9.989, display_l100: 20.1}
+  gece_gidis_1: {direction: gidis, night: true, ambient_c: 23.3, wind_mps: 0.7, wind_dir: D>B, humidity_pct: 65.9, pressure_hpa: 1001.1, fuel_device_l: 10.94, display_l100: 22.2}
+  gece_gidis_2: {direction: gidis, night: true, ambient_c: 24.5, wind_mps: 1.1, wind_dir: D>B, humidity_pct: 58.3, pressure_hpa: 1006.0, fuel_device_l: 10.71, display_l100: 22.0}
+  gece_gidis_3: {direction: gidis, night: true, ambient_c: 23.5, wind_mps: 0.9, wind_dir: D>B, humidity_pct: 65.9, pressure_hpa: 1006.4, fuel_device_l: 10.72, display_l100: 22.0}
+summary_l100:                                # rapordaki ortalamalar
+  gunduz: {display: 20.6, dewesoft: 20.7, fuel_device: 22.9}
+  gece: {display: 21.7, dewesoft: 21.8, fuel_device: 24.0}

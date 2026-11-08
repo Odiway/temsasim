@@ -10,7 +10,7 @@ model: MX-11 H5 330
 certification_number: e4*2017/2400*2019/318*E*0865*02
 fuel_type: diesel
 displacement_cm3: 10800.0
-idle_speed_rpm: 550.0
+idle_speed_rpm: 600.0     # sertifika 550; araç ECU'su 600 rpm'de rölantide (Mersin testi CAN logu, Eylül 2026)
 rated_speed_rpm: 1600.0
 rated_power_kw: 330.0
 max_torque_nm: 2358.0
@@ -30,6 +30,7 @@ drag_curve:
   - speed_rpm
   - drag_torque_nm
   x_unit: rpm
+fan_power_w: 200.0       # viskoz/kavramalı fan çoğu zaman devre dışı; KABUL, Mersin testi rölanti yakıtıyla uyumlu
 inertia_kgm2: 4.626
 whtc_urban: 1.0943
 whtc_rural: 1.036

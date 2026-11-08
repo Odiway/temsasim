@@ -43,12 +43,17 @@ class Environment:
     """Reduction for urban canyon shading, tree cover and awnings. Dense city
     centres see far less solar load than an open suburban corridor."""
 
+    hvac_enabled: bool = True
+    """False reproduces a fuel test run with every consumer switched off: the
+    cabin drifts with the ambient and neither heating nor cooling draws power."""
+
     label: str = "nominal"
 
     def describe(self) -> str:
         return (f"{self.label}: {self.ambient_c:+.0f} degC, "
                 f"{self.solar_irradiance_w_per_m2:.0f} W/m2 solar, "
-                f"{'night' if self.night else 'day'}")
+                f"{'night' if self.night else 'day'}"
+                + ("" if self.hvac_enabled else ", HVAC off"))
 
 
 @dataclass
@@ -391,7 +396,7 @@ class Route:
         ``speed_limit_kmh`` and an optional ``stop`` flag column."""
         path = pathlib.Path(path)
         with path.open(newline="") as fh:
-            rows = list(csv.DictReader(fh))
+            rows = list(csv.DictReader(line for line in fh if not line.lstrip().startswith('#')))
         d = np.array([float(r["distance_m"]) for r in rows])
         e = np.array([float(r["elevation_m"]) for r in rows])
         if "speed_limit_kmh" in rows[0]:

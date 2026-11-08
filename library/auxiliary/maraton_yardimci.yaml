@@ -6,15 +6,15 @@ description: 'Birincil araç dosyasındaki teknoloji seçimlerinden: alternatör
   direksiyon Fixed displacement, hava Large Supply 2-stage (mechanically), fan Belt
   driven or driven via transm. - On/off clutch. Güç değerleri VECTO''nun otobüs yardımcı
   tablolarına yakın KABUL değerleri.'
-constant_w: 1000.0
-lighting_w: 400.0
-lighting_night_w: 900.0
-steering_pump_w: 1500.0
+constant_w: 300.0        # ECU'lar, gösterge, telematik; Mersin testi rölanti yakıtı (1,1-1,2 l/h ≈ haritanın sıfır yük değeri) toplam yardımcı yükü ~0,6 kW'a sınırlar
+lighting_w: 100.0        # gündüz farı
+lighting_night_w: 350.0  # kısa farlar + gösterge aydınlatması
+steering_pump_w: 1000.0  # sabit deplasmanlı pompa; duruşta 0,25 katı
 steering_speed_factor: 0.6
 air_compressor_w: 4000.0
-air_compressor_duty_base: 0.08
+air_compressor_duty_base: 0.02   # regülatör kesmede; otoyolda fren yok
 air_per_stop_j: 60000.0
 dcdc_efficiency: 1.0
-validated: false
+validated: false         # rölanti toplamı CAN loguyla uyumlu; kalemler ayrı ayrı ölçülmedi
 notes: 24 V yükleri alternatör verimi 0,70 ile mekanik güce çevrilir (dizel çözücü).
   Ölçümle değiştirin.

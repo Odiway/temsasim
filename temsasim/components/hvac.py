@@ -214,7 +214,8 @@ class HVAC:
              doors_open_fraction: float = 1.0,
              solar_irradiance_w_per_m2: float = 0.0,
              shading_factor: float = 1.0,
-             recirculation: float = 0.0):
+             recirculation: float = 0.0,
+             enabled: bool = True):
         """Advance the cabin one step and report the electrical cost.
 
         ``recirculation`` between 0 and 1 reduces the fresh-air ventilation load
@@ -237,7 +238,9 @@ class HVAC:
         # Feed-forward plus proportional feedback: cancel the known loads and
         # close the remaining error over the control time constant.
         c_cab = self.capacitance_j_per_k(ambient_c)
-        if cabin_c < self.setpoint_heating_c:
+        if not enabled:
+            target = None               # system switched off: the cabin drifts
+        elif cabin_c < self.setpoint_heating_c:
             target = self.setpoint_heating_c
         elif cabin_c > self.setpoint_cooling_c:
             target = self.setpoint_cooling_c

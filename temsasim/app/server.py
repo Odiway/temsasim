@@ -40,6 +40,7 @@ from ..report_diesel import render_diesel_report
 from ..schema import (COMPONENT_KINDS, KIND_LABELS_TR, STRUCTURED, VEHICLE_SLOTS, component_values,
                       raw_description, safe_stem, save_component, save_vehicle, schema)
 from ..simulator import run, simulate
+from ..testlog import correlate_diesel, grade_along, list_campaigns, read_can_log, run_campaign
 from ..traffic import LEVELS as TRAFFIC_LEVELS
 from ..units import RPM, air_density
 from ..validate import validate
@@ -705,7 +706,77 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                         "meas_soc": None if meas_soc is None else np.round(meas_soc[::step], 2).tolist()},
         })
 
+    # ------------------------------------------------------------ diesel fuel tests (test-team CAN logs)
+    @app.get("/api/campaigns")
+    def campaigns():
+        L = lib()
+        return jsonify({"campaigns": list_campaigns(L.root)})
+
+    @app.post("/api/campaign/<name>/run")
+    def campaign_run(name):
+        b = request.get_json(force=True) or {}
+        L = lib()
+        out = run_campaign(L, safe_stem(name), vehicle=b.get("vehicle") or None, runs=b.get("runs") or None)
+        overlays = {cr.key: _overlay(cr.log, cr.correlation) for cr in out["runs"]}
+        return jsonify({"name": out["name"], "meta": out["meta"], "vehicle": out["vehicle"],
+                        "route_found": out["route_found"], "rows": out["rows"], "summary": out["summary"],
+                        "overlays": overlays})
+
+    @app.post("/api/correlate")
+    def correlate_upload():
+        """One CAN log from the browser, replayed with the given test conditions."""
+        f = request.files["file"]
+        log = read_can_log(f.read(), f.filename or "log.xlsx")
+        L = lib()
+        g = request.form.get
+        veh = L.load_vehicle(g("vehicle"))
+        env = Environment(ambient_c=float(g("ambient") or 20), night=g("night") in ("1", "true", "on"),
+                          headwind_mps=float(g("headwind") or 0), hvac_enabled=g("hvac_off") not in ("1", "true", "on"),
+                          label=log.name)
+        grade = None
+        L_km = float(g("distance_km")) if g("distance_km") else None
+        if g("route"):
+            route = Route.from_csv(L.root / "route" / f"{safe_stem(g('route'))}.csv")
+            scale = (L_km / log.distance_km) if (L_km and log.distance_km > 0) else 1.0
+            travelled = np.cumsum(np.r_[0.0, log.speed_mps[:-1] * scale * np.diff(log.time_s)])
+            grade = grade_along(route, travelled, reverse=(g("direction") == "donus"))
+        c = correlate_diesel(veh, log, environment=env, mass_kg=float(g("mass_kg")) if g("mass_kg") else None,
+                             grade_rad=grade, distance_km=L_km,
+                             fuel_device_l=float(g("fuel_device_l")) if g("fuel_device_l") else None)
+        m = dict(c.metrics)
+        return jsonify({"log": {"name": log.name, "columns": log.columns, "duration_min": log.duration_s / 60,
+                                "distance_km": log.distance_km, "notes": log.notes},
+                        "metrics": {k: v for k, v in m.items() if k != "by_phase"}, "by_phase": m["by_phase"],
+                        "notes": [n.tr if hasattr(n, "tr") else str(n) for n in c.notes],
+                        "overlay": _overlay(log, c), "summary": c.summary()})
+
     return app
+
+
+def _overlay(log, c, points: int = 1500) -> dict:
+    """Measured and simulated traces on the simulated time base, downsampled."""
+    s = c.result.series
+    t = s["time_s"]
+    t0 = log.time_s - log.time_s[0]
+    eng = c.result.vehicle.engine
+    idx = np.unique(np.linspace(0, t.size - 1, min(points, t.size)).round().astype(int))
+    sim_rate = (s["fuel_g_per_s"] + s["heater_fuel_g_per_s"]) / eng.fuel_density_kg_per_m3 * 3600
+    out = {"time_s": t[idx].round(1).tolist(), "distance_km": (s["distance_m"][idx] / 1000).round(3).tolist(),
+           "speed_kmh": (s["speed_mps"][idx] * 3.6).round(1).tolist(),
+           "grade_pct": (np.tan(s["grade_rad"][idx]) * 100).round(2).tolist(),
+           "sim_fuel_lph": sim_rate[idx].round(2).tolist(),
+           "sim_rpm": (s["engine_speed_rads"][idx] * 60 / (2 * np.pi)).round(0).tolist(),
+           "sim_gear": s["gear"][idx].round(0).tolist(),
+           "sim_fuel_cum_l": (np.cumsum(sim_rate) / 3600 * c.result.dt_s)[idx].round(3).tolist()}
+    if log.fuel_rate_lps is not None:
+        mr = np.interp(t, t0, np.nan_to_num(log.fuel_rate_lps)) * 3600
+        out["meas_fuel_lph"] = mr[idx].round(2).tolist()
+        out["meas_fuel_cum_l"] = (np.cumsum(mr) / 3600 * c.result.dt_s)[idx].round(3).tolist()
+    if log.engine_rpm is not None:
+        out["meas_rpm"] = np.interp(t, t0, np.nan_to_num(log.engine_rpm))[idx].round(0).tolist()
+    if log.gear is not None:
+        out["meas_gear"] = np.interp(t, t0, np.nan_to_num(log.gear))[idx].round(0).tolist()
+    return out
 
 
 # ---------------------------------------------------------------- helpers
@@ -1014,7 +1085,7 @@ def _cycle_from(L: Library, b: dict, veh):
 def _env_from(b: dict) -> Environment:
     return Environment(ambient_c=float(b.get("ambient", 20)),
                        solar_irradiance_w_per_m2=float(b.get("solar") or 0),
-                       night=bool(b.get("night")),
+                       night=bool(b.get("night")), hvac_enabled=not bool(b.get("hvac_off")),
                        label=b.get("label") or f"{float(b.get('ambient', 20)):+.0f} degC")
 
 

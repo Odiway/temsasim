@@ -206,7 +206,7 @@ def simulate_diesel(
         cabin_c, p_hvac_elec, hv = hvac.step(
             cabin_c, env.ambient_c, dt_s, n_passengers=pax, doors_open=doors,
             solar_irradiance_w_per_m2=env.solar_irradiance_w_per_m2,
-            shading_factor=env.shading_factor)
+            shading_factor=env.shading_factor, enabled=env.hvac_enabled)
         if hv["saturated"]:
             saturated_hvac_samples += 1
         q_hvac = hv["q_hvac_w"]
