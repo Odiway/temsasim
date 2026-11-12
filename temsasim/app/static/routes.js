@@ -108,12 +108,12 @@ export async function pageRoute(U, stem) {
     const overwrite = !asCopy && origStem && body.stem && body.stem === origStem;
     try {
       const r = await api.post("/api/route", { ...body, overwrite });
-      await U.overview(true); store.set("simRoute", r.stem);
-      toast(`Kaydedildi: ${r.csv} ve ${r.yaml}`); location.hash = `#/guzergah/${encodeURIComponent(r.stem)}`;
+      await U.overview(true); store.set("simRoute", r.stem); store.set("dutyKind", "route");
+      toast(`Kaydedildi: ${r.csv} ve ${r.yaml}`); U.rmBack(`#/guzergah/${encodeURIComponent(r.stem)}`);
     } catch (e) {
       if (/zaten var/.test(e.message) && confirm(`${e.message}\n\nÜzerine yazılsın mı?`)) {
         const r = await api.post("/api/route", { ...body, overwrite: true });
-        await U.overview(true); toast(`Üzerine yazıldı: ${r.csv}`); location.hash = `#/guzergah/${encodeURIComponent(r.stem)}`;
+        await U.overview(true); store.set("simRoute", r.stem); store.set("dutyKind", "route"); toast(`Üzerine yazıldı: ${r.csv}`); U.rmBack(`#/guzergah/${encodeURIComponent(r.stem)}`);
       } else throw e;
     }
   };
@@ -186,9 +186,9 @@ export async function pageScenario(U, stem) {
   const LOADS = ov.load_modes || [["profile", "Yol boyunca değişken"], ["constant", "Sabit yolcu"], ["stops", "Duraklardan"], ["mass", "Test kütlesi"]];
   const isNew = !stem || stem === "yeni";
   let sc = { name: "", kind: "serbest", description: "", duty: { route: store.get("newScenarioRoute") || (routes[0] && routes[0].stem) || "", direction: "gidis", laps: 1 },
-    vehicles: vehicles.length ? [vehicles[0].stem] : [], conditions: { ambient_c: 20, solar: 0, night: false, hvac_off: false, headwind_mps: 0, pressure_hpa: 1013.25 },
+    vehicles: vehicles.some(v => v.stem === store.get("newScenarioVehicle")) ? [store.get("newScenarioVehicle")] : vehicles.length ? [vehicles[0].stem] : [], conditions: { ambient_c: 20, solar: 0, night: false, hvac_off: false, headwind_mps: 0, pressure_hpa: 1013.25 },
     load: { mode: "profile", passengers: 40, mass_kg: 18000 }, traffic: "yok", overrides: {}, daily_km: 200, notes: "" };
-  store.set("newScenarioRoute", "");
+  store.set("newScenarioRoute", ""); store.set("newScenarioVehicle", "");
   if (!isNew) { try { sc = (await api.get(`/api/scenario/${encodeURIComponent(stem)}`)).scenario; sc.kind = sc.scenario_kind || sc.kind || "serbest"; } catch (e) { root.append(notice("err", "Senaryo açılamadı", [e.message])); } }
 
   /* ---------------- form ---------------- */
@@ -247,7 +247,9 @@ export async function pageScenario(U, stem) {
   const save = async (overwrite) => {
     const body = collect();
     const r = await api.post("/api/scenario", { ...body, stem: isNew ? "" : stem, overwrite });
-    await U.overview(true); toast(`Kaydedildi: ${r.saved}`); location.hash = `#/senaryo/${encodeURIComponent(r.stem)}`;
+    await U.overview(true); toast(`Kaydedildi: ${r.saved}`);
+    if (store.get("rmReturn")) { store.set("rm.scenario", r.stem); store.set("rm.step", 3); }
+    U.rmBack(`#/senaryo/${encodeURIComponent(r.stem)}`);
   };
   const form = h("div", { class: "stack" },
     h("div", { class: "panel stack" },

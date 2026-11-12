@@ -48,6 +48,8 @@ from ..surfaces import SURFACES
 from ..share import (LABELS_TR as SHARE_LABELS_TR, copy_item, export_library, export_zip, import_zip, inspect_zip,
                      read_raw, write_raw)
 from .. import __version__
+from ..templates import all_templates_zip, build_template, list_templates
+from ..report_compare import render_compare, run_facts
 from ..testlog import correlate_diesel, grade_along, list_campaigns, read_can_log, run_campaign
 from ..traffic import LEVELS as TRAFFIC_LEVELS
 from ..units import RPM, air_density
@@ -657,13 +659,15 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
     @app.get("/report/<rid>/html")
     def download_report(rid):
         rep = reports.get(rid)
-        name = f"rapor_{safe_stem(rep['result'].vehicle.name)}_{rid}.html"
+        name = f"rapor_{safe_stem(rep['result'].vehicle.name) if rep.get('result') is not None else 'karsilastirma'}_{rid}.html"
         return Response(rep["html"], mimetype="text/html", headers={"Content-Disposition": f"attachment; filename={name}"})
 
     @app.get("/report/<rid>/csv")
     def download_series(rid):
         rep = reports.get(rid)
         res = rep["result"]
+        if res is None:
+            raise ValueError("Karşılaştırma raporunun tek bir zaman serisi yok; her koşunun kendi CSV'sini indirin.")
         name = f"zaman_serisi_{safe_stem(res.vehicle.name)}_{rid}.csv"
         return Response(_series_csv(res), mimetype="text/csv", headers={"Content-Disposition": f"attachment; filename={name}"})
 
@@ -978,6 +982,97 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
         data = export_zip(lib_root, [(kind, stem)], with_deps=request.args.get("deps", "1") != "0")
         name = f"{safe_stem(stem)}_{kind}.temsasim.zip"
         return Response(data, mimetype="application/zip", headers={"Content-Disposition": f"attachment; filename={name}"})
+
+    # ------------------------------------------------------------ upload templates ("Veri biçimleri")
+    @app.get("/api/templates")
+    def templates_list():
+        return jsonify(list_templates(lib()))
+
+    @app.get("/api/template/<key>")
+    def template_get(key):
+        data, fname, mime = build_template(key, lib())
+        return Response(data, mimetype=mime, headers={"Content-Disposition": f"attachment; filename={fname}"})
+
+    @app.get("/api/templates.zip")
+    def templates_zip():
+        return Response(all_templates_zip(lib()), mimetype="application/zip",
+                        headers={"Content-Disposition": "attachment; filename=temsasim_sablonlar.zip"})
+
+    # ------------------------------------------------------------ one YAML item (scenario, vehicle, component, route spec, line)
+    @app.post("/api/import/yaml")
+    def import_yaml():
+        """Save one YAML file into the library under its own ``kind``. The
+        file is written only if the matching loader accepts it; otherwise
+        nothing is left behind."""
+        f = request.files["file"]
+        text = f.read().decode("utf-8-sig")
+        overwrite = str(request.form.get("overwrite", "")).lower() in ("1", "true", "on")
+        data = yaml.safe_load(text) or {}
+        if not isinstance(data, dict):
+            raise ValueError("Dosya bir YAML sözlüğü değil (kind: ... ile başlamalı).")
+        kind = str(data.get("kind") or "")
+        L = lib()
+        fname_stem = pathlib.Path(f.filename or "dosya").stem
+        if kind == "scenario":
+            sc = Scenario.from_dict(data, stem=str(data.get("stem") or ""))
+            if not sc.vehicles:
+                raise ValueError("Senaryoda en az bir araç olmalı (vehicles).")
+            for v in sc.vehicles:
+                L.load_vehicle(v)
+            if sc.duty.get("route") and not (L.root / "route" / f"{safe_stem(sc.duty['route'])}.csv").exists():
+                raise FileNotFoundError(f"Güzergâh yok: route/{sc.duty['route']}.csv")
+            path = save_scenario(L.root, sc, overwrite=overwrite)
+            return jsonify({"kind": "scenario", "stem": sc.stem, "saved": f"scenario/{path.name}", "name": sc.name, "label": "Senaryo"})
+        if kind == "route_spec":
+            spec = RouteSpec(**_spec_kwargs({k: v for k, v in data.items() if k != "kind"}))
+            out = save_spec(L.root, spec, overwrite=overwrite)
+            return jsonify({"kind": "route", "stem": out["stem"], "saved": out["csv"], "name": spec.name, "label": "Güzergâh"})
+        folders = {"vehicle": "vehicle", "line": "line", **{k: k for k in COMPONENT_KINDS}}
+        if kind not in folders:
+            raise ValueError(f"Tanınmayan kind: {kind or '(yok)'}. Kabul edilen: scenario, route_spec, vehicle, line, "
+                             + ", ".join(COMPONENT_KINDS))
+        stem = safe_stem(str(data.get("stem") or data.get("name") or fname_stem))
+        folder = L.root / folders[kind]
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{stem}.yaml"
+        if path.exists() and not overwrite:
+            raise FileExistsError(f"{kind}/{stem}.yaml zaten var")
+        backup = path.read_text(encoding="utf-8") if path.exists() else None
+        path.write_text(text, encoding="utf-8")
+        try:
+            if kind == "vehicle":
+                obj = L.load_vehicle(stem)
+            elif kind == "line":
+                obj = Line.from_yaml(path, L.root)
+            else:
+                obj = L.load_component(f"{kind}/{stem}.yaml", kind)
+        except Exception:
+            if backup is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_text(backup, encoding="utf-8")
+            raise
+        return jsonify({"kind": kind, "stem": stem, "saved": f"{folders[kind]}/{path.name}",
+                        "name": getattr(obj, "name", stem), "label": KIND_LABELS_TR.get(kind, "Hat" if kind == "line" else kind)})
+
+    # ------------------------------------------------------------ comparison of finished runs
+    @app.post("/api/compare/report")
+    def compare_report():
+        """Body: {title, runs: [{report_id, label}]}. Renders the runs already
+        in the report cache side by side and keeps the page as a report."""
+        b = request.get_json(force=True)
+        runs = []
+        for r in b.get("runs") or []:
+            rep = reports.get(r["report_id"])
+            if rep.get("result") is None:
+                raise ValueError("Bir karşılaştırma raporu başka bir karşılaştırmaya giremez.")
+            runs.append((str(r.get("label") or ""), rep["result"]))
+        if len(runs) < 2:
+            raise ValueError("Karşılaştırma için en az iki koşu gerekir.")
+        title = str(b.get("title") or "Karşılaştırma")
+        html = render_compare(runs, title=title)
+        rid = reports.put({"html": html, "result": None})
+        return jsonify({"report_id": rid, "facts": [run_facts(res, lab) for lab, res in runs]})
 
     @app.post("/api/import/package")
     def import_package():

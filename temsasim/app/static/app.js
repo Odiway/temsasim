@@ -596,12 +596,12 @@ async function openFileDialog(kind, stem, name) {
 const PAGES = {
   baslangic: pageHome, kutuphane: pageLibrary, yukle: pageUpload, bilesen: pageComponent,
   arac: pageVehicle, simulasyon: pageSim, surus: pageDrive, hat: pageNetwork, dogrulama: pageValidate,
-  guzergah: pageRouteBuilder, senaryo: pageScenarios,
+  guzergah: pageRouteBuilder, senaryo: pageScenarios, bicimler: pageFormats, karsilastir: pageCompare,
 };
-const PAGE_GRP = { baslangic: "home", kutuphane: "veri", yukle: "veri", bilesen: "veri", arac: "veri", guzergah: "veri", senaryo: "veri",
-  simulasyon: "kos", surus: "kos", hat: "kos", dogrulama: "dogrula" };
+const PAGE_GRP = { baslangic: "home", kutuphane: "veri", yukle: "veri", bilesen: "veri", arac: "veri", guzergah: "veri", senaryo: "veri", bicimler: "veri",
+  simulasyon: "kos", surus: "kos", hat: "kos", karsilastir: "kos", dogrulama: "dogrula" };
 const PAGE_SIGN = { baslangic: "Başlangıç", kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bileşen", arac: "Araç kur", simulasyon: "Simülasyon", surus: "Serbest sürüş", hat: "Hat ve sefer", dogrulama: "Doğrulama",
-  guzergah: "Güzergâh", senaryo: "Senaryo" };
+  guzergah: "Güzergâh", senaryo: "Senaryo", bicimler: "Veri biçimleri", karsilastir: "Çoklu koşu" };
 /* The shared toolkit the page modules (network.js, drive.js, routes.js) receive. */
 /* A data table: columns [{label, n (numeric), acts}] and an empty body to fill. */
 function dataTable(cols) {
@@ -611,8 +611,17 @@ function dataTable(cols) {
 }
 function pageKit() {
   return { h, api, store, fmt, parseNum, seg, select, field, numInput, toast, busy, notice, ov: OV, pageHead, lineChart, css, overview, route, kpi,
-    menu, itemMenu, copyItem, exportUrl, openFileDialog, valBadge, whenEl, downloadTable, dataTable,
+    menu, itemMenu, copyItem, exportUrl, openFileDialog, valBadge, whenEl, downloadTable, dataTable, dropZone, steps, distinctLabels, rmBack,
     setCleanup: fn => (pageCleanup = fn), raster: Sign.raster };
+}
+async function pageFormats(group) { const mod = await import("/static/formats.js"); return mod.pageFormats(pageKit(), group); }
+async function pageCompare() { const mod = await import("/static/compare.js"); return mod.pageCompare(pageKit()); }
+/* The home roadmap sends people to a builder or an upload page; when that page
+   saves, it comes back here instead of its usual next page. */
+function rmGo(hash) { store.set("rmReturn", true); location.hash = hash; }
+function rmBack(defaultHash) {
+  if (store.get("rmReturn")) { store.set("rmReturn", false); location.hash = "#/baslangic"; }
+  else location.hash = defaultHash;
 }
 async function pageRouteBuilder(stem) { const mod = await import("/static/routes.js"); return mod.pageRoute(pageKit(), stem); }
 async function pageScenarios(stem) { const mod = await import("/static/routes.js"); return mod.pageScenario(pageKit(), stem); }
@@ -657,14 +666,8 @@ async function pageHome() {
   try { camps = (await api.get("/api/campaigns")).campaigns || []; } catch { /* no test logs */ }
   const root = h("div", {});
   root.append(pageHead("Başlangıç", "Otobüs enerji simülatörü",
-    "Kütüphanedeki araç dosyalarından, bir güzergâh ya da senaryo üzerinde enerji ve yakıt tüketimini hesaplar; sonucu test ekibinin ölçümleriyle karşılaştırır. Her şey bu bilgisayardaki düz dosyalardır."));
-  const step = (n, title, text, links) => h("div", { class: "step" }, h("div", { class: "n" }, n), h("h3", {}, title), h("p", {}, text),
-    h("div", { class: "links" }, links.map(([l, href]) => h("a", { href }, l))));
-  root.append(h("div", { class: "flow" },
-    step("01 · Veri", "Araç ve bileşenler", "VECTO dosyası, tedarikçi haritası ya da elle girilen değer.", [["Kütüphane", "#/kutuphane"], ["Veri yükle", "#/yukle"], ["Araç kur", "#/arac/yeni"]]),
-    step("02 · Görev", "Güzergâh ve senaryo", "Yol bölüm bölüm; senaryo = yol + araç + koşul + yük.", [["Güzergâh", "#/guzergah/yeni"], ["Senaryolar", "#/senaryo"]]),
-    step("03 · Koş", "Simülasyon", "Görevi koş, 3B izle, raporu al.", [["Simülasyon", "#/simulasyon"], ["Serbest sürüş", "#/surus"], ["Hat ve sefer", "#/hat"]]),
-    step("04 · Doğrula", "Ölçümle karşılaştır", "Test kaydı modelden geçer; fark hangi bileşende, görünür.", [["Doğrulama", "#/dogrulama"], ["Hesap haritası", "/static/hesap-haritasi.html"]])));
+    "Kütüphanedeki araç dosyalarından, bir güzergâh ya da senaryo üzerinde enerji ve yakıt tüketimini hesaplar; sonucu test ekibinin ölçümleriyle karşılaştırır. Aşağıdaki yol haritası sıfırdan simülasyona götürür: her adımda ya kütüphaneden seçersiniz, ya dosya yüklersiniz, ya da yenisini kurarsınız."));
+  root.append(roadmap(ov));
   const unval = ov.components.reduce((n, g) => n + g.items.filter(i => !i.validated && !i.error).length, 0);
   const nComp = ov.components.reduce((n, g) => n + g.items.length, 0);
   const scen = ov.scenarios || [], rts = ov.route_items || [];
@@ -673,7 +676,14 @@ async function pageHome() {
       kpi("Araç", ov.vehicles.length), kpi("Bileşen", nComp), kpi("Ölçülmemiş bileşen", unval), kpi("Güzergâh", rts.length), kpi("Senaryo", scen.length)),
     unval ? h("p", { class: "small muted", style: "margin:10px 0 0" }, "Ölçülmemiş bileşen kabul değeriyle çalışır; sonucu yol gösterici sayın.") : null,
     camps.length ? h("div", { style: "margin-top:14px" }, h("div", { class: "section-title" }, "Test kampanyaları"),
-      h("ul", { class: "home-list" }, camps.map(c => h("li", {}, h("span", { class: "name", title: c.report || "" }, c.campaign || c.name), h("span", { class: "muted small num" }, `${c.runs || 0} koşu · ${c.dates || ""}`), h("a", { class: "btn", href: "#/dogrulama" }, "Karşılaştır"))))) : null);
+      h("ul", { class: "home-list" }, camps.map(c => h("li", {}, h("span", { class: "name", title: c.report || "" }, c.campaign || c.name), h("span", { class: "muted small num" }, `${c.runs || 0} koşu · ${c.dates || ""}`), h("a", { class: "btn", href: "#/dogrulama" }, "Karşılaştır"))))) : null,
+    h("div", { class: "section-title", style: "margin-top:14px" }, "Diğer yollar"),
+    h("ul", { class: "home-list" },
+      h("li", {}, h("span", { class: "name" }, "Çoklu koşu"), h("span", { class: "muted small" }, "2–4 simülasyon yan yana, karşılaştırma raporu"), h("a", { class: "btn", href: "#/karsilastir" }, "Aç")),
+      h("li", {}, h("span", { class: "name" }, "Serbest sürüş"), h("span", { class: "muted small" }, "aracı kendiniz sürün"), h("a", { class: "btn", href: "#/surus" }, "Aç")),
+      h("li", {}, h("span", { class: "name" }, "Hat ve sefer"), h("span", { class: "muted small" }, "tarife, filo, günlük enerji"), h("a", { class: "btn", href: "#/hat" }, "Aç")),
+      h("li", {}, h("span", { class: "name" }, "Veri biçimleri"), h("span", { class: "muted small" }, "her dosya için şablon ve açıklama"), h("a", { class: "btn", href: "#/bicimler" }, "Aç")),
+      h("li", {}, h("span", { class: "name" }, "Hesap haritası"), h("span", { class: "muted small" }, "bütün denklemler, blok diyagramlar"), h("a", { class: "btn", href: "/static/hesap-haritasi.html", target: "_blank", rel: "noopener" }, "Aç"))));
   const quick = h("div", { class: "panel" }, h("div", { class: "row" }, h("div", { class: "section-title", style: "flex:1;margin:0" }, "Senaryolar"), h("a", { class: "btn sm", href: "#/senaryo/yeni" }, "Yeni senaryo")),
     scen.length ? h("ul", { class: "home-list", style: "margin-top:8px" }, scen.slice(0, 6).map(s => h("li", {}, h("span", { class: "name", title: s.summary }, s.name), h("span", { class: "muted small" }, s.kind_tr || ""),
       h("button", { type: "button", class: "btn", onclick: () => { store.set("autoRunScenario", s.stem); location.hash = `#/senaryo/${encodeURIComponent(s.stem)}`; } }, "Çalıştır")))) : h("p", { class: "muted small" }, "Henüz senaryo yok."),
@@ -681,6 +691,139 @@ async function pageHome() {
     ov.vehicles.length ? h("ul", { class: "home-list" }, ov.vehicles.slice(0, 6).map(v => h("li", {}, h("span", { class: "name" }, v.name), h("span", { class: "muted small" }, v.powertrain_tr || ""),
       h("button", { type: "button", class: "btn", onclick: () => { store.set("vehicle", v.stem); location.hash = "#/simulasyon"; } }, "Simüle et")))) : h("p", { class: "muted small" }, "Henüz araç yok."));
   root.append(h("div", { class: "home-grid" }, status, quick));
+  return root;
+}
+
+/* ---- the roadmap -----------------------------------------------------------
+   Four numbered steps across the top; the open step shows its three ways of
+   being completed (pick from the library / upload a file / build it here).
+   Choices persist in localStorage, so a trip to a builder page and back keeps
+   the rest. Step 4 hands the choices to the simulation, scenario or compare page. */
+function roadmap(ov) {
+  const vehicles = ov.vehicles.filter(v => !v.error);
+  const routes = ov.route_items || [];
+  const scenarios = (ov.scenarios || []).filter(x => !x.error);
+  const S = {
+    vehicle: vehicles.some(v => v.stem === store.get("vehicle")) ? store.get("vehicle") : "",
+    duty: store.get("rm.duty", null),                      // {kind: "route"|"cycle", name}
+    scenario: store.get("rm.scenario", ""),                // stem, or "-" for "no scenario"
+  };
+  if (S.duty && !((S.duty.kind === "route" ? ov.routes : ov.cycles).includes(S.duty.name))) S.duty = null;
+  if (!S.duty && ov.routes.includes(store.get("simRoute"))) S.duty = { kind: "route", name: store.get("simRoute") };
+  if (S.scenario && S.scenario !== "-" && !scenarios.some(x => x.stem === S.scenario)) S.scenario = "";
+  const doneV = () => !!S.vehicle, doneD = () => !!S.duty, doneS = () => !!S.scenario;
+  const firstOpen = () => (!doneV() ? 0 : !doneD() ? 1 : !doneS() ? 2 : 3);
+  let cur = store.get("rm.step", null);
+  if (cur == null || cur > firstOpen()) cur = firstOpen();
+  const vName = () => (vehicles.find(v => v.stem === S.vehicle) || {}).name || S.vehicle;
+  const dName = () => { if (!S.duty) return ""; if (S.duty.kind === "cycle") return `çevrim ${S.duty.name}`; const r = routes.find(x => x.stem === S.duty.name); return r ? `${r.name} · ${fmt(r.length_km, 1)} km` : S.duty.name; };
+  const sName = () => S.scenario === "-" ? "senaryosuz: koşullar simülasyonda" : (scenarios.find(x => x.stem === S.scenario) || {}).name || "";
+  const save = () => { store.set("rm.duty", S.duty); store.set("rm.scenario", S.scenario); store.set("rm.step", cur); if (S.vehicle) store.set("vehicle", S.vehicle); if (S.duty) { store.set("dutyKind", S.duty.kind); store.set(S.duty.kind === "route" ? "simRoute" : "simCycle", S.duty.name); } };
+
+  const root = h("div", { class: "rmap panel" });
+  const head = h("div", { class: "rmap-steps" });
+  const body = h("div", { class: "rmap-body" });
+  root.append(head, body);
+  const STEPS = [
+    ["Araç", () => doneV() ? vName() : "seçilmedi", doneV],
+    ["Güzergâh", () => doneD() ? dName() : "seçilmedi", doneD],
+    ["Senaryo", () => doneS() ? sName() : "seçilmedi", doneS],
+    ["Simülasyon", () => (doneV() && doneD() && doneS()) ? "hazır" : "önce 1–3", () => false],
+  ];
+  const drawHead = () => head.replaceChildren(...STEPS.map(([title, status, done], i) =>
+    h("button", { type: "button", class: "rmap-step", "data-state": i === cur ? "now" : done() ? "done" : "todo", "aria-current": i === cur ? "step" : null,
+      onclick: () => { cur = i; store.set("rm.step", cur); draw(); } },
+      h("span", { class: "n" }, `0${i + 1}`), h("span", { class: "t" }, title), h("span", { class: "s" }, done() ? "✓ " : "", status()))));
+
+  const opt = (title, desc, ...kids) => h("div", { class: "rmap-opt" }, h("div", { class: "t" }, title), h("div", { class: "d" }, desc), h("div", { class: "c" }, kids));
+  const go = (i) => { cur = i; save(); draw(); };
+  const pick = (sel, onPick, label = "Seç") => h("div", { class: "row", style: "gap:8px" }, sel, h("button", { type: "button", class: "primary sm", onclick: () => onPick(sel.value) }, label));
+
+  const stepVehicle = () => {
+    const sel = select(vehicles.map(v => [v.stem, `${v.name}${v.variant ? " — " + v.variant : ""}`]), S.vehicle || (vehicles[0] && vehicles[0].stem));
+    return h("div", { class: "rmap-opts" },
+      opt("Kütüphaneden seç", vehicles.length ? `${vehicles.length} araç kayıtlı.` : "Kütüphanede araç yok.",
+        vehicles.length ? pick(sel, v => { S.vehicle = v; go(1); }) : null),
+      opt("Veri yükle", "Homologasyon dosyalarından dijital ikiz, başka kütüphaneden paket ya da hazır araç dosyası.",
+        h("div", { class: "rmap-links" },
+          h("button", { type: "button", onclick: () => rmGo("#/yukle/vecto") }, "VECTO dosyaları"),
+          h("button", { type: "button", onclick: () => rmGo("#/yukle/paket") }, "Paket (zip)"),
+          h("button", { type: "button", onclick: () => rmGo("#/yukle/dosya") }, "Araç YAML"))),
+      opt("Veri oluştur", "Bileşenleri seçerek araç kurun; eksik bileşeni formdan ya da harita yükleyerek ekleyin.",
+        h("div", { class: "rmap-links" },
+          h("button", { type: "button", onclick: () => rmGo("#/arac/yeni") }, "Araç kur"),
+          h("button", { type: "button", onclick: () => rmGo("#/yukle/harita") }, "Motor haritası yükle"),
+          h("a", { class: "btn", href: "#/kutuphane" }, "Bileşenler"))));
+  };
+  const stepDuty = () => {
+    const sel = h("select", {});
+    if (routes.length) sel.append(h("optgroup", { label: "Güzergâhlar" }, routes.map(r => h("option", { value: "route:" + r.stem, selected: S.duty && S.duty.kind === "route" && S.duty.name === r.stem ? true : null }, `${r.name} (${fmt(r.length_km, 1)} km, ${r.stops} durak)`))));
+    sel.append(h("optgroup", { label: "Standart çevrimler" }, ov.cycles.map(c => h("option", { value: "cycle:" + c, selected: S.duty && S.duty.kind === "cycle" && S.duty.name === c ? true : null }, c))));
+    return h("div", { class: "rmap-opts" },
+      opt("Kütüphaneden seç", `${routes.length} güzergâh, ${ov.cycles.length} standart çevrim.`,
+        pick(sel, v => { const [kind, name] = v.split(/:(.*)/); S.duty = { kind, name }; go(2); })),
+      opt("Güzergâh oluştur", "Bölüm bölüm: uzunluk, eğim, hız sınırı, yüzey, durak, ışık. Şablonla başlar.",
+        h("div", { class: "rmap-links" }, h("button", { type: "button", onclick: () => rmGo("#/guzergah/yeni") }, "Güzergâh oluştur"))),
+      opt("Dosya yükle", "GPX, KML/KMZ izi ya da mesafe–rakım tablosu (Excel, CSV).",
+        h("div", { class: "rmap-links" }, h("button", { type: "button", onclick: () => rmGo("#/yukle/guzergah") }, "GPX / KML / tablo yükle"), h("a", { class: "btn ghost", href: "#/bicimler/guzergah" }, "Şablonlar"))));
+  };
+  const stepScenario = () => {
+    const sel = select(scenarios.map(x => [x.stem, x.name]), S.scenario && S.scenario !== "-" ? S.scenario : (scenarios[0] && scenarios[0].stem));
+    const yamlBox = h("div", { class: "rmap-yaml", hidden: true });
+    const showYaml = async () => {
+      yamlBox.hidden = false;
+      const m = await import("/static/formats.js");
+      yamlBox.replaceChildren(m.yamlWizard(pageKit(), { title: "Senaryo YAML dosyasını bırakın", onSaved: async r => {
+        if (r.kind !== "scenario") { toast(`${r.label} kaydedildi; senaryo değil.`); return; }
+        await overview(true); S.scenario = r.stem; await applyScenario(r.stem); go(3);
+      } }));
+    };
+    return h("div", { class: "rmap-opts" },
+      opt("Hazır senaryo seç", scenarios.length ? `${scenarios.length} senaryo kayıtlı. Senaryo koşulları ve güzergâhı getirir; araç 1. adımdan.` : "Kayıtlı senaryo yok.",
+        scenarios.length ? pick(sel, async v => { S.scenario = v; await applyScenario(v); go(3); }) : null,
+        h("div", { style: "margin-top:8px" }, h("button", { type: "button", class: "ghost sm", onclick: () => { S.scenario = "-"; go(3); } }, "Senaryosuz devam: koşulları simülasyonda seçerim"))),
+      opt("Senaryo yükle", "Senaryo YAML dosyası (şablonu Veri biçimleri sayfasında).",
+        h("div", { class: "rmap-links" }, h("button", { type: "button", onclick: showYaml }, "Dosya seç"), h("a", { class: "btn ghost", href: "/api/template/scenario", download: "" }, "Şablon")), yamlBox),
+      opt("Senaryo hazırla", "Seçili araç ve güzergâhla başlar: koşullar, yük, trafik; kaydedilir ve yeniden koşar.",
+        h("div", { class: "rmap-links" }, h("button", { type: "button", onclick: () => { if (S.duty && S.duty.kind === "route") store.set("newScenarioRoute", S.duty.name); if (S.vehicle) store.set("newScenarioVehicle", S.vehicle); store.set("rm.scenarioFromNew", true); rmGo("#/senaryo/yeni"); } }, "Senaryo hazırla"))));
+  };
+  async function applyScenario(stem) {
+    try {
+      const sc = (await api.get(`/api/scenario/${encodeURIComponent(stem)}`)).scenario;
+      S.duty = sc.duty.route ? { kind: "route", name: sc.duty.route } : { kind: "cycle", name: sc.duty.cycle || "cbdbus" };
+      store.set("simAmb", sc.conditions.ambient_c); store.set("simSol", sc.conditions.solar || 0); store.set("simNight", !!sc.conditions.night);
+      store.set("simHvacOff", !!sc.conditions.hvac_off); store.set("simPax", sc.load.passengers || 0); store.set("simTraffic", sc.traffic || "yok");
+      store.set("simOcc", sc.load.mode === "constant" ? "constant" : "profile");
+    } catch (e) { toast(e.message, "err"); }
+  }
+  const stepRun = () => {
+    const ready = doneV() && doneD() && doneS();
+    const sc = S.scenario && S.scenario !== "-" ? scenarios.find(x => x.stem === S.scenario) : null;
+    const sum = h("div", { class: "rmap-sum" },
+      h("div", {}, h("span", { class: "k" }, "Araç"), h("b", {}, vName() || "—")),
+      h("div", {}, h("span", { class: "k" }, "Güzergâh"), h("b", {}, dName() || "—")),
+      h("div", {}, h("span", { class: "k" }, "Senaryo"), h("b", {}, sName() || "—")));
+    const startSim = () => { save(); if (sc) store.set("simScenario", sc.stem); store.set("autoRunSim", true); location.hash = "#/simulasyon"; };
+    const startCompare = () => {
+      save();
+      const p = { vehicle: S.vehicle, [S.duty.kind === "route" ? "route" : "cycle"]: S.duty.name, traffic: S.duty.kind === "route" ? store.get("simTraffic", "yok") : "yok",
+        ambient: store.get("simAmb", 20), solar: store.get("simSol", 0), passengers: store.get("simPax", 40), occupancy_mode: store.get("simOcc", "profile"),
+        night: store.get("simNight", false), hvac_off: store.get("simHvacOff", false) };
+      store.set("cmp.slots", [{ ...p, dutyKind: S.duty.kind, duty: S.duty.name, label: "" }, { ...p, dutyKind: S.duty.kind, duty: S.duty.name, ambient: (p.ambient || 20) + 15, label: "" }]);
+      store.set("cmp.n", 2);
+      location.hash = "#/karsilastir";
+    };
+    return h("div", { class: "rmap-opts" },
+      opt("Seçimler", "", sum, h("div", { style: "margin-top:8px" }, h("button", { type: "button", class: "ghost sm", onclick: () => { S.vehicle = ""; S.duty = null; S.scenario = ""; store.set("rm.scenario", ""); store.set("rm.duty", null); cur = 0; store.set("rm.step", 0); draw(); } }, "Baştan başla"))),
+      opt("Tek koşu, 3B", "Seçili araç ve güzergâh; senaryo varsa koşulları ondan. Otobüs yolda izlenir, rapor alınır.",
+        h("div", { class: "rmap-links" }, h("button", { type: "button", class: "primary", disabled: ready ? null : true, onclick: startSim }, "Simülasyonu başlat"))),
+      opt(sc ? "Senaryoyu çalıştır" : "Karşılaştırma", sc ? `“${sc.name}” senaryosundaki bütün araçlar aynı görevde; sonuç tablosu ve her araç için rapor.` : "Aynı görevde 2–4 koşu yan yana: başka araç, başka sıcaklık, başka trafik.",
+        h("div", { class: "rmap-links" },
+          sc ? h("button", { type: "button", onclick: () => { save(); store.set("autoRunScenario", sc.stem); location.hash = `#/senaryo/${encodeURIComponent(sc.stem)}`; } }, "Senaryoyu çalıştır") : null,
+          h("button", { type: "button", class: sc ? "" : "primary", disabled: doneV() && doneD() ? null : true, onclick: startCompare }, "Çoklu koşu"))));
+  };
+  const draw = () => { save(); drawHead(); body.replaceChildren([stepVehicle, stepDuty, stepScenario, stepRun][cur]()); };
+  draw();
   return root;
 }
 
@@ -824,7 +967,8 @@ function trashPanel() {
 async function pageUpload(which) {
   const root = h("div", {});
   root.append(pageHead("Veri yükle", "Veri yükle",
-    "Biçim dönüştürmenize gerek yok. Excel ya da CSV, noktalı virgül ya da virgül, ondalık virgül, ızgara ya da uzun liste, rpm ya da rad/s: araç ne olduğunu algılar, önizlemeyi gösterir, siz onaylayınca kaydeder."));
+    "Biçim dönüştürmenize gerek yok. Excel ya da CSV, noktalı virgül ya da virgül, ondalık virgül, ızgara ya da uzun liste, rpm ya da rad/s: araç ne olduğunu algılar, önizlemeyi gösterir, siz onaylayınca kaydeder.",
+    [h("a", { class: "btn", href: "#/bicimler" }, "Veri biçimleri ve şablonlar")]));
   const TILES = [
     ["vecto", "VECTO dosyaları", "Dizel aracın homologasyon XML klasörü; dijital ikiz kurulur."],
     ["harita", "Motor verim haritası", "Tedarikçi ya da dinamometre verisi: verim ya da kayıp."],
@@ -832,6 +976,7 @@ async function pageUpload(which) {
     ["egri", "Batarya ya da klima eğrisi", "OCV–SOC, COP–sıcaklık gibi iki sütunlu eğriler."],
     ["log", "Araç logu", "CAN / telematik kaydı; modeli ölçümle karşılaştırır."],
     ["paket", "Paket (zip)", "Başka bir kütüphaneden 'İndir' ile alınmış zip."],
+    ["dosya", "YAML dosyası", "Senaryo, araç, bileşen, güzergâh tanımı ya da hat dosyası."],
   ];
   const cur = which || store.get("uploadTile", "vecto");
   const body = h("div", {});
@@ -849,6 +994,11 @@ async function pageUpload(which) {
   });
   root.append(tiles, body);
   const show = k => {
+    if (k === "dosya") {
+      body.replaceChildren(h("div", { class: "muted" }, "Yükleniyor…"));
+      import("/static/formats.js").then(m => body.replaceChildren(m.yamlWizard(pageKit(), { onSaved: r => { if (store.get("rmReturn")) rmBack(""); else { body.replaceChildren(); show("dosya"); } } })));
+      return;
+    }
     body.replaceChildren(k === "guzergah" ? routeWizard() : k === "egri" ? curveTarget() : k === "vecto" ? vectoWizard() : k === "paket" ? packageWizard() : mapWizard({ mode: "hub" }));
   };
   show(cur === "log" ? "harita" : cur);
@@ -999,7 +1149,7 @@ function vectoWizard() {
           await overview(true); store.set("vehicle", r.stem);
           toast(`Kaydedildi: ${Object.values(r.written).length} dosya`);
           if (r.warnings && r.warnings.length) alert("Dikkat:\n\n" + r.warnings.join("\n"));
-          location.hash = `#/arac/${encodeURIComponent(r.stem)}`;
+          rmBack(`#/arac/${encodeURIComponent(r.stem)}`);
         }) }, "Dijital ikizi kaydet"),
         h("button", { type: "button", class: "ghost", onclick: stepCheck }, "← Geri"))));
   };
@@ -1130,10 +1280,10 @@ function routeWizard() {
           h("button", { class: "primary", type: "button", onclick: e => busy(e.currentTarget, async () => {
             const r = await api.post(`/api/import/route/${st.upload_id}/save`, { name: nameIn.value });
             await overview(true);
-            store.set("simRoute", r.stem);
+            store.set("simRoute", r.stem); store.set("dutyKind", "route");
             toast(`Kaydedildi: ${r.saved}`);
-            location.hash = "#/simulasyon";
-          }) }, "Kaydet ve simülasyona geç"),
+            rmBack("#/simulasyon");
+          }) }, store.get("rmReturn") ? "Kaydet ve devam et" : "Kaydet ve simülasyona geç"),
           h("button", { type: "button", class: "ghost", onclick: first }, "Başka dosya seç")))));
   };
   first();
@@ -1435,7 +1585,7 @@ async function pageVehicle(stem) {
     const r = await api.post("/api/vehicle", { ...collect(), stem: stemOut, overwrite });
     await overview(true); store.set("vehicle", r.stem);
     toast(`Kaydedildi: ${r.saved}`);
-    location.hash = `#/arac/${encodeURIComponent(r.stem)}`;
+    rmBack(`#/arac/${encodeURIComponent(r.stem)}`);
   };
   const bar = h("div", { class: "savebar" });
   if (isNew) bar.append(h("button", { class: "primary", type: "button", onclick: e => busy(e.currentTarget, () => save(`${nameIn.value} ${varIn.value}`, false)) }, "Aracı kaydet"));
@@ -1530,8 +1680,8 @@ async function pageSim() {
   };
   vSel.addEventListener("change", rollInfo); rollInfo();
   let occMode = store.get("simOcc", "profile");
-  const night = h("input", { type: "checkbox" });
-  night.addEventListener("change", () => { if (stage && !S.play) stage.setEnv({ night: night.checked }); });
+  const night = h("input", { type: "checkbox", checked: store.get("simNight", false) ? true : null });
+  night.addEventListener("change", () => { store.set("simNight", night.checked); if (stage && !S.play) stage.setEnv({ night: night.checked }); });
   const hvacOff = h("input", { type: "checkbox", checked: store.get("simHvacOff", false) ? true : null });
   const daily = numInput(200, { unit: "km/gün" });
   const cmpSel = select([["", "— yok —"], ...vehicles.map(v => [v.stem, `${v.name} — ${v.variant}`])], "");
@@ -1551,19 +1701,26 @@ async function pageSim() {
       traffic: dutyKind === "route" ? trafficLevel : "yok" };
   };
 
+  let keepVehicle = false;                 // the home roadmap: scenario conditions, but the vehicle chosen in step 1
   const scSel = select([["", "— senaryo seç —"], ...(ov.scenarios || []).filter(s => !s.error).map(s => [s.stem, s.name])], "");
   scSel.addEventListener("change", async () => {
     if (!scSel.value) return;
     const sc = (await api.get(`/api/scenario/${encodeURIComponent(scSel.value)}`)).scenario;
-    if (sc.vehicles && sc.vehicles.length) { vSel.value = sc.vehicles[0]; vSel.dispatchEvent(new Event("change")); }
+    if (sc.vehicles && sc.vehicles.length && !keepVehicle) { vSel.value = sc.vehicles[0]; vSel.dispatchEvent(new Event("change")); }
+    keepVehicle = false;
     if (sc.duty.route) { dutyKind = "route"; store.set("simRoute", sc.duty.route); } else { dutyKind = "cycle"; store.set("simCycle", sc.duty.cycle); }
     fillDuty(); drawTraffic(); trafficLevel = sc.traffic || "yok"; store.set("simTraffic", trafficLevel); drawTraffic();
     amb.value = sc.conditions.ambient_c; sol.value = sc.conditions.solar || 0; updRanges(); night.checked = !!sc.conditions.night; hvacOff.checked = !!sc.conditions.hvac_off;
     $("input", pax).value = String(sc.load.passengers || 0); occMode = sc.load.mode === "constant" ? "constant" : "profile";
     $("input", repeat).value = String(sc.duty.laps || sc.duty.repeat || 1);
+    store.set("simNight", night.checked);
     toast(`Senaryo yüklendi: ${sc.name}. Kütle/rüzgâr gibi ayrıntılar için Senaryolar sayfasında çalıştırın.`);
     loadPreview();
   });
+  // the home roadmap hands over a scenario and may ask for the run to start at once
+  const preScenario = store.get("simScenario", "");
+  if (preScenario && (ov.scenarios || []).some(x => x.stem === preScenario)) { store.set("simScenario", ""); keepVehicle = true; scSel.value = preScenario; setTimeout(() => scSel.dispatchEvent(new Event("change")), 0); }
+  if (store.get("autoRunSim")) { store.set("autoRunSim", false); setTimeout(() => runBtn.click(), preScenario ? 500 : 250); }
   const runBtn = h("button", { class: "primary simx-run", type: "button" }, "Simülasyonu çalıştır");
   const setup = h("aside", { class: "hud simx-setup", "aria-label": "Simülasyon kurulumu" },
     h("div", { class: "hud-head" }, h("span", { class: "eyebrow" }, "Kurulum"), h("span", { class: "spacer" }),
@@ -1739,6 +1896,8 @@ async function pageSim() {
     try {
       const p = params();
       const r = await api.post("/api/simulate", p);
+      S.prev = store.get("simLast", null);
+      store.set("simLast", { label: runLabel(p), kpi: r.kpi, when: Date.now() });
       S.play = r.play; S.reportId = r.report_id; S.t = 0; S.cursor = 0; S.lastEv = -2; S.run = r;
       S.diesel = r.play.vehicle.powertrain === "diesel";
       KEYS = S.diesel ? KEYS_BASE.concat(KEYS_DIESEL.filter(k => k in r.play.timeline)) : KEYS_BASE;
@@ -1759,6 +1918,24 @@ async function pageSim() {
       S.lastHud = 0;
     } finally { loading.hidden = true; }
   }));
+
+  const runLabel = p => `${(vehicles.find(v => v.stem === p.vehicle) || {}).name || p.vehicle} · ${p.route || p.cycle} · ${fmt(p.ambient, 0)} °C`;
+  const addCompare = async p => {
+    const mod = await import("/static/compare.js");
+    const k = mod.addToCompare(store, p, p.route ? "route" : "cycle");
+    toast(`Çoklu koşu kartı ${"ABCD"[k - 1]} olarak eklendi.`);
+  };
+  /* Against the run before this one: a one-line delta when they are comparable. */
+  const prevLine = (k, p) => {
+    const pv = S.prev;
+    if (!pv || !pv.kpi || pv.kpi.powertrain !== k.powertrain) return null;
+    const key = k.powertrain === "diesel" ? "l_per_100km" : "kwh_per_km";
+    const d = (k[key] - pv.kpi[key]) / Math.max(pv.kpi[key], 1e-9) * 100;
+    const dr = k.range_km - pv.kpi.range_km;
+    return h("div", { class: "tele-prev" }, h("span", { class: "sec-t" }, "Önceki koşuya göre"),
+      h("div", { class: "small" }, h("span", { class: "muted" }, pv.label, ": "), h("b", { class: "num", style: `color:${d > 0.05 ? "var(--err)" : d < -0.05 ? "var(--ok)" : "inherit"}` }, `${d >= 0 ? "+" : "−"}${fmt(Math.abs(d), 1)} %`), " tüketim · ",
+        h("b", { class: "num" }, `${dr >= 0 ? "+" : "−"}${fmt(Math.abs(dr), 0)} km`), " menzil"));
+  };
 
   /* ---------------- telemetry panel ---------------- */
   let H = {};
@@ -1838,7 +2015,8 @@ async function pageSim() {
             (pl.traffic && pl.traffic.traffic && pl.traffic.traffic !== "yok" ? ` · trafik ${pl.traffic.traffic_label.toLocaleLowerCase("tr-TR")}` : ""))),
         h("span", { class: "spacer" }),
         h("a", { class: "btn tele-report", href: `/report/${r.report_id}`, target: "_blank", rel: "noopener" }, "Tam rapor"),
-        menu("İndir", [{ label: "Rapor (HTML)", href: `/report/${r.report_id}/html`, download: "" }, { label: "Zaman serisi (CSV)", href: `/report/${r.report_id}/csv`, download: "", hint: "Excel ; ayraçlı" }], { cls: "tele-report" })),
+        menu("Diğer", [{ label: "Rapor (HTML)", href: `/report/${r.report_id}/html`, download: "" }, { label: "Zaman serisi (CSV)", href: `/report/${r.report_id}/csv`, download: "", hint: "Excel ; ayraçlı" }, "-",
+          { label: "Çoklu koşuya ekle", onclick: () => addCompare(p), hint: "yan yana karşılaştır" }, { label: "Çoklu koşu sayfası", href: "#/karsilastir" }], { cls: "tele-report" })),
       h("div", { class: "hud-body tele-body" },
         !r.achievable ? notice("err", "Araç bu görevi takip edemedi.", ["Bir bileşen sınırı yetersiz; bkz. tam rapor."]) : null,
         h("div", { class: "gauges" }, H.speed.el, H.soc.el),
@@ -1863,6 +2041,7 @@ async function pageSim() {
             h("div", { class: "stat" }, h("span", {}, "Menzil"), h("b", { class: "num" }, `${fmt(k.range_km, 0)} km`)),
             h("div", { class: "stat" }, h("span", {}, "Klima payı"), h("b", { class: "num" }, `%${fmt(k.hvac_share * 100, 0)}`)),
             h("div", { class: "stat" }, h("span", {}, "Reddedilen rejen."), h("b", { class: "num" }, `${fmt(k.regen_lost_kwh, 2)} kWh`))),
+          prevLine(k, p),
           warn)));
   }
 
