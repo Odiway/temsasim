@@ -637,7 +637,7 @@ async function pageHome() {
       h("ul", { class: "home-list" }, camps.map(c => h("li", {}, h("span", { class: "name", title: c.report || "" }, c.campaign || c.name), h("span", { class: "muted small" }, `${c.runs || 0} koşu · ${c.dates || ""}`), h("a", { class: "btn", href: "#/dogrulama" }, "Karşılaştır"))))) : null);
   const quick = h("div", { class: "panel" }, h("div", { class: "row" }, h("h2", {}, "Hızlı başla"), h("span", { class: "spacer" }), h("a", { class: "btn", href: "#/senaryo/yeni" }, "Yeni senaryo")),
     scen.length ? h("ul", { class: "home-list", style: "margin-top:8px" }, scen.slice(0, 6).map(s => h("li", {}, h("span", { class: "name", title: s.summary }, s.name), h("span", { class: "muted small" }, s.kind_tr || ""),
-      h("a", { class: "btn", href: `#/senaryo/${encodeURIComponent(s.stem)}` }, "Aç")))) : h("p", { class: "muted small" }, "Henüz senaryo yok."),
+      h("button", { type: "button", class: "btn", onclick: () => { store.set("autoRunScenario", s.stem); location.hash = `#/senaryo/${encodeURIComponent(s.stem)}`; } }, "Çalıştır")))) : h("p", { class: "muted small" }, "Henüz senaryo yok."),
     h("div", { class: "section-title" }, "Araçlar"),
     ov.vehicles.length ? h("ul", { class: "home-list" }, ov.vehicles.slice(0, 6).map(v => h("li", {}, h("span", { class: "name" }, v.name), h("span", { class: "muted small" }, v.powertrain_tr || ""),
       h("button", { type: "button", class: "btn", onclick: () => { store.set("vehicle", v.stem); location.hash = "#/simulasyon"; } }, "Simüle et")))) : h("p", { class: "muted small" }, "Henüz araç yok."));
@@ -661,7 +661,11 @@ async function pageLibrary() {
   root.append(pageHead("Kütüphane", "Veri kütüphanesi",
     "Her şey bu klasördeki düz dosyalardır: bir bileşen bir kez tanımlanır, araçlar ona referans verir; güzergâh ve senaryo da aynı kütüphanede durur. Her öğe kopyalanır, zip olarak indirilir ve başka bir bilgisayardaki kütüphaneye 'Veri yükle → Paket' ile alınır.",
     [h("a", { class: "btn", href: "#/yukle" }, "Veri yükle"), h("a", { class: "btn", href: "#/yukle/paket" }, "Paket al"),
-     h("a", { class: "btn", href: "/api/export/library", download: "", title: "Kütüphanenin tamamı, zip" }, "Tümünü indir"), newMenu]));
+     menu("Klasör", [
+       { label: "Tümünü indir (zip)", href: "/api/export/library", download: "", hint: "paylaşmak için" },
+       { label: "Klasörü aç", onclick: async () => { await api.post("/api/open_folder"); }, hint: "dosya gezgini" },
+       "-", { label: "Çöp kutusu", onclick: () => { const el = $("#lib-cop", root); if (el) { el.open = true; el.scrollIntoView({ behavior: "smooth" }); } } }]),
+     newMenu]));
 
   /* sticky section nav + search over everything */
   const q = h("input", { type: "search", placeholder: "Ara: ad, özet, rozet…", "aria-label": "Kütüphanede ara" });
@@ -731,7 +735,41 @@ async function pageLibrary() {
       list));
   });
   root.append(section("bilesen", "Bileşenler", "ölçülmedi rozeti: dosya kabul değeri içeriyor, kaynağı açıklamasında", cg));
+  root.append(trashPanel());
   return root;
+}
+
+/* Deleted files wait in library/.cop_kutusu; this is the way back. */
+function trashPanel() {
+  const det = h("details", { class: "panel", id: "lib-cop", style: "margin-top:28px" });
+  const list = h("ul", { class: "trash-list" });
+  const count = h("span", { class: "muted small" }, "");
+  const purgeBtn = h("button", { type: "button", class: "ghost danger", onclick: async () => {
+    if (!confirm("Çöp kutusundaki bütün dosyalar kalıcı olarak silinsin mi? Bu geri alınamaz.")) return;
+    try { const r = await api.post("/api/trash/purge"); toast(`${r.removed} dosya kalıcı olarak silindi.`); load(); } catch (e) { toast(e.message, "err"); }
+  } }, "Boşalt");
+  const load = async () => {
+    try {
+      const r = await api.get("/api/trash");
+      count.textContent = r.items.length ? `${r.items.length} dosya` : "boş";
+      purgeBtn.hidden = !r.items.length;
+      list.replaceChildren(...(r.items.length ? r.items.map(it => h("li", {},
+        h("span", { class: "badge plain" }, it.kind_tr || it.kind), h("span", { class: "path", title: it.path }, it.path),
+        h("span", { class: "when" }, it.deleted || ""),
+        h("button", { type: "button", class: "btn", onclick: async e => busy(e.currentTarget, async () => {
+          try { const o = await api.post("/api/trash/restore", { path: it.path }); toast(`Geri alındı: ${o.restored}`); await overview(true); route(); }
+          catch (err) {
+            if (/zaten var/.test(err.message) && confirm(err.message + "\nÜzerine yazılsın mı?")) { const o = await api.post("/api/trash/restore", { path: it.path, overwrite: true }); toast(`Geri alındı: ${o.restored}`); await overview(true); route(); }
+            else toast(err.message, "err");
+          }
+        }) }, "Geri al"))) : [h("li", { class: "muted" }, "Çöp kutusu boş.")]));
+    } catch (e) { list.replaceChildren(h("li", { class: "muted" }, e.message)); }
+  };
+  det.append(h("summary", { style: "cursor:pointer" }, h("b", {}, "Çöp kutusu"), " ", count, h("span", { class: "muted small" }, " · silinen dosyalar burada bekler, geri alınabilir")),
+    h("div", { class: "row", style: "margin:8px 0 4px" }, h("span", { class: "muted small" }, "library/.cop_kutusu"), h("span", { class: "spacer" }), purgeBtn), list);
+  det.addEventListener("toggle", () => { if (det.open) load(); });
+  load();
+  return det;
 }
 
 /* ================================================================ upload hub */

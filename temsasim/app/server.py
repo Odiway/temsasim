@@ -843,6 +843,78 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
         return jsonify({k: v for k, v in out.items() if k != "results"})
 
     # ------------------------------------------------------------ diesel fuel tests (test-team CAN logs)
+    # ------------------------------------------------------------ trash
+    @app.get("/api/trash")
+    def trash_list():
+        root = lib_root / ".cop_kutusu"
+        items = []
+        if root.exists():
+            for p in sorted(root.rglob("*"), key=lambda q: q.stat().st_mtime, reverse=True):
+                if p.is_file():
+                    rel = p.relative_to(root)
+                    items.append({"path": str(rel).replace("\\", "/"), "kind": rel.parts[0] if len(rel.parts) > 1 else "",
+                                  "kind_tr": SHARE_LABELS_TR.get(rel.parts[0], rel.parts[0]) if len(rel.parts) > 1 else "",
+                                  "name": p.name, "deleted": _mtime(p), "size": p.stat().st_size})
+        return jsonify({"items": items})
+
+    @app.post("/api/trash/restore")
+    def trash_restore():
+        b = request.get_json(force=True)
+        rel = pathlib.PurePosixPath(str(b.get("path", "")))
+        if rel.is_absolute() or ".." in rel.parts or len(rel.parts) != 2:
+            raise ValueError("Geçersiz yol.")
+        src = lib_root / ".cop_kutusu" / rel
+        if not src.exists():
+            raise FileNotFoundError(f"Çöp kutusunda yok: {rel}")
+        # name_YYYYMMDD_HHMMSS.ext -> name.ext
+        stem = re.sub(r"_\d{8}_\d{6}$", "", src.stem)
+        dst = lib_root / rel.parts[0] / f"{stem}{src.suffix}"
+        if dst.exists() and not b.get("overwrite"):
+            raise FileExistsError(f"{rel.parts[0]}/{dst.name} zaten var. Üzerine yazmak için onay verin.")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), dst)
+        return jsonify({"restored": f"{rel.parts[0]}/{dst.name}"})
+
+    @app.post("/api/trash/purge")
+    def trash_purge():
+        root = lib_root / ".cop_kutusu"
+        n = 0
+        if root.exists():
+            for p in list(root.rglob("*")):
+                if p.is_file():
+                    p.unlink(); n += 1
+        return jsonify({"removed": n})
+
+    @app.post("/api/open_folder")
+    def open_folder():
+        """Local convenience: show the library folder in the file manager."""
+        import os
+        import subprocess
+        import sys
+        target = lib_root
+        sub = (request.get_json(force=True, silent=True) or {}).get("path")
+        if sub:
+            cand = (lib_root / str(sub)).resolve()
+            if lib_root in cand.parents or cand == lib_root:
+                target = cand if cand.is_dir() else cand.parent
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(str(target))      # noqa: S606
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(target)])
+            else:
+                subprocess.Popen(["xdg-open", str(target)])
+        except Exception as exc:
+            raise ValueError(f"Klasör açılamadı: {exc}")
+        return jsonify({"opened": str(target)})
+
+    @app.get("/favicon.ico")
+    def favicon():
+        svg = ("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='#121110'/>"
+               "<g fill='#ffb000'><circle cx='4' cy='5' r='1.2'/><circle cx='8' cy='5' r='1.2'/><circle cx='12' cy='5' r='1.2'/>"
+               "<circle cx='4' cy='11' r='1.2'/><circle cx='8' cy='8' r='1.2'/><circle cx='12' cy='11' r='1.2'/></g></svg>")
+        return Response(svg, mimetype="image/svg+xml")
+
     # ------------------------------------------------------------ copy / share
     @app.post("/api/copy/<kind>/<stem>")
     def copy_endpoint(kind, stem):

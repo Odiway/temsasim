@@ -122,3 +122,17 @@ def test_share_endpoints(lib_root):
     f = c.get("/api/file/vehicle/maraton_deneme").get_json(); assert f["path"] == "vehicle/maraton_deneme.yaml"
     bad = c.post("/api/file/vehicle/maraton_deneme", json={"text": "kind: vehicle\nname: x\npowertrain: ucan\n"}); assert bad.status_code == 400
     ok = c.post("/api/file/vehicle/maraton_deneme", json={"text": f["text"]}); assert ok.status_code == 200
+
+
+def test_trash_endpoints_restore_and_purge(lib_root):
+    from temsasim.app.server import create_app
+    c = create_app(lib_root).test_client()
+    assert c.post("/api/scenario/otoyol_kis_gecesi/delete").status_code == 200
+    items = c.get("/api/trash").get_json()["items"]
+    assert len(items) == 1 and items[0]["kind"] == "scenario" and items[0]["path"].startswith("scenario/otoyol_kis_gecesi_")
+    r = c.post("/api/trash/restore", json={"path": items[0]["path"]}); assert r.status_code == 200, r.get_json()
+    assert r.get_json()["restored"] == "scenario/otoyol_kis_gecesi.yaml" and (lib_root / "scenario" / "otoyol_kis_gecesi.yaml").exists()
+    assert c.post("/api/trash/restore", json={"path": "../x.yaml"}).status_code == 400
+    assert c.post("/api/scenario/otoyol_kis_gecesi/delete").status_code == 200
+    assert c.post("/api/trash/purge").get_json()["removed"] == 1 and c.get("/api/trash").get_json()["items"] == []
+    assert c.get("/favicon.ico").status_code == 200

@@ -77,6 +77,20 @@ class Scenario:
                            headwind_mps=float(c.get("headwind_mps") or 0),
                            air_pressure_pa=float(c.get("pressure_hpa") or 1013.25) * 100.0, label=self.name)
 
+    def conditions_tr(self) -> str:
+        c = self.conditions
+        parts = [f"{c.get('ambient_c', 20):.0f} °C", f"güneş {c.get('solar') or 0:.0f} W/m²", "gece" if c.get("night") else "gündüz"]
+        if c.get("hvac_off"):
+            parts.append("klima kapalı")
+        if c.get("headwind_mps"):
+            parts.append(f"rüzgâr {c.get('headwind_mps'):+.1f} m/s")
+        lo = self.load
+        parts.append({"profile": f"{lo.get('passengers', 0)} yolcu (değişken)", "constant": f"{lo.get('passengers', 0)} yolcu (sabit)",
+                      "stops": "yolcu duraklardan", "mass": f"{lo.get('mass_kg') or 0:.0f} kg test kütlesi"}.get(lo.get("mode"), ""))
+        if self.traffic and self.traffic != "yok":
+            parts.append(f"trafik {self.traffic}")
+        return " · ".join(p for p in parts if p)
+
     def summary_tr(self) -> str:
         c, lo, d = self.conditions, self.load, self.duty
         duty = (f"{d.get('route')}{' (dönüş)' if d.get('direction') == 'donus' else ''}" if d.get("route") else f"çevrim {d.get('cycle', 'cbdbus')}")
@@ -181,7 +195,7 @@ def run_scenario(lib, sc: Scenario, *, vehicles: list | None = None, render=None
         row = {"vehicle": stem, "name": veh.name, "variant": veh.variant, "powertrain": veh.powertrain,
                "distance_km": round(t["distance_km"], 2), "duration_min": round(t["duration_s"] / 60, 1),
                "mean_speed_kmh": round(t["distance_km"] / max(t["duration_s"] / 3600, 1e-9), 1),
-               "energy_kwh_per_km": round(res.energy_per_km_kwh, 3), "achievable": res.achievable,
+               "energy_kwh_per_km": round(res.energy_per_km_kwh, 3), "achievable": res.achievable, "shortfall": res.shortfall,
                "hvac_share": round(t.get("hvac_share", 0.0), 3), "stops": t.get("stops"),
                "warnings": [w.tr if hasattr(w, "tr") else str(w) for w in res.warnings]}
         if veh.is_diesel:
@@ -198,4 +212,4 @@ def run_scenario(lib, sc: Scenario, *, vehicles: list | None = None, render=None
     cyc_text = ""
     if rows:
         cyc_text = f"{cyc.name}: {cyc.distance_km:.2f} km, {cyc.duration_s / 60:.1f} dk, ort. {cyc.mean_speed_kmh:.1f} km/h, {cyc.stop_count} durak"
-    return {"scenario": sc.to_dict(), "stem": sc.stem, "environment": env.describe(), "cycle": cyc_text, "rows": rows, "results": results}
+    return {"scenario": sc.to_dict(), "stem": sc.stem, "environment": sc.conditions_tr(), "cycle": cyc_text, "rows": rows, "results": results}

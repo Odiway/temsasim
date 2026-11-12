@@ -95,7 +95,8 @@ aynı dört işi yapar:
 - **Dosyayı gör / düzenle**: YAML'ı olduğu gibi gösterir; kaydetmeden önce
   yükleyiciden geçirir, geçmezse dosyaya dokunmaz.
 - **Sil**: `.cop_kutusu/` klasörüne taşır; başka bir öğe onu kullanıyorsa
-  reddeder.
+  reddeder. Kütüphane sayfasının altındaki **Çöp kutusu** paneli silinenleri
+  listeler; "Geri al" dosyayı eski adıyla yerine koyar, "Boşalt" kalıcı siler.
 
 "Tümünü indir" bütün kütüphaneyi zip yapar; başka bir bilgisayarda *Veri
 yükle → Paket* ile açılır. Paket alırken var olan öğeler için üç seçenek:

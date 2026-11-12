@@ -60,7 +60,23 @@ class DieselResult:
 
     @property
     def achievable(self) -> bool:
-        return self.unmet_samples == 0
+        """True unless the vehicle fell short of the trace in a way that
+        matters: more than 2 % of the samples, or more than 0.5 % of the
+        energy. A few seconds on a steep ramp where a real driver would lose
+        a km/h or shift down is reported in ``shortfall`` but does not fail
+        the run."""
+        if self.unmet_samples == 0:
+            return True
+        n = max(1, len(self.series.get("time_s", ())))
+        tot = float(self.totals.get("fuel_energy_kwh") or 0.0)
+        und = float(self.totals.get("undelivered_kwh") or 0.0)
+        return self.unmet_samples <= 0.02 * n and (tot <= 0 or und <= 0.005 * tot)
+
+    @property
+    def shortfall(self) -> dict:
+        """Seconds and kWh the demand exceeded what the powertrain could deliver."""
+        return {"seconds": self.unmet_samples * self.dt_s,
+                "kwh": float(self.totals.get("undelivered_kwh") or 0.0)}
 
     @property
     def fuel_l_per_100km(self) -> float:

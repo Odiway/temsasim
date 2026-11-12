@@ -42,7 +42,7 @@ export async function pageRoute(U, stem) {
 
   function drawSegments() {
     segTable.replaceChildren(
-      h("div", { class: "rb-seg rb-head" }, ...["#", "Ad", "Uzunluk m", "Eğim %", "Hız km/h", "Yüzey", "Rüzgâr m/s", "Durak", "Bekleme s", "Biniş", "İniş", "Işık", ""].map(x => h("span", {}, x))),
+      h("div", { class: "rb-seg rb-head" }, ...["#", "Ad", "Uzunluk m", "Eğim %", "Hız km/h", "Yüzey", "Rüzgâr m/s", "Durak", "Durak adı", "Bekleme s", "Biniş", "İniş", "Işık", ""].map(x => h("span", {}, x))),
       ...spec.segments.map((s, i) => {
         const len = num(s.length_m), gr = num(s.grade_pct), vl = num(s.speed_limit_kmh), sf = surfSel(s.surface), wind = num(s.headwind_mps);
         const nm = h("input", { type: "text", value: s.name || "", placeholder: `Bölüm ${i + 1}` });
@@ -126,24 +126,24 @@ export async function pageRoute(U, stem) {
     ? U.itemMenu("route", origStem, nameIn.value || origStem, { label: "Diğer", up: true, extra: [scenarioItem, "-"], after: () => { location.hash = "#/kutuphane"; } })
     : U.menu("Diğer", [scenarioItem], { up: true }));
   const tplBtn = (label, kindKey, q) => h("button", { type: "button", onclick: e => busy(e.currentTarget, async () => { const r = await api.get(`/api/route/template/${kindKey}${q || ""}`); loadSpec(r.spec, true); stemIn.value = ""; }) }, label);
-  const left = h("div", { class: "stack" },
-    h("div", { class: "panel stack" },
-      h("div", { class: "row" }, h("b", {}, "Şablondan başla:"), tplBtn("Şehir içi hat (20 durak)", "sehir_ici"), tplBtn("Şehir içi kısa (8 durak)", "sehir_ici", "?stops=8"), tplBtn("Otoyol 45 km", "otoyol"), tplBtn("Boş", "serbest")),
-      h("div", { class: "formgrid" }, field("Ad", nameIn), field("Dosya adı", stemIn, { hint: "library/route/<ad>.csv + .yaml; boş bırakılırsa addan üretilir." }),
-        h("div", { class: "field" }, h("div", { class: "lab" }, "Tür"), kindBox), field("Başlangıç rakımı", elev0),
-        h("div", { class: "wide" }, field("Açıklama", descIn)))),
-    h("div", { class: "panel" }, h("div", { class: "row" }, h("h3", {}, "Bölümler"), h("span", { class: "spacer" }),
-        h("button", { type: "button", onclick: () => { const last = spec.segments[spec.segments.length - 1]; spec.segments.push({ ...last, stop: null, signal: false, name: "" }); drawSegments(); schedulePreview(); } }, "+ Bölüm ekle")),
-      h("p", { class: "small muted", style: "margin:4px 0 10px" }, "Durak ve ışık bölümün sonundadır. Rüzgâr: gidiş yönünde karşıdan esiyorsa +, arkadan −. Yüzey çarpanı yuvarlanma direncini ölçekler."),
-      h("div", { class: "scrollx" }, segTable)),
-    h("div", { class: "savebar" },
-      h("button", { class: "primary", type: "button", onclick: e => busy(e.currentTarget, () => save(false)) }, origStem ? "Kaydet" : "Kütüphaneye kaydet"),
-      h("button", { type: "button", onclick: e => busy(e.currentTarget, () => save(true)) }, "Kopya olarak kaydet"),
-      moreBox,
-      h("span", { class: "spacer" }), h("a", { class: "btn ghost", href: "#/kutuphane" }, "Vazgeç")));
-  const right = h("div", { class: "stack" }, totals, chartBox, warnBox,
-    h("div", { class: "panel" }, h("h3", {}, "Kütüphanedeki güzergâhlar"), routeList(U, { onOpen: s => { location.hash = `#/guzergah/${encodeURIComponent(s)}`; } })));
-  root.append(h("div", { class: "rb-grid" }, left, right));
+  /* layout: the spec and its preview side by side, the segment table at full
+     width underneath (14 columns need the room), the library list last */
+  const specPanel = h("div", { class: "panel stack" },
+    h("div", { class: "row" }, h("b", {}, "Şablondan başla:"), tplBtn("Şehir içi hat (20 durak)", "sehir_ici"), tplBtn("Şehir içi kısa (8 durak)", "sehir_ici", "?stops=8"), tplBtn("Otoyol 45 km", "otoyol"), tplBtn("Boş", "serbest")),
+    h("div", { class: "formgrid" }, field("Ad", nameIn), field("Dosya adı", stemIn, { hint: "library/route/<ad>.csv + .yaml; boş bırakılırsa addan üretilir." }),
+      h("div", { class: "field" }, h("div", { class: "lab" }, "Tür"), kindBox), field("Başlangıç rakımı", elev0),
+      h("div", { class: "wide" }, field("Açıklama", descIn))));
+  const segPanel = h("div", { class: "panel" }, h("div", { class: "row" }, h("h3", {}, "Bölümler"), h("span", { class: "muted small" }, "durak ve ışık bölümün sonundadır · rüzgâr: karşıdan +, arkadan − · yüzey çarpanı yuvarlanma direncini ölçekler"), h("span", { class: "spacer" }),
+      h("button", { type: "button", onclick: () => { const last = spec.segments[spec.segments.length - 1]; spec.segments.push({ ...last, stop: null, signal: false, name: "" }); drawSegments(); schedulePreview(); } }, "+ Bölüm ekle")),
+    h("div", { class: "scrollx", style: "margin-top:8px" }, segTable));
+  const bar = h("div", { class: "savebar" },
+    h("button", { class: "primary", type: "button", onclick: e => busy(e.currentTarget, () => save(false)) }, origStem ? "Kaydet" : "Kütüphaneye kaydet"),
+    h("button", { type: "button", onclick: e => busy(e.currentTarget, () => save(true)) }, "Kopya olarak kaydet"),
+    moreBox,
+    h("span", { class: "spacer" }), h("a", { class: "btn ghost", href: "#/kutuphane" }, "Vazgeç"));
+  const libPanel = h("details", { class: "panel" }, h("summary", { class: "small", style: "cursor:pointer" }, h("b", {}, "Kütüphanedeki güzergâhlar"), ` (${(ov.route_items || []).length})`),
+    h("div", { style: "margin-top:10px" }, routeList(U, { onOpen: s => { location.hash = `#/guzergah/${encodeURIComponent(s)}`; }, compact: true })));
+  root.append(h("div", { class: "rb-top" }, specPanel, h("div", { class: "stack" }, totals, chartBox, warnBox)), h("div", { style: "margin-top:16px" }, segPanel), h("div", { style: "margin-top:16px" }, libPanel), bar);
 
   if (stem && stem !== "yeni") {
     try { const r = await api.get(`/api/route/${encodeURIComponent(stem)}`); loadSpec(r.spec, r.editable); if (r.note) warnBox.append(notice("", "Not", [r.note])); }
@@ -236,10 +236,14 @@ export async function pageScenario(U, stem) {
   const runBtn = h("button", { class: "primary", type: "button" }, "Çalıştır ve karşılaştır");
   runBtn.addEventListener("click", () => busy(runBtn, async () => {
     const body = collect(); if (!body.vehicles.length) throw new Error("En az bir araç seçin.");
-    results.replaceChildren(h("p", { class: "muted" }, "Hesaplanıyor…"));
+    results.replaceChildren(h("div", { class: "panel" }, h("p", { class: "muted", style: "margin:0" }, "Hesaplanıyor…")));
+    results.scrollIntoView({ behavior: "smooth", block: "start" });
     const r = await api.post("/api/scenario/run", { scenario: body, stem: isNew ? "" : stem });
-    results.replaceChildren(resultTable(U, r, body));
+    results.replaceChildren(h("div", { class: "panel" }, resultTable(U, r, body)));
+    results.scrollIntoView({ behavior: "smooth", block: "start" });
   }));
+  // "Çalıştır" from a list: open the page and run at once
+  if (!isNew && store.get("autoRunScenario") === stem) { store.set("autoRunScenario", ""); setTimeout(() => runBtn.click(), 50); }
   const save = async (overwrite) => {
     const body = collect();
     const r = await api.post("/api/scenario", { ...body, stem: isNew ? "" : stem, overwrite });
@@ -274,6 +278,7 @@ export function scenarioList(U) {
     h("div", { class: "sum" }, s.error ? s.error : s.summary), h("div", { class: "badges" }, h("span", { class: "badge plain" }, s.kind_tr || ""), ...(s.vehicles || []).map(v => h("span", { class: "badge plain" }, v)), U.whenEl(s.modified)),
     s.description ? h("div", { class: "sum muted" }, s.description) : null),
     h("div", { class: "acts" },
+      h("button", { type: "button", class: "btn", title: "Aç ve hemen çalıştır", onclick: () => { U.store.set("autoRunScenario", s.stem); location.hash = `#/senaryo/${encodeURIComponent(s.stem)}`; } }, "Çalıştır"),
       h("a", { class: "btn", href: `#/senaryo/${encodeURIComponent(s.stem)}` }, "Aç"),
       U.itemMenu("scenario", s.stem, s.name)))));
   return list;
@@ -294,7 +299,8 @@ function resultTable(U, r, body) {
     location.hash = "#/simulasyon";
   };
   const row = x => h("tr", {},
-    h("td", {}, h("b", {}, x.name), h("div", { class: "small muted" }, x.variant), !x.achievable ? h("div", { class: "small", style: "color:var(--err)" }, "görevi tam takip edemedi") : null),
+    h("td", {}, h("b", {}, x.name), h("div", { class: "small muted" }, x.variant), !x.achievable ? h("div", { class: "small", style: "color:var(--err)" }, "görevi tam takip edemedi")
+        : x.shortfall && x.shortfall.seconds > 0 ? h("div", { class: "small muted", title: "Tam yük eğrisine dayandığı anlar; sürücü hız kaybeder ya da vites küçültür" }, `güç sınırında ${fmt(x.shortfall.seconds, 0)} s · ${fmt(x.shortfall.kwh, 3)} kWh eksik`) : null),
     h("td", { class: "n" }, x.powertrain === "diesel" ? `${fmt(x.l_per_100km, 2)} l/100 km` : `${fmt(x.energy_kwh_per_km, 3)} kWh/km`),
     h("td", { class: "n", style: x.energy_kwh_per_km === best && rows.length > 1 ? "color:var(--ok);font-weight:700" : "" }, fmt(x.energy_kwh_per_km, 3)),
     h("td", { class: "n" }, x.co2_g_per_km != null ? fmt(x.co2_g_per_km, 0) : "0 (TTW)"),

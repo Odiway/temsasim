@@ -25,6 +25,10 @@
   --sign-on: #ffb000;
   --s1: #2a78d6;
   --s2: #eb6834;
+  --s3: #7a5cc4;
+  --s4: #d99a00;
+  --s5: #c2417f;
+  --s6: #1f9d5c;
   --grid: #e1e0d9;
   --axis: #c3c2b7;
   --radius: 6px;
@@ -40,6 +44,7 @@
     --ink-2: #aab5bf; --muted: #7d8994; --rule: #2b333b; --rule-2: #222a31;
     --amber-ink: #ffc54d; --amber-wash: #2d2410; --ok: #3cc47e; --ok-wash: #11261a;
     --err: #ff7b6e; --err-wash: #2c1413; --s1: #3987e5; --s2: #d95926;
+    --s3: #9b85e0; --s4: #e6b02e; --s5: #e06aa3; --s6: #3cc47e;
     --grid: #2c2c2a; --axis: #383835;
   }
 }
@@ -49,6 +54,7 @@
   --ink-2: #aab5bf; --muted: #7d8994; --rule: #2b333b; --rule-2: #222a31;
   --amber-ink: #ffc54d; --amber-wash: #2d2410; --ok: #3cc47e; --ok-wash: #11261a;
   --err: #ff7b6e; --err-wash: #2c1413; --s1: #3987e5; --s2: #d95926;
+  --s3: #9b85e0; --s4: #e6b02e; --s5: #e06aa3; --s6: #3cc47e;
   --grid: #2c2c2a; --axis: #383835;
 }
 
@@ -394,6 +400,11 @@ table.data tr.sel td { background: color-mix(in srgb, var(--s1) 12%, transparent
 .rb-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 1100px) { .rb-grid { grid-template-columns: 1fr; } }
 .rb-segs { display: grid; gap: 2px; min-width: 980px; }
+.rb-top { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .rb-top { grid-template-columns: 1fr; } }
+.trash-list li { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--rule-2); font-size: 13px; }
+.trash-list li:first-child { border-top: 0; }
+.trash-list .path { font-family: var(--mono); font-size: 12px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rb-seg { display: grid; grid-template-columns: 26px 1.3fr 80px 64px 64px 1.4fr 70px 40px 1.2fr 64px 56px 56px 40px 120px; gap: 4px; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--rule-2); }
 .rb-seg input[type=text], .rb-seg select { width: 100%; min-width: 0; padding: 4px 6px; font-size: 12.5px; }
 .rb-seg input[type=checkbox] { justify-self: center; }
