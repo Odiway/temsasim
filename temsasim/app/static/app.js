@@ -461,7 +461,8 @@ function notice(kind, title, items) {
     items && items.length ? h("ul", {}, items.map(t => h("li", {}, t))) : null);
 }
 function field(label, control, { unit, hint } = {}) {
-  return h("label", { class: "field" }, h("div", { class: "lab" }, label, unit ? h("span", { class: "unit" }, unit) : null), control, hint ? h("div", { class: "hint" }, hint) : null);
+  return h("label", { class: "field" }, h("div", { class: "lab" }, label, unit ? h("span", { class: "unit" }, unit) : null,
+    hint ? h("span", { class: "qm", title: hint, "aria-label": hint }, "?") : null), control);
 }
 function numInput(value, { unit, placeholder } = {}) {
   const inp = h("input", { type: "text", inputmode: "decimal", class: "numeric", value: fmtInput(value), placeholder: placeholder != null ? fmtInput(placeholder) : null, autocomplete: "off" });
@@ -472,10 +473,13 @@ function numInput(value, { unit, placeholder } = {}) {
 function select(options, value) {
   return h("select", {}, options.map(([v, l]) => h("option", { value: v, selected: v === value ? true : null }, l)));
 }
-function pageHead(eyebrow, title, lede, actions) {
+/* Title, optional one-line subtitle, actions on the right. The sign above
+   already names the section, so no eyebrow. A longer explanation folds under
+   one small "Bu sayfa ne yapar?" line instead of sitting over every page. */
+function pageHead(eyebrow, title, lede, actions, sub) {
   return h("div", {},
-    h("div", { class: "pagehead" }, h("div", {}, h("div", { class: "eyebrow" }, eyebrow), h("h1", {}, title)), actions ? h("div", { class: "row" }, actions) : null),
-    lede ? h("p", { class: "lede" }, lede) : null);
+    h("div", { class: "pagehead" }, h("div", {}, h("h1", {}, title), sub ? h("div", { class: "sub" }, sub) : null), actions ? h("div", { class: "row" }, actions) : null),
+    lede ? h("details", { class: "help-line" }, h("summary", {}, "Bu sayfa ne yapar?"), h("p", {}, lede)) : null);
 }
 
 /* ---- menus, copy, download, raw file ----------------------------------- */
@@ -492,7 +496,7 @@ function menu(label, items, { cls, left, up } = {}) {
     if (it.hint) el.append(h("span", { class: "hint" }, it.hint));
     list.append(el);
   });
-  d.append(h("summary", { class: "btn" + (cls ? " " + cls : " ghost"), "aria-haspopup": "menu", title: typeof label === "string" ? label : null }, label), list);
+  d.append(h("summary", { class: "btn" + (cls ? " " + cls : " ghost"), "aria-haspopup": "menu", title: typeof label === "string" && label !== "⋯" ? label : (label === "⋯" ? "Diğer işlemler" : null) }, label), list);
   d.addEventListener("toggle", () => { if (d.open) $$("details.menu[open]").forEach(o => { if (o !== d) o.open = false; }); });
   return d;
 }
@@ -543,7 +547,7 @@ function itemMenu(kind, stem, name, { after, extra, label, up } = {}) {
     { label: "Dosyayı gör / düzenle", onclick: () => openFileDialog(kind, stem, name) },
     "-",
     { label: "Sil", danger: true, onclick: async () => { if (await deleteItem(kind, stem, name)) re(); } },
-  ], { up });
+  ], { up, cls: label ? undefined : "ghost dots" });
 }
 
 /* The item's file as text: read it, copy it, hand-edit it. A save is only
@@ -632,17 +636,17 @@ async function pageHome() {
   const step = (n, title, text, links) => h("div", { class: "panel step" }, h("div", { class: "n" }, n), h("h3", {}, title), h("p", {}, text),
     h("div", { class: "links" }, links.map(([l, href]) => h("a", { href }, l))));
   root.append(h("div", { class: "flow" },
-    step("1 · Veri", "Araç ve bileşenler", "VECTO dosyaları, tedarikçi haritaları, elle girilen değerler. Bir bileşen bir kez tanımlanır.", [["Kütüphane", "#/kutuphane"], ["Veri yükle", "#/yukle"], ["Araç kur", "#/arac/yeni"]]),
-    step("2 · Görev", "Güzergâh ve senaryo", "Yol bölüm bölüm; durak, ışık, yüzey, rüzgâr. Senaryo = yol + araçlar + koşullar + yük.", [["Güzergâh oluştur", "#/guzergah/yeni"], ["Senaryolar", "#/senaryo"]]),
-    step("3 · Koş", "Simülasyon", "Görevi araçta koş, 3B izle, raporu al. Serbest sürüşle hisset, hat ve sefer için günü hesapla.", [["Simülasyon", "#/simulasyon"], ["Serbest sürüş", "#/surus"], ["Hat ve sefer", "#/hat"]]),
-    step("4 · Doğrula", "Ölçümle karşılaştır", "Test ekibinin CAN kayıtları modelden geçer; fark nerede toplanıyorsa düzeltilecek bileşen odur.", [["Doğrulama", "#/dogrulama"], ["Hesap haritası", "/static/hesap-haritasi.html"]])));
+    step("1 · Veri", "Araç ve bileşenler", "VECTO dosyası, tedarikçi haritası ya da elle girilen değer.", [["Kütüphane", "#/kutuphane"], ["Veri yükle", "#/yukle"], ["Araç kur", "#/arac/yeni"]]),
+    step("2 · Görev", "Güzergâh ve senaryo", "Yol bölüm bölüm; senaryo = yol + araç + koşul + yük.", [["Güzergâh", "#/guzergah/yeni"], ["Senaryolar", "#/senaryo"]]),
+    step("3 · Koş", "Simülasyon", "Görevi koş, 3B izle, raporu al.", [["Simülasyon", "#/simulasyon"], ["Serbest sürüş", "#/surus"], ["Hat ve sefer", "#/hat"]]),
+    step("4 · Doğrula", "Ölçümle karşılaştır", "Test kaydı modelden geçer; fark hangi bileşende, görünür.", [["Doğrulama", "#/dogrulama"], ["Hesap haritası", "/static/hesap-haritasi.html"]])));
   const unval = ov.components.reduce((n, g) => n + g.items.filter(i => !i.validated && !i.error).length, 0);
   const nComp = ov.components.reduce((n, g) => n + g.items.length, 0);
   const scen = ov.scenarios || [], rts = ov.route_items || [];
   const status = h("div", { class: "panel" }, h("h2", {}, "Kütüphanenin durumu"),
     h("div", { class: "kpis", style: "margin-top:10px" },
       kpi("Araç", ov.vehicles.length), kpi("Bileşen", nComp), kpi("Ölçülmemiş bileşen", unval), kpi("Güzergâh", rts.length), kpi("Senaryo", scen.length)),
-    unval ? h("p", { class: "small muted", style: "margin:10px 0 0" }, "Ölçülmemiş: dosya kabul değeri içeriyor; sonuç yol göstericidir. Kaynağı kütüphanede açıklamasında yazar.") : null,
+    unval ? h("p", { class: "small muted", style: "margin:10px 0 0" }, "Ölçülmemiş bileşen kabul değeriyle çalışır; sonucu yol gösterici sayın.") : null,
     camps.length ? h("div", { style: "margin-top:14px" }, h("div", { class: "section-title" }, "Test kampanyaları"),
       h("ul", { class: "home-list" }, camps.map(c => h("li", {}, h("span", { class: "name", title: c.report || "" }, c.campaign || c.name), h("span", { class: "muted small" }, `${c.runs || 0} koşu · ${c.dates || ""}`), h("a", { class: "btn", href: "#/dogrulama" }, "Karşılaştır"))))) : null);
   const quick = h("div", { class: "panel" }, h("div", { class: "row" }, h("h2", {}, "Hızlı başla"), h("span", { class: "spacer" }), h("a", { class: "btn", href: "#/senaryo/yeni" }, "Yeni senaryo")),
@@ -662,99 +666,109 @@ async function pageLibrary() {
   const root = h("div", {});
   const routes = ov.route_items || [], scenarios = ov.scenarios || [];
   const nComp = ov.components.reduce((n, g) => n + g.items.length, 0);
+  const enc = encodeURIComponent;
   const newMenu = menu("Yeni", [
     { label: "Araç", href: "#/arac/yeni", hint: "bileşenlerden" },
     { label: "Güzergâh", href: "#/guzergah/yeni", hint: "bölüm bölüm" },
     { label: "Senaryo", href: "#/senaryo/yeni" }, "-",
     ...ov.components.map(g => ({ label: g.label, href: `#/bilesen/${g.kind}/yeni` })),
   ], { cls: "primary" });
-  root.append(pageHead("Kütüphane", "Veri kütüphanesi",
+  root.append(pageHead("Kütüphane", "Kütüphane",
     "Her şey bu klasördeki düz dosyalardır: bir bileşen bir kez tanımlanır, araçlar ona referans verir; güzergâh ve senaryo da aynı kütüphanede durur. Her öğe kopyalanır, zip olarak indirilir ve başka bir bilgisayardaki kütüphaneye 'Veri yükle → Paket' ile alınır.",
-    [h("a", { class: "btn", href: "#/yukle" }, "Veri yükle"), h("a", { class: "btn", href: "#/yukle/paket" }, "Paket al"),
+    [h("a", { class: "btn", href: "#/yukle" }, "Veri yükle"),
      menu("Klasör", [
        { label: "Tümünü indir (zip)", href: "/api/export/library", download: "", hint: "paylaşmak için" },
+       { label: "Paket al (zip)", href: "#/yukle/paket", hint: "başka kütüphaneden" },
        { label: "Klasörü aç", onclick: async () => { await api.post("/api/open_folder"); }, hint: "dosya gezgini" },
        "-", { label: "Çöp kutusu", onclick: () => { const el = $("#lib-cop", root); if (el) { el.open = true; el.scrollIntoView({ behavior: "smooth" }); } } }]),
      newMenu]));
 
-  /* sticky section nav + search over everything */
-  const q = h("input", { type: "search", placeholder: "Ara: ad, özet, rozet…", "aria-label": "Kütüphanede ara" });
+  /* tabs: one kind of thing at a time; the search looks across all of them */
+  const TABS = [["arac", "Araçlar", ov.vehicles.length], ["guzergah", "Güzergâhlar", routes.length], ["senaryo", "Senaryolar", scenarios.length], ["bilesen", "Bileşenler", nComp]];
+  let tab = store.get("libTab", "arac");
+  if (!TABS.some(t => t[0] === tab)) tab = "arac";
+  const q = h("input", { type: "search", placeholder: "Ara…", "aria-label": "Kütüphanede ara" });
   const nomatch = h("span", { class: "nomatch", hidden: true }, "eşleşme yok");
-  const SECS = [["arac", "Araçlar", ov.vehicles.length], ["guzergah", "Güzergâhlar", routes.length], ["senaryo", "Senaryolar", scenarios.length], ["bilesen", "Bileşenler", nComp]];
-  root.append(h("div", { class: "subnav" },
-    ...SECS.map(([id, l, n]) => h("a", { href: `#/kutuphane`, onclick: e => { e.preventDefault(); const el = $(`#lib-${id}`, root); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); } }, l, h("span", { class: "n" }, n))),
+  const tabBtns = {};
+  root.append(h("div", { class: "tabs", role: "tablist" },
+    ...TABS.map(([id, l, n]) => (tabBtns[id] = h("button", { type: "button", class: "tab", role: "tab", "aria-selected": String(id === tab),
+      onclick: () => { tab = id; store.set("libTab", id); q.value = ""; apply(); } }, l, h("span", { class: "n" }, n)))),
     h("span", { class: "spacer" }), q, nomatch));
-  q.addEventListener("input", () => {
+  const secs = {};
+  const section = (id, ...body) => (secs[id] = h("section", { class: "lib-sec", id: `lib-${id}`, role: "tabpanel" }, ...body));
+  const head = (title, ...acts) => h("div", { class: "group-head" }, h("h3", {}, title), h("span", { class: "spacer" }), ...acts);
+  function apply() {
     const s = q.value.trim().toLocaleLowerCase("tr-TR");
     let shown = 0;
-    $$(".itemlist li, .vehicle-card", root).forEach(el => { const hit = s === "" || el.textContent.toLocaleLowerCase("tr-TR").includes(s); el.hidden = !hit; if (hit) shown++; });
-    $$(".panel.group", root).forEach(pn => { pn.hidden = s !== "" && !$$(".itemlist li", pn).some(li => !li.hidden); });
-    nomatch.hidden = shown > 0 || s === "";
-  });
-  const section = (id, title, sub, body) => h("section", { class: "lib-sec", id: `lib-${id}` }, h("div", { class: "sec-head" }, h("h2", {}, title), sub ? h("span", { class: "muted" }, sub) : null), body);
+    Object.entries(secs).forEach(([id, sec]) => {
+      let n = 0;
+      $$(".itemlist li", sec).forEach(li => { if (li.classList.contains("empty")) return; const hit = s === "" || li.textContent.toLocaleLowerCase("tr-TR").includes(s); li.hidden = !hit; if (hit) n++; });
+      $$(".group", sec).forEach(g => { g.hidden = s !== "" && !$$(".itemlist li", g).some(li => !li.hidden && !li.classList.contains("empty")); });
+      sec.hidden = s === "" ? id !== tab : n === 0;
+      shown += n;
+    });
+    Object.entries(tabBtns).forEach(([id, b]) => b.setAttribute("aria-selected", String(s === "" && id === tab)));
+    nomatch.hidden = s === "" || shown > 0;
+  }
+  q.addEventListener("input", apply);
 
   /* vehicles */
-  const vg = h("div", { class: "grid-auto" });
-  if (!ov.vehicles.length) vg.append(h("div", { class: "panel empty" }, "Henüz araç yok. ", h("a", { href: "#/arac/yeni" }, "İlk aracı kurun"), " ya da bir paket alın."));
+  const vl = h("ul", { class: "itemlist" });
+  if (!ov.vehicles.length) vl.append(h("li", { class: "empty" }, "Henüz araç yok. ", h("a", { href: "#/arac/yeni" }, "İlk aracı kurun"), " ya da bir paket alın."));
   ov.vehicles.forEach(v => {
-    vg.append(h("div", { class: "panel vehicle-card" },
-      h("div", {}, h("h3", {}, v.name), h("div", { class: "muted small" }, v.variant || "")),
-      v.error ? notice("err", "Dosya okunamadı", [v.error]) : h("div", { class: "small" }, h("span", { class: "badge plain", style: "margin-right:6px" }, v.powertrain_tr || ""), v.summary),
-      v.error ? null : h("div", { class: "row" }, v.validated ? h("span", { class: "badge ok" }, "tüm bileşenler doğrulandı")
-        : h("span", { class: "badge warn", title: v.unvalidated.join(", ") }, `${v.unvalidated.length} bileşen ölçülmedi`), h("span", { class: "spacer" }), whenEl(v.modified)),
-      h("div", { class: "actions" },
-        v.error ? null : h("button", { class: "primary", type: "button", onclick: () => { store.set("vehicle", v.stem); location.hash = "#/simulasyon"; } }, "Simüle et"),
-        h("a", { class: "btn", href: `#/arac/${encodeURIComponent(v.stem)}` }, "Düzenle"),
-        h("span", { class: "spacer" }),
-        itemMenu("vehicle", v.stem, v.name))));
+    const href = `#/arac/${enc(v.stem)}`;
+    vl.append(h("li", { class: v.error ? "err" : null },
+      h("div", { class: "main" },
+        h("div", { class: "name" }, h("a", { href }, v.name)),
+        h("div", { class: "sum", title: v.error ? v.error : (v.unvalidated || []).join(", ") },
+          v.error ? h("span", { class: "badge err" }, "hatalı dosya") : v.validated ? h("span", { class: "badge ok" }, "doğrulandı") : h("span", { class: "badge warn" }, `${v.unvalidated.length} bileşen ölçülmedi`),
+          v.error ? v.error : [v.powertrain_tr, v.variant, v.summary].filter(Boolean).join(" · "))),
+      h("div", { class: "acts" }, whenEl(v.modified),
+        v.error ? null : h("button", { type: "button", class: "btn", onclick: () => { store.set("vehicle", v.stem); location.hash = "#/simulasyon"; } }, "Simüle et"),
+        itemMenu("vehicle", v.stem, v.name, { extra: [{ label: "Düzenle", href }] }))));
   });
-  root.append(section("arac", "Araçlar", "bileşen seçimleri", vg));
+  root.append(section("arac", h("div", { class: "panel list" }, head("Araçlar", h("a", { class: "btn sm", href: "#/arac/yeni" }, "Yeni araç")), vl)));
 
-  /* routes + scenarios */
-  root.append(section("guzergah", "Güzergâhlar ve senaryolar", "kaydedilen yol her araçta koşar",
-    h("div", { class: "grid-2" },
-      h("div", { class: "panel", id: "lib-guzergah-p" }, h("div", { class: "group-head" }, h("h3", {}, "Güzergâhlar"), h("span", { class: "muted small" }, routes.length), h("span", { class: "spacer" }),
-          h("a", { class: "btn", href: "#/guzergah/yeni" }, "Oluştur"), h("a", { class: "btn", href: "#/yukle/guzergah" }, "GPX yükle")),
-        rmod.routeList(pageKit(), { onOpen: s => (location.hash = `#/guzergah/${encodeURIComponent(s)}`), compact: true })),
-      h("div", { class: "panel", id: "lib-senaryo" }, h("div", { class: "group-head" }, h("h3", {}, "Senaryolar"), h("span", { class: "muted small" }, scenarios.length), h("span", { class: "spacer" }),
-          h("a", { class: "btn", href: "#/senaryo/yeni" }, "Yeni senaryo")),
-        rmod.scenarioList(pageKit())))));
+  /* routes, scenarios */
+  root.append(section("guzergah", h("div", { class: "panel list" },
+    head("Güzergâhlar", h("a", { class: "btn sm", href: "#/yukle/guzergah" }, "GPX / KML yükle"), h("a", { class: "btn sm", href: "#/guzergah/yeni" }, "Yeni güzergâh")),
+    rmod.routeList(pageKit(), { compact: true }))));
+  root.append(section("senaryo", h("div", { class: "panel list" },
+    head("Senaryolar", h("a", { class: "btn sm", href: "#/senaryo/yeni" }, "Yeni senaryo")),
+    rmod.scenarioList(pageKit()))));
 
-  /* components */
-  const cg = h("div", { class: "grid-auto" });
+  /* components: one list, a header per kind */
+  const cp = h("div", { class: "panel list" });
   ov.components.forEach(g => {
     const list = h("ul", { class: "itemlist" });
     if (!g.items.length) list.append(h("li", { class: "empty" }, "Henüz yok."));
     g.items.forEach(it => {
-      list.append(h("li", {},
+      const href = `#/bilesen/${g.kind}/${enc(it.stem)}`;
+      list.append(h("li", { class: it.error ? "err" : null },
         h("div", { class: "main" },
-          h("div", { class: "name" }, it.name),
-          it.error ? h("div", { class: "sum", style: "color:var(--err)" }, it.error) : h("div", { class: "sum" }, it.summary),
-          h("div", { class: "badges" },
+          h("div", { class: "name" }, h("a", { href }, it.name)),
+          h("div", { class: "sum" },
             it.error ? h("span", { class: "badge err" }, "hatalı dosya") : valBadge(it.validated),
             it.map === "sentetik" ? h("span", { class: "badge plain", title: "Tedarikçi haritası yüklenene kadar kayıp modelinden üretilir" }, "sentetik harita") : null,
             it.map === "ölçülmüş" ? h("span", { class: "badge ok" }, "yüklenen harita") : null,
-            whenEl(it.modified))),
-        h("div", { class: "acts" },
-          h("a", { class: "btn", href: `#/bilesen/${g.kind}/${encodeURIComponent(it.stem)}` }, "Düzenle"),
-          itemMenu(g.kind, it.stem, it.name))));
+            it.error ? it.error : it.summary)),
+        h("div", { class: "acts" }, whenEl(it.modified), itemMenu(g.kind, it.stem, it.name, { extra: [{ label: "Düzenle", href }] }))));
     });
-    cg.append(h("div", { class: "panel group" },
-      h("div", { class: "group-head" }, h("h3", {}, g.label), h("span", { class: "muted small" }, g.items.length), h("span", { class: "spacer" }),
-        h("a", { class: "btn", href: `#/bilesen/${g.kind}/yeni` }, "Ekle")),
-      list));
+    cp.append(h("div", { class: "group" }, h("div", { class: "group-head" }, h("h3", {}, g.label), h("span", { class: "n" }, g.items.length), h("span", { class: "spacer" }),
+      h("a", { class: "btn sm", href: `#/bilesen/${g.kind}/yeni` }, "Ekle")), list));
   });
-  root.append(section("bilesen", "Bileşenler", "ölçülmedi rozeti: dosya kabul değeri içeriyor, kaynağı açıklamasında", cg));
+  root.append(section("bilesen", cp));
   root.append(trashPanel());
+  apply();
   return root;
 }
 
 /* Deleted files wait in library/.cop_kutusu; this is the way back. */
 function trashPanel() {
-  const det = h("details", { class: "panel", id: "lib-cop", style: "margin-top:28px" });
+  const det = h("details", { class: "trash", id: "lib-cop" });
   const list = h("ul", { class: "trash-list" });
-  const count = h("span", { class: "muted small" }, "");
-  const purgeBtn = h("button", { type: "button", class: "ghost danger", onclick: async () => {
+  const count = h("span", {}, "");
+  const purgeBtn = h("button", { type: "button", class: "ghost danger sm", onclick: async () => {
     if (!confirm("Çöp kutusundaki bütün dosyalar kalıcı olarak silinsin mi? Bu geri alınamaz.")) return;
     try { const r = await api.post("/api/trash/purge"); toast(`${r.removed} dosya kalıcı olarak silindi.`); load(); } catch (e) { toast(e.message, "err"); }
   } }, "Boşalt");
@@ -766,7 +780,7 @@ function trashPanel() {
       list.replaceChildren(...(r.items.length ? r.items.map(it => h("li", {},
         h("span", { class: "badge plain" }, it.kind_tr || it.kind), h("span", { class: "path", title: it.path }, it.path),
         h("span", { class: "when" }, it.deleted || ""),
-        h("button", { type: "button", class: "btn", onclick: async e => busy(e.currentTarget, async () => {
+        h("button", { type: "button", class: "btn sm", onclick: async e => busy(e.currentTarget, async () => {
           try { const o = await api.post("/api/trash/restore", { path: it.path }); toast(`Geri alındı: ${o.restored}`); await overview(true); route(); }
           catch (err) {
             if (/zaten var/.test(err.message) && confirm(err.message + "\nÜzerine yazılsın mı?")) { const o = await api.post("/api/trash/restore", { path: it.path, overwrite: true }); toast(`Geri alındı: ${o.restored}`); await overview(true); route(); }
@@ -775,8 +789,8 @@ function trashPanel() {
         }) }, "Geri al"))) : [h("li", { class: "muted" }, "Çöp kutusu boş.")]));
     } catch (e) { list.replaceChildren(h("li", { class: "muted" }, e.message)); }
   };
-  det.append(h("summary", { style: "cursor:pointer" }, h("b", {}, "Çöp kutusu"), " ", count, h("span", { class: "muted small" }, " · silinen dosyalar burada bekler, geri alınabilir")),
-    h("div", { class: "row", style: "margin:8px 0 4px" }, h("span", { class: "muted small" }, "library/.cop_kutusu"), h("span", { class: "spacer" }), purgeBtn), list);
+  det.append(h("summary", {}, "Çöp kutusu · ", count),
+    h("div", { class: "panel" }, h("div", { class: "row", style: "margin-bottom:4px" }, h("span", { class: "muted small" }, "Silinen dosyalar library/.cop_kutusu altında bekler; geri alınabilir."), h("span", { class: "spacer" }), purgeBtn), list));
   det.addEventListener("toggle", () => { if (det.open) load(); });
   load();
   return det;
@@ -785,15 +799,15 @@ function trashPanel() {
 /* ================================================================ upload hub */
 async function pageUpload(which) {
   const root = h("div", {});
-  root.append(pageHead("Veri yükle", "Dosyanızı olduğu gibi getirin",
+  root.append(pageHead("Veri yükle", "Veri yükle",
     "Biçim dönüştürmenize gerek yok. Excel ya da CSV, noktalı virgül ya da virgül, ondalık virgül, ızgara ya da uzun liste, rpm ya da rad/s: araç ne olduğunu algılar, önizlemeyi gösterir, siz onaylayınca kaydeder."));
   const TILES = [
-    ["vecto", "VECTO dosyaları (dizel araç)", "Homologasyonun motor, şanzıman, aks, lastik ve araç XML dosyaları. Klasörü olduğu gibi bırakın; dijital ikiz kurulur."],
-    ["harita", "Motor verim haritası", "Tedarikçi ya da dinamometre verisi. Verim (% ya da kesir) veya kayıp gücü."],
-    ["guzergah", "Güzergâh", "GPX ya da KML/KMZ izi, ya da mesafe–rakım tablosu. Duraklar GPX/KML noktalarından okunur."],
+    ["vecto", "VECTO dosyaları", "Dizel aracın homologasyon XML klasörü; dijital ikiz kurulur."],
+    ["harita", "Motor verim haritası", "Tedarikçi ya da dinamometre verisi: verim ya da kayıp."],
+    ["guzergah", "Güzergâh", "GPX, KML/KMZ izi ya da mesafe–rakım tablosu."],
     ["egri", "Batarya ya da klima eğrisi", "OCV–SOC, COP–sıcaklık gibi iki sütunlu eğriler."],
-    ["log", "Araç logu", "CAN / telematik kaydı. Modeli gerçek otobüsle karşılaştırır."],
-    ["paket", "Paket (zip)", "Bir meslektaşın kütüphanesinden 'İndir' ile alınmış zip: araç + bileşenler, güzergâh, senaryo ya da bütün kütüphane. Var olanlara ne yapılacağını sorar."],
+    ["log", "Araç logu", "CAN / telematik kaydı; modeli ölçümle karşılaştırır."],
+    ["paket", "Paket (zip)", "Başka bir kütüphaneden 'İndir' ile alınmış zip."],
   ];
   const cur = which || store.get("uploadTile", "vecto");
   const body = h("div", {});
@@ -1146,7 +1160,8 @@ async function pageComponent(kind, stem) {
 
   const root = h("div", {});
   root.append(pageHead(sch.label, isNew ? `Yeni ${sch.label.toLocaleLowerCase("tr-TR")}` : values.name,
-    isNew ? "Önce ana alanlar görünür: bunlar bir veri sayfasında bulunan değerlerdir. Diğerleri makul varsayılanlarla dolu gelir, ‘Gelişmiş’ altında." : cur.summary));
+    isNew ? "Önce ana alanlar görünür: bunlar bir veri sayfasında bulunan değerlerdir. Diğerleri makul varsayılanlarla dolu gelir, ‘Gelişmiş’ altında." : null,
+    null, isNew ? sch.label : `${sch.label} · ${cur.summary}`));
 
   const nameIn = h("input", { type: "text", value: values.name || "", placeholder: "ör. Tedarikçi X 280 kW", required: true });
   const descIn = h("textarea", { placeholder: "Veri nereden geldi? Hangi test, hangi tarih?" }, cur ? cur.description : "");
@@ -1326,7 +1341,8 @@ async function pageVehicle(stem) {
   let powertrain = cur ? cur.powertrain : store.get("newPowertrain", "battery_electric");
   const root = h("div", {});
   root.append(pageHead("Araç kur", isNew ? "Yeni araç" : `${cur.name}`,
-    "Bir araç, kütüphanedeki bileşenlerin bir seçimidir. Bir bileşeni değiştirmek için başka bir tane seçin; varyant için bu aracı kopya olarak kaydedin."));
+    "Bir araç, kütüphanedeki bileşenlerin bir seçimidir. Bir bileşeni değiştirmek için başka bir tane seçin; varyant için bu aracı kopya olarak kaydedin.",
+    null, isNew ? null : cur.variant || null));
   const nameIn = h("input", { type: "text", value: cur ? cur.name : "", placeholder: "ör. 12 m şehir içi BE" });
   const varIn = h("input", { type: "text", value: cur ? cur.variant : "", placeholder: "ör. 350 kWh / ısı pompası" });
   const seats = numInput(cur ? cur.seats : 28), stand = numInput(cur ? cur.standees : 60);
@@ -1360,7 +1376,7 @@ async function pageVehicle(stem) {
     ctlPanel.hidden = powertrain === "diesel";
   };
   if (isNew) ptBox.append(seg(ov.powertrains, powertrain, v => { powertrain = v; store.set("newPowertrain", v); drawSlots(); }));
-  else ptBox.append(h("div", { class: "small", style: "padding:8px 0" }, h("span", { class: "badge plain" }, (ov.powertrains.find(x => x[0] === powertrain) || [0, powertrain])[1]), " ", h("span", { class: "muted" }, "güç aktarma tipi sonradan değişmez; yeni araç kurun")));
+  else ptBox.append(h("div", { class: "small", style: "padding:8px 0" }, h("span", { class: "badge plain" }, (ov.powertrains.find(x => x[0] === powertrain) || [0, powertrain])[1]), " ", h("span", { class: "qm", title: "Güç aktarma tipi sonradan değişmez; başka tip için yeni araç kurun." }, "?")));
   drawSlots();
   slotPanel.append(grid);
   root.append(slotPanel);
@@ -1466,11 +1482,10 @@ async function pageSim() {
   let trafficLevel = store.get("simTraffic", "orta");
   const trafficBox = h("div", {});
   const drawTraffic = () => trafficBox.replaceChildren(
-    h("div", { class: "lab simx-lab" }, "Trafik"),
+    h("div", { class: "lab simx-lab" }, "Trafik", h("span", { class: "qm", title: dutyKind === "route" ? "Işıklar, kuyruklar ve dur-kalk tüketime dahil edilir." : "Standart çevrimlerin hız profili, kaydedildiği andaki trafiği zaten içerir." }, "?")),
     dutyKind === "route"
-      ? h("div", {}, seg(ov.traffic_levels, trafficLevel, v => { trafficLevel = v; store.set("simTraffic", v); }),
-          h("div", { class: "hint" }, "Işıklar, kuyruklar ve dur-kalk tüketime dahil edilir."))
-      : h("div", { class: "hint" }, "Standart çevrimlerin hız profili, kaydedildiği andaki trafiği zaten içerir."));
+      ? seg(ov.traffic_levels, trafficLevel, v => { trafficLevel = v; store.set("simTraffic", v); })
+      : h("div", { class: "hint" }, "Çevrim trafiği içerir."));
   drawTraffic();
   const repeat = numInput(store.get("simRepeat", 1));
   const amb = h("input", { type: "range", min: -25, max: 45, step: 1, value: store.get("simAmb", 20), "aria-label": "Dış sıcaklık" });
@@ -2083,7 +2098,7 @@ function kpi(k, v, u) { return h("div", {}, h("div", { class: "k" }, k), h("div"
 async function pageValidate(which) {
   const ov = await overview(true);
   const root = h("div", {});
-  root.append(pageHead("Doğrulama", "Modeli gerçek otobüsle karşılaştırın",
+  root.append(pageHead("Doğrulama", "Doğrulama",
     "Elektrikli araçta CAN/telematik kaydı batarya enerjisiyle, dizel araçta test ekibinin yakıt testi kaydı litre ve l/100 km ile karşılaştırılır. Fark varsa, hangi bileşene bakmanız gerektiğini söyler."));
   const hasDiesel = ov.vehicles.some(v => v.powertrain === "diesel");
   let mode = which || store.get("valMode", hasDiesel ? "dizel" : "elektrik");
@@ -2111,7 +2126,6 @@ async function pageValidate(which) {
     });
     area.replaceChildren(h("div", { class: "stack" },
       h("h2", {}, "Test kampanyaları"),
-      h("p", { class: "small muted", style: "margin:0" }, "Test ekibinin CAN kayıtları ve koşulları (kütle, hava, rüzgâr, klima kapalı) kütüphanede. Her koşu aynı hız iziyle modelden geçer; litre, l/100 km, evre payları, devir ve vites yan yana gelir."),
       list,
       h("h2", { style: "margin-top:16px" }, "Tek bir CAN logu yükle"), singleLogForm()));
   }

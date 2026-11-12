@@ -14,7 +14,7 @@
 export async function pageRoute(U, stem) {
   const { h, api, store, fmt, parseNum, seg, select, field, numInput, toast, busy, notice, ov, pageHead, lineChart, css } = U;
   const root = h("div", {});
-  root.append(pageHead("Güzergâh oluştur", "Yolu bölüm bölüm tanımlayın",
+  root.append(pageHead("Güzergâh oluştur", "Güzergâh oluştur",
     "Her bölüm: uzunluk, eğim, hız sınırı, yüzey, rüzgâr; sonunda bir durak (biniş/iniş, bekleme) ya da trafik ışığı olabilir. Kaydedilen güzergâh her araçta, her senaryoda aynı şekilde koşar."));
 
   const surfaces = ov.surfaces || [];
@@ -87,9 +87,7 @@ export async function pageRoute(U, stem) {
         lineChart({ x, series: [{ label: "Rakım", color: css("--s1"), y: p.elevation_m }], xLabel: "mesafe (km)", yLabel: "Rakım (m)", xFmt: v => fmt(v, 1), yFmt: v => fmt(v, 0) + " m", height: 220 }),
         lineChart({ x, series: [{ label: "Hız sınırı", color: css("--s4"), y: p.speed_limit_kmh }, { label: "Rüzgâr ×10", color: css("--s2"), y: p.headwind_mps.map(w => w * 10) }, { label: "Yüzey ×50", color: css("--s3"), y: p.surface_factor.map(f => f * 50) }],
           xLabel: "mesafe (km)", yLabel: "km/h · m/s×10 · ×50", xFmt: v => fmt(v, 1), yFmt: v => fmt(v, 0), height: 160 }),
-        h("p", { class: "small muted", style: "margin:6px 0 0" },
-          p.stops_km.length ? `Duraklar: ${p.stops_km.map((d, i) => `${p.stop_names[i] || "durak"} ${fmt(d, 2)} km`).join(" · ")}` : "Durak yok.",
-          p.signals_km.length ? ` · Işıklar: ${p.signals_km.map(d => fmt(d, 2)).join(", ")} km` : ""));
+        h("p", { class: "small muted", style: "margin:6px 0 0" }, `${p.stops_km.length} durak · ${p.signals_km.length} ışık`));
       warnBox.replaceChildren();
     } catch (e) { warnBox.replaceChildren(notice("err", "Önizleme yapılamadı", [e.message])); }
   }
@@ -133,7 +131,7 @@ export async function pageRoute(U, stem) {
     h("div", { class: "formgrid" }, field("Ad", nameIn), field("Dosya adı", stemIn, { hint: "library/route/<ad>.csv + .yaml; boş bırakılırsa addan üretilir." }),
       h("div", { class: "field" }, h("div", { class: "lab" }, "Tür"), kindBox), field("Başlangıç rakımı", elev0),
       h("div", { class: "wide" }, field("Açıklama", descIn))));
-  const segPanel = h("div", { class: "panel" }, h("div", { class: "row" }, h("h3", {}, "Bölümler"), h("span", { class: "muted small" }, "durak ve ışık bölümün sonundadır · rüzgâr: karşıdan +, arkadan − · yüzey çarpanı yuvarlanma direncini ölçekler"), h("span", { class: "spacer" }),
+  const segPanel = h("div", { class: "panel" }, h("div", { class: "row" }, h("h3", {}, "Bölümler"), h("span", { class: "qm", title: "Durak ve ışık bölümün sonundadır. Rüzgâr: karşıdan +, arkadan −. Yüzey çarpanı yuvarlanma direncini ölçekler." }, "?"), h("span", { class: "spacer" }),
       h("button", { type: "button", onclick: () => { const last = spec.segments[spec.segments.length - 1]; spec.segments.push({ ...last, stop: null, signal: false, name: "" }); drawSegments(); schedulePreview(); } }, "+ Bölüm ekle")),
     h("div", { class: "scrollx", style: "margin-top:8px" }, segTable));
   const bar = h("div", { class: "savebar" },
@@ -142,7 +140,7 @@ export async function pageRoute(U, stem) {
     moreBox,
     h("span", { class: "spacer" }), h("a", { class: "btn ghost", href: "#/kutuphane" }, "Vazgeç"));
   const libPanel = h("details", { class: "panel" }, h("summary", { class: "small", style: "cursor:pointer" }, h("b", {}, "Kütüphanedeki güzergâhlar"), ` (${(ov.route_items || []).length})`),
-    h("div", { style: "margin-top:10px" }, routeList(U, { onOpen: s => { location.hash = `#/guzergah/${encodeURIComponent(s)}`; }, compact: true })));
+    h("div", { style: "margin-top:6px" }, routeList(U, { compact: true })));
   root.append(h("div", { class: "rb-top" }, specPanel, h("div", { class: "stack" }, totals, chartBox, warnBox)), h("div", { style: "margin-top:16px" }, segPanel), h("div", { style: "margin-top:16px" }, libPanel), bar);
 
   if (stem && stem !== "yeni") {
@@ -155,21 +153,24 @@ export async function pageRoute(U, stem) {
 }
 
 export function routeList(U, { onOpen, compact } = {}) {
-  const { h, fmt, ov, api, toast } = U;
+  const { h, fmt, ov } = U;
   const items = ov.route_items || [];
-  if (!items.length) return h("p", { class: "muted small" }, "Henüz güzergâh yok.");
   const list = h("ul", { class: "itemlist" });
+  if (!items.length) { list.append(h("li", { class: "empty" }, "Henüz güzergâh yok.")); return list; }
   items.forEach(r => {
-    const badges = h("div", { class: "badges" }, h("span", { class: "badge plain" }, r.kind_tr || "içe aktarılmış"),
-      r.has_wind ? h("span", { class: "badge plain" }, "rüzgâr") : null, r.has_surface ? h("span", { class: "badge plain" }, "yüzey") : null,
-      r.boardings ? h("span", { class: "badge plain" }, `${r.boardings} biniş`) : null, r.error ? h("span", { class: "badge err" }, "hatalı dosya") : null, U.whenEl(r.modified));
-    list.append(h("li", {}, h("div", { class: "main" }, h("div", { class: "name" }, r.name),
-      h("div", { class: "sum" }, r.error ? r.error : `${fmt(r.length_km, 2)} km · ${r.stops} durak · ${r.signals} ışık · tırmanış ${fmt(r.climb_m, 0)} m · ${r.elev_min}–${r.elev_max} m · ort. sınır ${r.mean_speed_limit_kmh} km/h`),
-      r.description && !compact ? h("div", { class: "sum muted" }, r.description) : null, badges),
-      h("div", { class: "acts" },
-        h("button", { type: "button", class: "btn", onclick: () => onOpen(r.stem) }, r.editable ? "Düzenle" : "Aç / kopyala"),
-        h("button", { type: "button", class: "btn", onclick: () => { U.store.set("simRoute", r.stem); U.store.set("dutyKind", "route"); location.hash = "#/simulasyon"; } }, "Simüle et"),
-        U.itemMenu("route", r.stem, r.name, { extra: [{ label: "Bu güzergâhla senaryo kur", onclick: () => { U.store.set("newScenarioRoute", r.stem); location.hash = "#/senaryo/yeni"; } }] }))));
+    const href = `#/guzergah/${encodeURIComponent(r.stem)}`;
+    const tags = [r.kind_tr || "içe aktarılmış", r.has_wind ? "rüzgâr" : null, r.has_surface ? "yüzey" : null, r.boardings ? `${r.boardings} biniş` : null].filter(Boolean);
+    list.append(h("li", { class: r.error ? "err" : null },
+      h("div", { class: "main" },
+        h("div", { class: "name" }, h("a", { href, onclick: onOpen ? e => { e.preventDefault(); onOpen(r.stem); } : null }, r.name)),
+        h("div", { class: "sum", title: r.description || "" },
+          r.error ? h("span", { class: "badge err" }, "hatalı dosya") : h("span", { class: "badge plain" }, tags.join(" · ")),
+          r.error ? r.error : `${fmt(r.length_km, 1)} km · ${r.stops} durak · ${r.signals} ışık · tırmanış ${fmt(r.climb_m, 0)} m · ${r.elev_min}–${r.elev_max} m · sınır ort. ${r.mean_speed_limit_kmh} km/h`)),
+      h("div", { class: "acts" }, U.whenEl(r.modified),
+        r.error ? null : h("button", { type: "button", class: "btn", onclick: () => { U.store.set("simRoute", r.stem); U.store.set("dutyKind", "route"); location.hash = "#/simulasyon"; } }, "Simüle et"),
+        U.itemMenu("route", r.stem, r.name, { extra: [
+          { label: r.editable ? "Düzenle" : "Aç / kopyala", href },
+          { label: "Bu güzergâhla senaryo kur", onclick: () => { U.store.set("newScenarioRoute", r.stem); location.hash = "#/senaryo/yeni"; } }] }))));
   });
   return list;
 }
@@ -178,7 +179,7 @@ export function routeList(U, { onOpen, compact } = {}) {
 export async function pageScenario(U, stem) {
   const { h, api, store, fmt, parseNum, seg, select, field, numInput, toast, busy, notice, ov, pageHead } = U;
   const root = h("div", {});
-  root.append(pageHead("Senaryolar", "Aynı soruyu her araca sorun",
+  root.append(pageHead("Senaryolar", "Senaryolar",
     "Senaryo = güzergâh (ya da standart çevrim) + araçlar + koşullar + yük + trafik. Kaydedilir, yeniden koşar, araçları aynı iz üzerinde yan yana karşılaştırır."));
   const vehicles = ov.vehicles.filter(v => !v.error);
   const routes = ov.route_items || [];
@@ -264,23 +265,28 @@ export async function pageScenario(U, stem) {
       isNew ? null : h("button", { type: "button", onclick: e => busy(e.currentTarget, async () => { const n = prompt("Kopyanın adı:", `${nameIn.value} kopya`); if (n) { nameIn.value = n; await save(false); } }) }, "Kopya olarak kaydet"),
       h("span", { class: "spacer" }), h("a", { class: "btn ghost", href: "#/senaryo" }, "Listeye dön")),
     results);
-  const listPanel = h("div", { class: "panel" }, h("div", { class: "row" }, h("h3", {}, "Kayıtlı senaryolar"), h("span", { class: "spacer" }), h("a", { class: "btn", href: "#/senaryo/yeni" }, "Yeni senaryo")), scenarioList(U));
+  const listPanel = h("div", { class: "panel list" }, h("div", { class: "group-head" }, h("h3", {}, "Kayıtlı senaryolar"), h("span", { class: "spacer" }), h("a", { class: "btn sm", href: "#/senaryo/yeni" }, "Yeni senaryo")), scenarioList(U));
   root.append(h("div", { class: "rb-grid" }, form, listPanel));
   return root;
 }
 
 export function scenarioList(U) {
-  const { h, ov, api, toast, busy } = U;
+  const { h, ov } = U;
   const items = ov.scenarios || [];
-  if (!items.length) return h("p", { class: "muted small" }, "Henüz senaryo yok. Bir güzergâh ve araç seçip kaydedin.");
   const list = h("ul", { class: "itemlist" });
-  items.forEach(s => list.append(h("li", {}, h("div", { class: "main" }, h("div", { class: "name" }, s.name),
-    h("div", { class: "sum" }, s.error ? s.error : s.summary), h("div", { class: "badges" }, h("span", { class: "badge plain" }, s.kind_tr || ""), ...(s.vehicles || []).map(v => h("span", { class: "badge plain" }, v)), U.whenEl(s.modified)),
-    s.description ? h("div", { class: "sum muted" }, s.description) : null),
-    h("div", { class: "acts" },
-      h("button", { type: "button", class: "btn", title: "Aç ve hemen çalıştır", onclick: () => { U.store.set("autoRunScenario", s.stem); location.hash = `#/senaryo/${encodeURIComponent(s.stem)}`; } }, "Çalıştır"),
-      h("a", { class: "btn", href: `#/senaryo/${encodeURIComponent(s.stem)}` }, "Aç"),
-      U.itemMenu("scenario", s.stem, s.name)))));
+  if (!items.length) { list.append(h("li", { class: "empty" }, "Henüz senaryo yok. Bir güzergâh ve araç seçip kaydedin.")); return list; }
+  items.forEach(s => {
+    const href = `#/senaryo/${encodeURIComponent(s.stem)}`;
+    list.append(h("li", { class: s.error ? "err" : null },
+      h("div", { class: "main" },
+        h("div", { class: "name" }, h("a", { href }, s.name)),
+        h("div", { class: "sum", title: s.description || "" },
+          s.error ? h("span", { class: "badge err" }, "hatalı dosya") : h("span", { class: "badge plain" }, s.kind_tr || "senaryo"),
+          s.error ? s.error : [(s.vehicles || []).join(", "), s.summary].filter(Boolean).join(" · "))),
+      h("div", { class: "acts" }, U.whenEl(s.modified),
+        s.error ? null : h("button", { type: "button", class: "btn", title: "Aç ve hemen çalıştır", onclick: () => { U.store.set("autoRunScenario", s.stem); location.hash = href; } }, "Çalıştır"),
+        U.itemMenu("scenario", s.stem, s.name, { extra: [{ label: "Aç", href }] }))));
+  });
   return list;
 }
 

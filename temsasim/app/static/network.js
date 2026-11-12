@@ -18,7 +18,7 @@ export async function pageNetwork(U) {
   const vehicles = ov.vehicles.filter(v => !v.error);
   const { lines } = await api.get("/api/network/lines");
   const good = lines.filter(l => !l.error);
-  root.append(pageHead("Hat ve sefer", "Bir hattın bir günü",
+  root.append(pageHead("Hat ve sefer", "Hat ve sefer",
     "Sefer aralığını, trafiği ve talebi değiştirin; kaç otobüs gerektiğini, doluluğu, bekleme süresini ve günlük enerjiyi aynı modelle görün."));
   if (!vehicles.length || !good.length) {
     root.append(notice("warn", !vehicles.length ? "Önce bir araç kurun." : "Kütüphanede hat yok.",
@@ -70,8 +70,7 @@ export async function pageNetwork(U) {
     h("label", { class: "check" }, night, h("span", {}, "Gece")),
     h("div", { class: "field" }, h("div", { class: "lab" }, "Talep (zirveye göre)", h("span", { class: "spacer" }), demandOut), demand),
     field("Kapasite", capIn, { hint: "Boş bırakılırsa aracın oturan + ayakta kapasitesi." }),
-    h("div", {}, h("div", { class: "lab" }, "Sefer aralığı ve trafik"),
-      h("div", { class: "hint" }, "Soldaki değerler hattın tarifesi. Değiştirdikleriniz “deneme” olarak aynı günde yanına hesaplanır."), bandsBox),
+    h("div", {}, h("div", { class: "lab" }, "Sefer aralığı ve trafik", h("span", { class: "qm", title: "Değerler hattın tarifesi. Değiştirdikleriniz “deneme” olarak aynı günde yanına hesaplanır." }, "?")), bandsBox),
     runBtn);
 
   /* ---------------- results ---------------- */
