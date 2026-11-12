@@ -47,6 +47,7 @@ from ..scenarios import (KINDS_TR as SCENARIO_KINDS_TR, LOAD_MODES, Scenario, li
 from ..surfaces import SURFACES
 from ..share import (LABELS_TR as SHARE_LABELS_TR, copy_item, export_library, export_zip, import_zip, inspect_zip,
                      read_raw, write_raw)
+from .. import __version__
 from ..testlog import correlate_diesel, grade_along, list_campaigns, read_can_log, run_campaign
 from ..traffic import LEVELS as TRAFFIC_LEVELS
 from ..units import RPM, air_density
@@ -171,7 +172,7 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                         "load_modes": [[k, v] for k, v in LOAD_MODES.items()],
                         "surfaces": [{"key": k, "label": lab, "factor": f, "note": note} for k, lab, f, note in SURFACES],
                         "traffic_levels": [[k, v.label] for k, v in TRAFFIC_LEVELS.items()],
-                        "library_root": str(lib_root)})
+                        "library_root": str(lib_root), "version": __version__})
 
     @app.get("/api/schema/<kind>")
     def get_schema(kind):

@@ -140,7 +140,7 @@ export async function pageRoute(U, stem) {
     moreBox,
     h("span", { class: "spacer" }), h("a", { class: "btn ghost", href: "#/kutuphane" }, "Vazgeç"));
   const libPanel = h("details", { class: "panel" }, h("summary", { class: "small", style: "cursor:pointer" }, h("b", {}, "Kütüphanedeki güzergâhlar"), ` (${(ov.route_items || []).length})`),
-    h("div", { style: "margin-top:6px" }, routeList(U, { compact: true })));
+    h("div", { style: "margin-top:10px" }, routeList(U)));
   root.append(h("div", { class: "rb-top" }, specPanel, h("div", { class: "stack" }, totals, chartBox, warnBox)), h("div", { style: "margin-top:16px" }, segPanel), h("div", { style: "margin-top:16px" }, libPanel), bar);
 
   if (stem && stem !== "yeni") {
@@ -155,24 +155,23 @@ export async function pageRoute(U, stem) {
 export function routeList(U, { onOpen, compact } = {}) {
   const { h, fmt, ov } = U;
   const items = ov.route_items || [];
-  const list = h("ul", { class: "itemlist" });
-  if (!items.length) { list.append(h("li", { class: "empty" }, "Henüz güzergâh yok.")); return list; }
+  const t = U.dataTable([{ label: "Güzergâh" }, { label: "Uzunluk km", n: true }, { label: "Durak", n: true }, { label: "Işık", n: true }, { label: "Tırmanış m", n: true }, { label: "Sınır km/h", n: true }, { label: "Değişiklik" }, { label: "", acts: true }]);
+  if (!items.length) { t.body.append(h("tr", {}, h("td", { class: "empty", colspan: 8 }, "Henüz güzergâh yok."))); return t.table; }
   items.forEach(r => {
     const href = `#/guzergah/${encodeURIComponent(r.stem)}`;
     const tags = [r.kind_tr || "içe aktarılmış", r.has_wind ? "rüzgâr" : null, r.has_surface ? "yüzey" : null, r.boardings ? `${r.boardings} biniş` : null].filter(Boolean);
-    list.append(h("li", { class: r.error ? "err" : null },
-      h("div", { class: "main" },
-        h("div", { class: "name" }, h("a", { href, onclick: onOpen ? e => { e.preventDefault(); onOpen(r.stem); } : null }, r.name)),
-        h("div", { class: "sum", title: r.description || "" },
-          r.error ? h("span", { class: "badge err" }, "hatalı dosya") : h("span", { class: "badge plain" }, tags.join(" · ")),
-          r.error ? r.error : `${fmt(r.length_km, 1)} km · ${r.stops} durak · ${r.signals} ışık · tırmanış ${fmt(r.climb_m, 0)} m · ${r.elev_min}–${r.elev_max} m · sınır ort. ${r.mean_speed_limit_kmh} km/h`)),
-      h("div", { class: "acts" }, U.whenEl(r.modified),
+    const num = (v, d) => h("td", { class: "n" }, r.error ? "—" : fmt(v, d));
+    t.body.append(h("tr", { class: "item" + (r.error ? " err" : "") },
+      h("td", { class: "name" }, h("a", { href, title: r.description || "", onclick: onOpen ? e => { e.preventDefault(); onOpen(r.stem); } : null }, r.name), h("span", { class: "sub" }, r.error ? r.error : tags.join(" · "))),
+      num(r.length_km, 1), num(r.stops, 0), num(r.signals, 0), num(r.climb_m, 0), num(r.mean_speed_limit_kmh, 0),
+      h("td", { class: "when" }, U.whenEl(r.modified)),
+      h("td", { class: "act" }, h("div", { class: "acts" },
         r.error ? null : h("button", { type: "button", class: "btn", onclick: () => { U.store.set("simRoute", r.stem); U.store.set("dutyKind", "route"); location.hash = "#/simulasyon"; } }, "Simüle et"),
         U.itemMenu("route", r.stem, r.name, { extra: [
           { label: r.editable ? "Düzenle" : "Aç / kopyala", href },
-          { label: "Bu güzergâhla senaryo kur", onclick: () => { U.store.set("newScenarioRoute", r.stem); location.hash = "#/senaryo/yeni"; } }] }))));
+          { label: "Bu güzergâhla senaryo kur", onclick: () => { U.store.set("newScenarioRoute", r.stem); location.hash = "#/senaryo/yeni"; } }] })))));
   });
-  return list;
+  return t.table;
 }
 
 /* ================================================================ scenarios */
@@ -265,29 +264,34 @@ export async function pageScenario(U, stem) {
       isNew ? null : h("button", { type: "button", onclick: e => busy(e.currentTarget, async () => { const n = prompt("Kopyanın adı:", `${nameIn.value} kopya`); if (n) { nameIn.value = n; await save(false); } }) }, "Kopya olarak kaydet"),
       h("span", { class: "spacer" }), h("a", { class: "btn ghost", href: "#/senaryo" }, "Listeye dön")),
     results);
-  const listPanel = h("div", { class: "panel list" }, h("div", { class: "group-head" }, h("h3", {}, "Kayıtlı senaryolar"), h("span", { class: "spacer" }), h("a", { class: "btn sm", href: "#/senaryo/yeni" }, "Yeni senaryo")), scenarioList(U));
+  const listPanel = h("div", { class: "panel list" }, h("div", { class: "group-head" }, h("h3", {}, "Kayıtlı senaryolar"), h("span", { class: "spacer" }), h("a", { class: "btn sm", href: "#/senaryo/yeni" }, "Yeni senaryo")), scenarioList(U, { compact: true }));
   root.append(h("div", { class: "rb-grid" }, form, listPanel));
   return root;
 }
 
-export function scenarioList(U) {
+export function scenarioList(U, { compact } = {}) {
   const { h, ov } = U;
   const items = ov.scenarios || [];
-  const list = h("ul", { class: "itemlist" });
-  if (!items.length) { list.append(h("li", { class: "empty" }, "Henüz senaryo yok. Bir güzergâh ve araç seçip kaydedin.")); return list; }
+  const cols = compact ? [{ label: "Senaryo" }, { label: "", acts: true }] : [{ label: "Senaryo" }, { label: "Tür" }, { label: "Araçlar" }, { label: "Koşullar" }, { label: "Değişiklik" }, { label: "", acts: true }];
+  const t = U.dataTable(cols);
+  if (!items.length) { t.body.append(h("tr", {}, h("td", { class: "empty", colspan: cols.length }, "Henüz senaryo yok. Bir güzergâh ve araç seçip kaydedin."))); return t.table; }
   items.forEach(s => {
     const href = `#/senaryo/${encodeURIComponent(s.stem)}`;
-    list.append(h("li", { class: s.error ? "err" : null },
-      h("div", { class: "main" },
-        h("div", { class: "name" }, h("a", { href }, s.name)),
-        h("div", { class: "sum", title: s.description || "" },
-          s.error ? h("span", { class: "badge err" }, "hatalı dosya") : h("span", { class: "badge plain" }, s.kind_tr || "senaryo"),
-          s.error ? s.error : [(s.vehicles || []).join(", "), s.summary].filter(Boolean).join(" · "))),
-      h("div", { class: "acts" }, U.whenEl(s.modified),
-        s.error ? null : h("button", { type: "button", class: "btn", title: "Aç ve hemen çalıştır", onclick: () => { U.store.set("autoRunScenario", s.stem); location.hash = href; } }, "Çalıştır"),
-        U.itemMenu("scenario", s.stem, s.name, { extra: [{ label: "Aç", href }] }))));
+    const run = h("button", { type: "button", class: "btn", title: "Aç ve hemen çalıştır", onclick: () => { U.store.set("autoRunScenario", s.stem); location.hash = href; } }, "Çalıştır");
+    const acts = h("td", { class: "act" }, h("div", { class: "acts" }, s.error ? null : run, U.itemMenu("scenario", s.stem, s.name, { extra: [{ label: "Aç", href }] })));
+    const vehicles = (s.vehicles || []).join(", ");
+    t.body.append(compact
+      ? h("tr", { class: "item" + (s.error ? " err" : "") },
+          h("td", { class: "name" }, h("a", { href, title: s.description || "" }, s.name), h("span", { class: "sub" }, s.error ? s.error : [s.kind_tr, vehicles, s.summary].filter(Boolean).join(" · "))), acts)
+      : h("tr", { class: "item" + (s.error ? " err" : "") },
+          h("td", { class: "name" }, h("a", { href, title: s.description || "" }, s.name)),
+          h("td", {}, s.kind_tr || ""),
+          h("td", { class: "txt" }, vehicles),
+          h("td", { class: "txt" }, s.error ? s.error : s.summary),
+          h("td", { class: "when" }, U.whenEl(s.modified)),
+          acts));
   });
-  return list;
+  return t.table;
 }
 
 function resultTable(U, r, body) {
