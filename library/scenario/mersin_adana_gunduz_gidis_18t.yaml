@@ -1,0 +1,28 @@
+# Senaryo: güzergâh + araç(lar) + koşullar. Arayüzde Senaryo sayfasından düzenlenir.
+kind: scenario
+name: Mersin–Adana gündüz gidiş, 18 t (test tekrarı)
+scenario_kind: test
+description: 'Test ekibinin TRM-150-006-03 gündüz gidiş koşulu: 18 t, cruise 100 km/h,
+  klima kapalı, 33,5 °C, 1,1 m/s karşı rüzgâr. Sürücü modeli iz üretir; ölçülen izle
+  karşılaştırma Doğrulama sayfasındadır.'
+duty:
+  route: mersin_adana_otoyol_gidis
+  direction: gidis
+  laps: 1
+vehicles:
+- maraton_13_dizel
+conditions:
+  ambient_c: 33.5
+  solar: 800
+  night: false
+  hvac_off: true
+  headwind_mps: 1.1
+  pressure_hpa: 1004.4
+load:
+  mode: mass
+  passengers: 40
+  mass_kg: 18000
+traffic: yok
+overrides: {}
+daily_km: 200.0
+notes: ''

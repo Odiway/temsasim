@@ -20,7 +20,8 @@ düzeltildiğinde o motoru kullanan bütün araçlar düzelir.
 | `auxiliary/` | Yardımcı tüketiciler (24 V yükleri, direksiyon, kompresör) | YAML |
 | `aging/` | Elektrikli: batarya yaşlanma katsayıları | YAML |
 | `cycle/` | Standart hız çevrimleri (ADVISOR'dan) | CSV: `time_s, speed_mps` |
-| `route/` | Güzergâhlar: mesafe, rakım, hız sınırı, durak | CSV: `distance_m, elevation_m, speed_limit_kmh, stop` |
+| `route/` | Güzergâhlar: mesafe, rakım, hız sınırı, durak, ışık, yüzey, rüzgâr, durak adı/bekleme/biniş/iniş | CSV (çözücü okur) + aynı adlı YAML (güzergâh oluşturucunun bölüm tanımı; varsa düzenlenebilir) |
+| `scenario/` | Senaryolar: güzergâh/çevrim + araçlar + koşullar + yük + trafik | YAML |
 | `line/` | Hat ve tarife: duraklar, biniş, saat bantları | YAML |
 | `testlog/<kampanya>/` | Test ekibinin ölçüm kayıtları ve `meta.yaml` (koşullar, ölçülen yakıt) | CSV + YAML |
 | `.cop_kutusu/` | Arayüzden silinen dosyalar; geri alınabilir | |
@@ -92,4 +93,6 @@ yazım hatası varsayılanı yerinde bırakmak yerine yüklemeyi durdurur.
   loglarından. Dönüş yönü için ters okunur.
 - `testlog/mersin_adana_2026_09/`: 9 koşu (gündüz gidiş/dönüş, gece gidiş), test
   raporu TRM-150-006-03'ün koşul ve sonuç tablosu `meta.yaml` içinde.
+- `route/sehir_ici_ornek_20_durak`, `route/otoyol_ornek_45_km`: güzergâh oluşturucu şablonları (düzenlenebilir).
+- `scenario/`: Mersin–Adana gündüz gidiş 18 t (test tekrarı), şehir içi yaz zirvesi, otoyol kış gecesi.
 - Yer tutucu elektrikli otobüsler burada değil, `examples/vehicle/` altındadır.

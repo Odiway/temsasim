@@ -40,6 +40,11 @@ from ..report_diesel import render_diesel_report
 from ..schema import (COMPONENT_KINDS, KIND_LABELS_TR, STRUCTURED, VEHICLE_SLOTS, component_values,
                       raw_description, safe_stem, save_component, save_vehicle, schema)
 from ..simulator import run, simulate
+from ..routes import (KINDS_TR as ROUTE_KINDS_TR, RouteSpec, from_route_csv, list_routes, load_spec, save_spec,
+                      template as route_template)
+from ..scenarios import (KINDS_TR as SCENARIO_KINDS_TR, LOAD_MODES, Scenario, list_scenarios, load_scenario,
+                         run_scenario, save_scenario)
+from ..surfaces import SURFACES
 from ..testlog import correlate_diesel, grade_along, list_campaigns, read_can_log, run_campaign
 from ..traffic import LEVELS as TRAFFIC_LEVELS
 from ..units import RPM, air_density
@@ -152,6 +157,11 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                         "powertrains": [[k, v] for k, v in POWERTRAINS.items()],
                         "slots_by_powertrain": SLOTS_BY_POWERTRAIN,
                         "cycles": L.list_cycles(), "routes": _routes(L),
+                        "route_items": list_routes(L.root), "scenarios": list_scenarios(L.root),
+                        "route_kinds": [[k, v] for k, v in ROUTE_KINDS_TR.items()],
+                        "scenario_kinds": [[k, v] for k, v in SCENARIO_KINDS_TR.items()],
+                        "load_modes": [[k, v] for k, v in LOAD_MODES.items()],
+                        "surfaces": [{"key": k, "label": lab, "factor": f, "note": note} for k, lab, f, note in SURFACES],
                         "traffic_levels": [[k, v.label] for k, v in TRAFFIC_LEVELS.items()],
                         "library_root": str(lib_root)})
 
@@ -706,6 +716,96 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                         "meas_soc": None if meas_soc is None else np.round(meas_soc[::step], 2).tolist()},
         })
 
+    # ------------------------------------------------------------ route builder
+    @app.get("/api/routes")
+    def routes_list():
+        return jsonify({"routes": list_routes(lib().root)})
+
+    @app.get("/api/route/<stem>")
+    def route_get(stem):
+        L = lib()
+        stem = safe_stem(stem)
+        if (L.root / "route" / f"{stem}.yaml").exists():
+            spec = load_spec(L.root, stem)
+            return jsonify({"spec": spec.to_dict(), "preview": spec.preview(), "editable": True})
+        spec = from_route_csv(L.root, stem)
+        return jsonify({"spec": spec.to_dict(), "preview": spec.preview(), "editable": False,
+                        "note": "İçe aktarılmış güzergâh; 500 m bölümlere yaklaştırıldı. Kaydedince düzenlenebilir bir kopya oluşur."})
+
+    @app.get("/api/route/template/<kind>")
+    def route_template_get(kind):
+        spec = route_template(kind, **{k: float(v) for k, v in request.args.items() if k in ("stops", "spacing_m", "grade_amp_pct")})
+        return jsonify({"spec": spec.to_dict(), "preview": spec.preview()})
+
+    @app.post("/api/route/preview")
+    def route_preview():
+        spec = RouteSpec(**_spec_kwargs(request.get_json(force=True)))
+        return jsonify({"preview": spec.preview(), "stem": spec.stem})
+
+    @app.post("/api/route")
+    def route_save():
+        b = request.get_json(force=True)
+        spec = RouteSpec(**_spec_kwargs(b))
+        out = save_spec(lib().root, spec, overwrite=bool(b.get("overwrite")))
+        return jsonify(out)
+
+    @app.post("/api/route/<stem>/delete")
+    def route_delete(stem):
+        L = lib()
+        stem = safe_stem(stem)
+        used = [s["stem"] for s in list_scenarios(L.root) if (s.get("duty") or {}).get("route") == stem]
+        if used:
+            raise ValueError(f"Bu güzergâhı kullanan senaryolar var: {', '.join(used)}. Önce onları değiştirin.")
+        trash = L.root / ".cop_kutusu" / "route"; trash.mkdir(parents=True, exist_ok=True)
+        moved = []
+        for ext in ("csv", "yaml"):
+            src = L.root / "route" / f"{stem}.{ext}"
+            if src.exists():
+                dst = trash / f"{stem}_{time.strftime('%Y%m%d_%H%M%S')}.{ext}"
+                shutil.move(str(src), dst); moved.append(dst.name)
+        return jsonify({"moved": moved})
+
+    # ------------------------------------------------------------ scenarios
+    @app.get("/api/scenarios")
+    def scenarios_list():
+        return jsonify({"scenarios": list_scenarios(lib().root)})
+
+    @app.get("/api/scenario/<stem>")
+    def scenario_get(stem):
+        sc = load_scenario(lib().root, stem)
+        return jsonify({"scenario": sc.to_dict(), "stem": sc.stem, "summary": sc.summary_tr()})
+
+    @app.post("/api/scenario")
+    def scenario_save():
+        b = request.get_json(force=True)
+        sc = Scenario.from_dict(b, stem=b.get("stem") or "")
+        if not sc.vehicles:
+            raise ValueError("Senaryoda en az bir araç seçilmeli.")
+        if not (sc.duty.get("route") or sc.duty.get("cycle")):
+            raise ValueError("Senaryoda bir güzergâh ya da çevrim seçilmeli.")
+        p = save_scenario(lib().root, sc, overwrite=bool(b.get("overwrite")))
+        return jsonify({"saved": f"scenario/{p.name}", "stem": sc.stem})
+
+    @app.post("/api/scenario/<stem>/delete")
+    def scenario_delete(stem):
+        L = lib()
+        src = L.root / "scenario" / f"{safe_stem(stem)}.yaml"
+        trash = L.root / ".cop_kutusu" / "scenario"; trash.mkdir(parents=True, exist_ok=True)
+        dst = trash / f"{src.stem}_{time.strftime('%Y%m%d_%H%M%S')}.yaml"
+        shutil.move(str(src), dst)
+        return jsonify({"moved_to": str(dst.relative_to(L.root))})
+
+    @app.post("/api/scenario/run")
+    def scenario_run():
+        """Run a scenario given inline (saved or not) on its vehicles; keep a report per vehicle."""
+        b = request.get_json(force=True)
+        L = lib()
+        sc = load_scenario(L.root, b["stem"]) if b.get("stem") and not b.get("scenario") else Scenario.from_dict(b.get("scenario") or b, stem=b.get("stem") or "")
+        vehicles = b.get("vehicles") or None
+        out = run_scenario(L, sc, vehicles=vehicles,
+                           render=lambda res: reports.put(_render(res, daily_km=float(sc.daily_km or 200))))
+        return jsonify({k: v for k, v in out.items() if k != "results"})
+
     # ------------------------------------------------------------ diesel fuel tests (test-team CAN logs)
     @app.get("/api/campaigns")
     def campaigns():
@@ -751,6 +851,17 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                         "overlay": _overlay(log, c), "summary": c.summary()})
 
     return app
+
+
+def _spec_kwargs(b: dict) -> dict:
+    """Route-spec fields from a request body; unknown keys are dropped."""
+    keys = ("name", "stem", "kind", "description", "start_elevation_m", "segments", "notes", "source")
+    out = {k: b[k] for k in keys if k in b}
+    if "route_kind" in b and "kind" not in out:
+        out["kind"] = b["route_kind"]
+    if not out.get("name"):
+        raise ValueError("Güzergâh adı boş olamaz.")
+    return out
 
 
 def _overlay(log, c, points: int = 1500) -> dict:
@@ -1024,15 +1135,6 @@ def _kpi(result) -> dict:
 # Road surfaces for the free-drive road editor: rolling-resistance multiplier
 # relative to the good dry asphalt the chassis coefficients describe. Typical
 # literature values for heavy-vehicle tyres, not measurements -- the UI says so.
-SURFACES = [
-    ("yeni_asfalt", "Yeni asfalt", 0.95, "pürüzsüz, yeni serilmiş"),
-    ("asfalt", "İyi asfalt", 1.00, "şasi katsayılarının tanımlandığı yüzey"),
-    ("beton", "Beton", 0.97, "derzli beton kaplama"),
-    ("eski_asfalt", "Eskimiş asfalt", 1.15, "yamalı, çatlaklı"),
-    ("parke", "Parke taşı", 1.40, "kilitli beton parke"),
-    ("arnavut", "Arnavut kaldırımı", 1.80, "doğal taş, çok pürüzlü"),
-    ("stabilize", "Stabilize yol", 2.30, "sıkıştırılmış çakıl ve toprak"),
-]
 
 
 def _cycle_tr(c) -> str:

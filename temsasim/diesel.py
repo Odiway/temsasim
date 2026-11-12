@@ -187,7 +187,7 @@ def simulate_diesel(
         # --- road load ---------------------------------------------------------
         m_eq = ch.equivalent_rotating_mass_kg(tr.referred_inertia_kgm2(gear, eng.inertia_kgm2) if moving else 0.0)
         forces = ch.resistive_force(v, mass_kg=mass, grade_rad=theta,
-                                    air_density=rho, headwind_mps=env.headwind_mps)
+                                    air_density=rho, headwind_mps=env.headwind_mps + float(cyc.headwind_mps[i]))
         f_roll = float(forces["rolling"]) * float(cyc.surface_factor[i])
         f_aero = float(forces["aero"])
         f_grade = float(forces["grade"]) if moving else 0.0

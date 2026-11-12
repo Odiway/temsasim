@@ -1,0 +1,27 @@
+# Senaryo: güzergâh + araç(lar) + koşullar. Arayüzde Senaryo sayfasından düzenlenir.
+kind: scenario
+name: Şehir içi yaz zirvesi, duraklardan yolcu
+scenario_kind: sehir_ici
+description: Örnek şehir hattında 32 °C, güneşli, orta trafik; yolcu sayısı durakların
+  biniş/iniş değerlerinden.
+duty:
+  route: sehir_ici_ornek_20_durak
+  direction: gidis
+  laps: 1
+vehicles:
+- maraton_13_dizel
+conditions:
+  ambient_c: 32
+  solar: 700
+  night: false
+  hvac_off: false
+  headwind_mps: 0
+  pressure_hpa: 1013.25
+load:
+  mode: stops
+  passengers: 0
+  mass_kg: null
+traffic: orta
+overrides: {}
+daily_km: 200.0
+notes: ''

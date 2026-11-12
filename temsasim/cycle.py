@@ -78,6 +78,10 @@ class DriveCycle:
     asphalt); worn asphalt, setts and gravel are higher. Defaults to all ones,
     so cycles that do not set it are unaffected."""
 
+    headwind_mps: np.ndarray | None = None
+    """Wind against the direction of travel [m/s], per sample, from the route.
+    Added to the run's ``Environment.headwind_mps``. Negative is a tailwind."""
+
     # ----------------------------------------------------------------------
     def __post_init__(self) -> None:
         self.time_s = np.asarray(self.time_s, dtype=float)
@@ -99,6 +103,11 @@ class DriveCycle:
         self.surface_factor = np.asarray(self.surface_factor, dtype=float)
         if self.surface_factor.size != n:
             raise ValueError(f"cycle {self.name!r}: surface_factor length differs")
+        if self.headwind_mps is None:
+            self.headwind_mps = np.zeros(n)
+        self.headwind_mps = np.asarray(self.headwind_mps, dtype=float)
+        if self.headwind_mps.size != n:
+            raise ValueError(f"cycle {self.name!r}: headwind_mps length differs")
 
     def _infer_door_state(self, stop_speed_mps: float = 0.2,
                           min_dwell_s: float = 6.0) -> np.ndarray:
@@ -186,6 +195,7 @@ class DriveCycle:
             source=self.source,
             meta=self.meta,
             surface_factor=np.interp(t_new, self.time_s, self.surface_factor),
+            headwind_mps=np.interp(t_new, self.time_s, self.headwind_mps),
         )
 
     def with_occupancy(self, passengers, *, seats: int | None = None) -> "DriveCycle":
@@ -209,14 +219,14 @@ class DriveCycle:
             pax = np.clip(pax, 0.0, float(seats))
         return DriveCycle(self.time_s, self.speed_mps, self.grade_rad, pax,
                           self.doors_open, self.name, self.source, self.meta,
-                          surface_factor=self.surface_factor)
+                          surface_factor=self.surface_factor, headwind_mps=self.headwind_mps)
 
     def repeat(self, n: int) -> "DriveCycle":
         """Concatenate the cycle n times, for range-to-empty runs."""
         if n < 1:
             raise ValueError("n must be >= 1")
         dt = float(np.median(np.diff(self.time_s)))
-        times, speeds, grades, pax, doors, surf = [], [], [], [], [], []
+        times, speeds, grades, pax, doors, surf, wind = [], [], [], [], [], [], []
         for k in range(n):
             offset = k * (self.duration_s + dt)
             times.append(self.time_s + offset)
@@ -225,11 +235,12 @@ class DriveCycle:
             pax.append(self.passengers)
             doors.append(self.doors_open)
             surf.append(self.surface_factor)
+            wind.append(self.headwind_mps)
         return DriveCycle(
             np.concatenate(times), np.concatenate(speeds), np.concatenate(grades),
             np.concatenate(pax), np.concatenate(doors),
             name=f"{self.name} x{n}", source=self.source,
-            surface_factor=np.concatenate(surf))
+            surface_factor=np.concatenate(surf), headwind_mps=np.concatenate(wind))
 
     # ----------------------------------------------------------------------
     @classmethod
@@ -298,10 +309,66 @@ class Route:
     """Traffic lights along the route. Empty means none are known, and a
     plausible urban spacing is generated when traffic is simulated."""
 
+    surface_factor: np.ndarray | None = None
+    """Rolling-resistance multiplier along the route (1.0 = good asphalt)."""
+    headwind_mps: np.ndarray | None = None
+    """Wind against the direction of travel along the route [m/s]."""
+    stops: dict = field(default_factory=dict)
+    """Per-stop detail keyed by position [m]: ``{"name", "dwell_s", "board", "alight"}``.
+    Stops without an entry use ``stop_dwell_s`` and carry no passenger change."""
+    kind: str = ""
+    """``sehir_ici``, ``otoyol`` or ``serbest`` when the route was built in the
+    route builder; empty for imported routes."""
+
     def __post_init__(self) -> None:
         self.distance_m = np.asarray(self.distance_m, dtype=float)
         self.elevation_m = np.asarray(self.elevation_m, dtype=float)
         self.speed_limit_mps = np.asarray(self.speed_limit_mps, dtype=float)
+        n = self.distance_m.size
+        self.surface_factor = np.ones(n) if self.surface_factor is None else np.asarray(self.surface_factor, dtype=float)
+        self.headwind_mps = np.zeros(n) if self.headwind_mps is None else np.asarray(self.headwind_mps, dtype=float)
+        self.stops = {round(float(k), 1): dict(v) for k, v in (self.stops or {}).items()}
+
+    def dwell_at(self, pos_m: float) -> float:
+        """Dwell time at the stop nearest ``pos_m`` (per-stop value or the default)."""
+        if self.stops:
+            k = min(self.stops, key=lambda p: abs(p - pos_m))
+            if abs(k - pos_m) < 5.0 and self.stops[k].get("dwell_s") is not None:
+                return float(self.stops[k]["dwell_s"])
+        return float(self.stop_dwell_s)
+
+    def occupancy_from_stops(self, start: float = 0.0):
+        """Passengers on board as a function of normalised distance, from the
+        boarding and alighting counts stored per stop. Returns None when no
+        stop carries counts."""
+        if not any(v.get("board") or v.get("alight") for v in self.stops.values()):
+            return None
+        L = max(float(self.distance_m[-1]), 1e-9)
+        pos = sorted(self.stops)
+        levels, n = [], float(start)
+        for p in pos:
+            n = max(0.0, n - float(self.stops[p].get("alight") or 0) + float(self.stops[p].get("board") or 0))
+            levels.append((p / L, n))
+
+        def occ(f):
+            val = float(start)
+            for fp, lv in levels:
+                if f >= fp - 1e-9:
+                    val = lv
+            return val
+        return occ
+
+    def reversed(self) -> "Route":
+        """The same road driven the other way: distances re-origin at the far
+        end, climbs become descents, headwind flips sign, stop order reverses."""
+        L = float(self.distance_m[-1])
+        d = L - self.distance_m[::-1]
+        return Route(d, self.elevation_m[::-1], self.speed_limit_mps[::-1],
+                     [L - s for s in sorted(self.stop_positions_m, reverse=True)],
+                     self.stop_dwell_s, f"{self.name} (dönüş)", self.source,
+                     signal_positions_m=[L - s for s in sorted(self.signal_positions_m, reverse=True)],
+                     surface_factor=self.surface_factor[::-1], headwind_mps=-self.headwind_mps[::-1],
+                     stops={L - k: v for k, v in self.stops.items()}, kind=self.kind)
 
     @property
     def length_km(self) -> float:
@@ -353,6 +420,8 @@ class Route:
         """
         from .traffic import drive
 
+        if isinstance(occupancy, str) and occupancy == "stops":
+            occupancy = self.occupancy_from_stops()
         a_limit_fn = None
         if vehicle is not None:
             ch = vehicle.chassis
@@ -387,15 +456,18 @@ class Route:
             if seats is not None:
                 pax = np.clip(pax, 0.0, float(seats))
         name = self.name if laps <= 1 else f"{self.name} x{laps}"
+        surf = np.interp(local, self.distance_m, self.surface_factor)
+        wind = np.interp(local, self.distance_m, self.headwind_mps)
         return DriveCycle(times, speeds, grade, pax, doors, name=name,
-                          source=f"route:{self.source}", meta=meta)
+                          source=f"route:{self.source}", meta=meta,
+                          surface_factor=surf, headwind_mps=wind)
 
     @classmethod
     def from_csv(cls, path, name: str = "") -> "Route":
         """Read a route CSV with columns ``distance_m``, ``elevation_m``,
         ``speed_limit_kmh`` and an optional ``stop`` flag column."""
         path = pathlib.Path(path)
-        with path.open(newline="") as fh:
+        with path.open(newline="", encoding="utf-8-sig") as fh:
             rows = list(csv.DictReader(line for line in fh if not line.lstrip().startswith('#')))
         d = np.array([float(r["distance_m"]) for r in rows])
         e = np.array([float(r["elevation_m"]) for r in rows])
@@ -403,11 +475,19 @@ class Route:
             vl = np.array([float(r["speed_limit_kmh"]) for r in rows]) / 3.6
         else:
             vl = np.full(d.size, 50.0 / 3.6)
-        flag = lambda r, k: str(r.get(k, "0")).strip() in ("1", "true", "True")
+        flag = lambda r, k: str(r.get(k, "0") or "0").strip() in ("1", "true", "True")
+        num = lambda r, k, dflt: float(r[k]) if r.get(k) not in (None, "") else dflt
         stops = [float(r["distance_m"]) for r in rows if flag(r, "stop")]
         signals = [float(r["distance_m"]) for r in rows if flag(r, "signal")]
+        surf = np.array([num(r, "surface_factor", 1.0) for r in rows]) if "surface_factor" in rows[0] else None
+        wind = np.array([num(r, "headwind_mps", 0.0) for r in rows]) if "headwind_mps" in rows[0] else None
+        detail = {}
+        for r in rows:
+            if flag(r, "stop") and any(r.get(k) not in (None, "") for k in ("stop_name", "dwell_s", "board", "alight")):
+                detail[float(r["distance_m"])] = {"name": r.get("stop_name") or "", "dwell_s": num(r, "dwell_s", None),
+                                                  "board": num(r, "board", 0.0), "alight": num(r, "alight", 0.0)}
         return cls(d, e, vl, stops, name=name or path.stem, source=f"csv:{path.name}",
-                   signal_positions_m=signals)
+                   signal_positions_m=signals, surface_factor=surf, headwind_mps=wind, stops=detail)
 
     def summary(self) -> str:
         climb = float(np.sum(np.clip(np.diff(self.elevation_m), 0, None)))

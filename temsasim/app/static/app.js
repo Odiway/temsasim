@@ -471,8 +471,17 @@ function pageHead(eyebrow, title, lede, actions) {
 const PAGES = {
   kutuphane: pageLibrary, yukle: pageUpload, bilesen: pageComponent,
   arac: pageVehicle, simulasyon: pageSim, surus: pageDrive, hat: pageNetwork, dogrulama: pageValidate,
+  guzergah: pageRouteBuilder, senaryo: pageScenarios,
 };
-const PAGE_SIGN = { kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bileşen", arac: "Araç kur", simulasyon: "Simülasyon", surus: "Serbest sürüş", hat: "Hat ve sefer", dogrulama: "Doğrulama" };
+const PAGE_SIGN = { kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bileşen", arac: "Araç kur", simulasyon: "Simülasyon", surus: "Serbest sürüş", hat: "Hat ve sefer", dogrulama: "Doğrulama",
+  guzergah: "Güzergâh", senaryo: "Senaryo" };
+/* The shared toolkit the page modules (network.js, drive.js, routes.js) receive. */
+function pageKit() {
+  return { h, api, store, fmt, parseNum, seg, select, field, numInput, toast, busy, notice, ov: OV, pageHead, lineChart, css, overview, route, kpi,
+    setCleanup: fn => (pageCleanup = fn), raster: Sign.raster };
+}
+async function pageRouteBuilder(stem) { const mod = await import("/static/routes.js"); return mod.pageRoute(pageKit(), stem); }
+async function pageScenarios(stem) { const mod = await import("/static/routes.js"); return mod.pageScenario(pageKit(), stem); }
 
 async function route() {
   const parts = (location.hash || "#/kutuphane").replace(/^#\/?/, "").split("/").map(decodeURIComponent);
@@ -511,6 +520,10 @@ async function pageLibrary() {
     "Her bileşen bir kez tanımlanır ve onu kullanan her araç ondan beslenir. Tedarikçiden gerçek harita geldiğinde bir kez yükleyin; bağlı bütün araçlar güncellenir.",
     [h("a", { class: "btn", href: "#/yukle" }, "Veri yükle"), h("a", { class: "btn", href: "#/arac/yeni" }, "Yeni araç")]));
 
+  const q = h("input", { type: "search", placeholder: "Ara: bileşen, araç, güzergâh…", style: "max-width:360px" });
+  q.addEventListener("input", () => { const s = q.value.trim().toLocaleLowerCase("tr-TR");
+    $$(".itemlist li, .vehicle-card", root).forEach(el => { el.hidden = s !== "" && !el.textContent.toLocaleLowerCase("tr-TR").includes(s); }); });
+  root.append(h("div", { class: "row", style: "margin:0 0 12px" }, q, h("span", { class: "muted small" }, "Ölçülmedi rozeti: dosya kabul değerleri içeriyor; açıklamasında kaynağı yazar.")));
   root.append(h("h2", { style: "margin:4px 0 10px" }, "Araçlar"));
   const vg = h("div", { class: "grid-auto" });
   if (!ov.vehicles.length) vg.append(h("div", { class: "panel empty" }, "Henüz araç yok. ", h("a", { href: "#/arac/yeni" }, "İlk aracı kurun"), "."));
@@ -527,6 +540,12 @@ async function pageLibrary() {
   });
   root.append(vg);
 
+  const rmod = await import("/static/routes.js");
+  root.append(h("div", { class: "grid-2", style: "margin-top:28px" },
+    h("div", { class: "panel" }, h("div", { class: "group-head" }, h("h3", {}, "Güzergâhlar"), h("span", { class: "muted small" }, (ov.route_items || []).length), h("span", { class: "spacer" }), h("a", { class: "btn", href: "#/guzergah/yeni" }, "Oluştur"), h("a", { class: "btn", href: "#/yukle/guzergah" }, "GPX yükle")),
+      rmod.routeList(pageKit(), { onOpen: s => (location.hash = `#/guzergah/${encodeURIComponent(s)}`), compact: true })),
+    h("div", { class: "panel" }, h("div", { class: "group-head" }, h("h3", {}, "Senaryolar"), h("span", { class: "muted small" }, (ov.scenarios || []).length), h("span", { class: "spacer" }), h("a", { class: "btn", href: "#/senaryo/yeni" }, "Yeni senaryo")),
+      rmod.scenarioList(pageKit()))));
   root.append(h("h2", { style: "margin:28px 0 10px" }, "Bileşenler"));
   const cg = h("div", { class: "grid-auto" });
   ov.components.forEach(g => {
@@ -1212,11 +1231,25 @@ async function pageSim() {
       traffic: dutyKind === "route" ? trafficLevel : "yok" };
   };
 
+  const scSel = select([["", "— senaryo seç —"], ...(ov.scenarios || []).filter(s => !s.error).map(s => [s.stem, s.name])], "");
+  scSel.addEventListener("change", async () => {
+    if (!scSel.value) return;
+    const sc = (await api.get(`/api/scenario/${encodeURIComponent(scSel.value)}`)).scenario;
+    if (sc.vehicles && sc.vehicles.length) { vSel.value = sc.vehicles[0]; vSel.dispatchEvent(new Event("change")); }
+    if (sc.duty.route) { dutyKind = "route"; store.set("simRoute", sc.duty.route); } else { dutyKind = "cycle"; store.set("simCycle", sc.duty.cycle); }
+    fillDuty(); drawTraffic(); trafficLevel = sc.traffic || "yok"; store.set("simTraffic", trafficLevel); drawTraffic();
+    amb.value = sc.conditions.ambient_c; sol.value = sc.conditions.solar || 0; updRanges(); night.checked = !!sc.conditions.night; hvacOff.checked = !!sc.conditions.hvac_off;
+    $("input", pax).value = String(sc.load.passengers || 0); occMode = sc.load.mode === "constant" ? "constant" : "profile";
+    $("input", repeat).value = String(sc.duty.laps || sc.duty.repeat || 1);
+    toast(`Senaryo yüklendi: ${sc.name}. Kütle/rüzgâr gibi ayrıntılar için Senaryolar sayfasında çalıştırın.`);
+    loadPreview();
+  });
   const runBtn = h("button", { class: "primary simx-run", type: "button" }, "Simülasyonu çalıştır");
   const setup = h("aside", { class: "hud simx-setup", "aria-label": "Simülasyon kurulumu" },
     h("div", { class: "hud-head" }, h("span", { class: "eyebrow" }, "Kurulum"), h("span", { class: "spacer" }),
       h("button", { type: "button", class: "ghost hud-x", title: "Paneli gizle", onclick: () => toggleSetup(false) }, "Gizle")),
     h("div", { class: "hud-body stack" },
+      (ov.scenarios || []).length ? field("Kayıtlı senaryo", scSel) : null,
       field("Araç", vSel),
       h("div", {}, h("div", { class: "lab simx-lab" }, "Görev"),
         seg([["route", "Güzergâh"], ["cycle", "Standart çevrim"]], dutyKind, v => { dutyKind = v; fillDuty(); drawTraffic(); loadPreview(); }),

@@ -1,0 +1,50 @@
+# Güzergâh tanımı (route builder). CSV bu dosyadan üretilir; ikisini birlikte tutun.
+kind: route_spec
+route_kind: otoyol
+name: Otoyol örnek (45 km, tesis duruşu)
+stem: otoyol_ornek_45_km
+description: 'Şablon: 45 km, 100 km/h, bir dinlenme tesisinde 5 dk rölanti, 1,5 m/s
+  karşı rüzgâr, %2 tepe.'
+start_elevation_m: 50.0
+segments:
+- length_m: 2000.0
+  grade_pct: 0.0
+  speed_limit_kmh: 80.0
+  surface: asfalt
+  name: Şehir çıkışı
+- length_m: 12000.0
+  grade_pct: 0.3
+  speed_limit_kmh: 100.0
+  surface: asfalt
+  headwind_mps: 1.5
+  name: Hafif tırmanış
+- length_m: 6000.0
+  grade_pct: 2.0
+  speed_limit_kmh: 100.0
+  surface: asfalt
+  headwind_mps: 1.5
+  name: Tepe
+- length_m: 8000.0
+  grade_pct: -1.5
+  speed_limit_kmh: 100.0
+  surface: asfalt
+  headwind_mps: 1.5
+  stop:
+    name: Dinlenme tesisi
+    dwell_s: 300.0
+    board: 0.0
+    alight: 0.0
+  name: İniş ve tesis
+- length_m: 15000.0
+  grade_pct: 0.0
+  speed_limit_kmh: 100.0
+  surface: asfalt
+  headwind_mps: 1.5
+  name: Düz
+- length_m: 2000.0
+  grade_pct: 0.0
+  speed_limit_kmh: 70.0
+  surface: asfalt
+  name: Gişe yaklaşımı
+notes: ''
+source: route builder

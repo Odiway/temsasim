@@ -386,7 +386,7 @@ pack_preconditioned    false</div>
 
 <!-- =============================================================== 3 -->
 <section id="gorev">
-  <div class="shead"><span class="num">3</span><h2>Görev üretimi: güzergâhtan hız izine</h2><p>Güzergâh dosyası mesafeye göre rakım, hız sınırı ve durak verir. Zamana göre hız izini sürücü modeli üretir. Trafik, ışıklar ve sıkışma bu sürücünün kararlarına girer; karar kayıtları <code>meta</code> içinde saklanır ve oynatmada aynen gösterilir.</p></div>
+  <div class="shead"><span class="num">3</span><h2>Görev üretimi: güzergâhtan hız izine</h2><p>Güzergâh dosyası mesafeye göre rakım, hız sınırı, durak (ad, bekleme, biniş/iniş), ışık, yüzey çarpanı ve rüzgâr verir; güzergâh oluşturucu (<code>routes.py</code>) bunu bölüm bölüm tanımdan üretir, senaryo (<code>scenarios.py</code>) güzergâhı araçlar ve koşullarla birleştirip saklar. Yüzey yuvarlanma direncini ölçekler, güzergâh rüzgârı koşunun rüzgârına eklenir, dönüş yönü aynı dosyanın tersten okunmasıdır. Zamana göre hız izini sürücü modeli üretir. Trafik, ışıklar ve sıkışma bu sürücünün kararlarına girer; karar kayıtları <code>meta</code> içinde saklanır ve oynatmada aynen gösterilir.</p></div>
   <figure class="w-xl"><div class="scroll">
   <svg viewBox="0 0 1180 560" role="img" aria-label="Sürücü modeli her saniye serbest hızı, en yakın hedefi ve hızlanma sınırını hesaplar; durak, sıkışma ve ışıkta bekleme durumlarına girer; sonuçta zaman, hız, konum ve kapı dizileri ile meta çıkar.">
     <defs>

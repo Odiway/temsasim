@@ -422,6 +422,10 @@ def read_vecto_path(path) -> VectoFile:
 
 
 def safe_name(text: str) -> str:
+    """A file stem: ASCII letters, digits and underscores, Turkish letters folded."""
+    import unicodedata
     table = str.maketrans("ıİşŞğĞüÜöÖçÇ", "iISsGgUuOoCc")
-    s = re.sub(r"[^a-z0-9]+", "_", text.translate(table).lower()).strip("_")
+    s = unicodedata.normalize("NFKD", str(text).translate(table))
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    s = re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")
     return s or "vecto"

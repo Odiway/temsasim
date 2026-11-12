@@ -1,0 +1,26 @@
+# Senaryo: güzergâh + araç(lar) + koşullar. Arayüzde Senaryo sayfasından düzenlenir.
+kind: scenario
+name: Otoyol kış gecesi, dolu
+scenario_kind: otoyol
+description: Örnek otoyolda −5 °C gece, 50 yolcu, kabin ısıtması açık.
+duty:
+  route: otoyol_ornek_45_km
+  direction: gidis
+  laps: 1
+vehicles:
+- maraton_13_dizel
+conditions:
+  ambient_c: -5
+  solar: 0
+  night: true
+  hvac_off: false
+  headwind_mps: 0
+  pressure_hpa: 1013.25
+load:
+  mode: constant
+  passengers: 50
+  mass_kg: null
+traffic: yok
+overrides: {}
+daily_km: 200.0
+notes: ''

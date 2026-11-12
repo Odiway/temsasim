@@ -37,9 +37,11 @@ bilgisayarda çalışır, şirket ağına açılmaz. İnternet gerekmez.
 
 | Bölüm | Ne yapar |
 |---|---|
-| **Kütüphane** | Tüm araçlar ve bileşenler; hangisi ölçümle doğrulandı, hangisi hâlâ varsayılan. |
+| **Kütüphane** | Tüm araçlar, bileşenler, güzergâhlar ve senaryolar; arama kutusu; hangisi ölçümle doğrulandı, hangisi hâlâ varsayılan. Yapı `library/README.md`'de. |
 | **Veri yükle** | **VECTO dosyaları:** homologasyonun motor, şanzıman, aks, lastik ve araç XML dosyalarını (klasörü olduğu gibi) bırakın; dizel dijital ikiz kurulur, her değerin hangi dosyadan geldiği gösterilir. Ayrıca motor verim haritası, güzergâh (GPX / tablo), batarya ve klima eğrileri. Dosyayı olduğu gibi bırakın: Excel ya da CSV, `;` ya da `,`, ondalık virgül, ızgara ya da uzun liste, rpm ya da rad/s, verim % / kesir ya da kayıp kW, hepsi otomatik algılanır. Önizlemede yanlış görünen bir ayarı tek tıkla değiştirirsiniz; onaylamadan hiçbir şey kaydedilmez. |
 | **Araç kur** | Bileşenleri açılır listelerden seçerek araç ya da varyant oluşturma. Güç aktarma tipi seçilir: bataryalı elektrikli (şasi, aktarma, motor, batarya, klima, yardımcılar, yaşlanma) ya da dizel (şasi, şanzıman+aks+retarder, dizel motor, klima, yardımcılar). |
+| **Güzergâh oluştur** | Yol, bölüm bölüm: uzunluk, eğim, hız sınırı, yüzey, rüzgâr; bölüm sonunda durak (ad, bekleme, biniş/iniş) ya da trafik ışığı. Şablonlar: şehir içi hat (duraklı, ışıklı, tepeli) ve otoyol (tesis duruşlu). Rakım/hız/rüzgâr önizlemesi; kaydedince `library/route/<ad>.yaml` (tanım, yeniden düzenlenir) + `.csv` (çözücünün sürdüğü 10 m ızgara). GPX ile içe aktarılmış bir güzergâh açılınca bölümlere çevrilip düzenlenebilir kopya olur. |
+| **Senaryolar** | Senaryo = güzergâh (ya da standart çevrim, yön, tur) + araçlar + koşullar (sıcaklık, güneş, gece, klima kapalı, rüzgâr, basınç) + yük (zirve yolcu, sabit, duraklardan, test kütlesi) + trafik + yuvarlanma katsayısı. `library/scenario/<ad>.yaml` olarak kaydedilir; "Çalıştır ve karşılaştır" seçilen bütün araçları aynı iz üzerinde yan yana koyar (tüketim, kWh/km, CO₂, menzil, süre), her satırda tam rapor ve "3B izle". Simülasyon menüsünden kayıtlı senaryo yüklenebilir. |
 | **Simülasyon** | Tam ekran 3B sahne: otobüs güzergâhta ilerler; sağda canlı hız/SOC göstergeleri, güç akışı, harcanan enerji ve olay akışı; altta sürüklenebilir rakım zaman çizelgesi. Kış/yaz/gece koşula göre değişir. Ayrıca Türkçe tam rapor ve −15…+40 °C sıcaklık taraması. |
 | **Doğrulama** | **Dizel yakıt testi:** test ekibinin CAN kayıtları (`library/testlog/<kampanya>/`) tek tıkla modelden geçer; litre, l/100 km, evre payları, devir ve vites ölçümle yan yana, koşu başına izler üst üste. Tek bir Dewesoft/CAN dosyası da yüklenebilir (kütle, hava, rüzgâr, güzergâh, klima kapalı). **Elektrikli araç logu:** batarya gücü/SOC ile karşılaştırma, fark varsa hangi bileşene bakılacağı söylenir. |
 
@@ -162,7 +164,7 @@ python -m temsasim validate --vehicle citybus_12m_be --log logs/bus_1042_2026-01
 python -m temsasim correlate                             # list test campaigns
 python -m temsasim correlate --campaign mersin_adana_2026_09 --overlay out/mersin
 
-python -m pytest tests                                   # 152 tests
+python -m pytest tests                                   # 157 tests
 python -m temsasim gui                                   # the web interface
 ```
 
@@ -300,6 +302,9 @@ temsasim/            solver package
   vecto_import.py    VECTO bundle -> library components and vehicle, with sources
   vecto.py           bridge to a local VECTO release (runs it, reads .vmod/.vsum)
   testlog.py         test-team CAN logs: reader, replay through the diesel model, campaign table
+  routes.py          route builder: segment specs -> route YAML + CSV, templates, reversal
+  scenarios.py       saved scenarios: route/cycle + vehicles + conditions + load, run and compare
+  surfaces.py        road surface rolling-resistance multipliers
   schema.py          forms generated from the component dataclasses
   app/               local web interface (Flask + one static page, offline)
 library/             TEMSA data: the Maraton twin, coast-down chassis, cycles, routes, lines, test logs (see library/README.md)

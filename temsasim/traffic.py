@@ -272,7 +272,8 @@ def drive(route, *, level: str | TrafficLevel | None = None, laps: int = 1,
                 v = d_t / dt_s
                 if what == "stop":
                     i_stop += 1
-                    arriving = ("dwell", route.stop_dwell_s)
+                    dwell = route.dwell_at(local(stops[i_stop - 1])) if hasattr(route, "dwell_at") else route.stop_dwell_s
+                    arriving = ("dwell", dwell)
                 elif what == "jam":
                     arriving = ("jam", jams_plan[i_jam][1], jams_plan[i_jam][2]); i_jam += 1
                 else:

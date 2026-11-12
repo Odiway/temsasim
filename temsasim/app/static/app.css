@@ -331,3 +331,15 @@ table.net th { font: 600 11px var(--cond); letter-spacing: .06em; text-transform
 @media (max-width: 1000px) { .net-grid { grid-template-columns: 1fr; } .net-setup { position: static; } }
 
 table.data tr.sel td { background: color-mix(in srgb, var(--s1) 12%, transparent); }
+
+/* route builder and scenarios */
+.rb-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .rb-grid { grid-template-columns: 1fr; } }
+.rb-segs { display: grid; gap: 2px; min-width: 980px; }
+.rb-seg { display: grid; grid-template-columns: 26px 1.3fr 80px 64px 64px 1.4fr 70px 40px 1.2fr 64px 56px 56px 40px 120px; gap: 4px; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--rule-2); }
+.rb-seg input[type=text], .rb-seg select { width: 100%; min-width: 0; padding: 4px 6px; font-size: 12.5px; }
+.rb-seg input[type=checkbox] { justify-self: center; }
+.rb-head span { font: 600 10.5px var(--cond); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.rb-tools { display: flex; gap: 2px; }
+.rb-tools button { padding: 2px 6px; font-size: 12px; }
+.sc-vehicles { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px; }

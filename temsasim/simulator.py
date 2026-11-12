@@ -215,7 +215,7 @@ def simulate(
         m_eq = ch.equivalent_rotating_mass_kg(dl.referred_inertia_kgm2(gear))
 
         forces = ch.resistive_force(v, mass_kg=mass, grade_rad=theta,
-                                    air_density=rho, headwind_mps=env.headwind_mps)
+                                    air_density=rho, headwind_mps=env.headwind_mps + float(cyc.headwind_mps[i]))
         f_roll = float(forces["rolling"]) * float(cyc.surface_factor[i])
         f_aero = float(forces["aero"])
         f_grade = float(forces["grade"])

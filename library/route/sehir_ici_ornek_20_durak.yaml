@@ -1,0 +1,221 @@
+# Güzergâh tanımı (route builder). CSV bu dosyadan üretilir; ikisini birlikte tutun.
+kind: route_spec
+route_kind: sehir_ici
+name: Şehir içi örnek hat (20 durak)
+stem: sehir_ici_ornek_20_durak
+description: 'Şablon: 9 km, 20 durak, 10 ışık, ±3 % tepeler, duraklarda biniş/iniş.
+  Gerçek hat için bölümleri düzenleyin ya da GPX/KML yükleyin.'
+start_elevation_m: 30.0
+segments:
+- length_m: 450.0
+  grade_pct: 0.0
+  speed_limit_kmh: 50.0
+  surface: eski_asfalt
+  stop:
+    name: Durak 1
+    dwell_s: 20.0
+    board: 6.0
+    alight: 0.0
+  name: Bölüm 1
+- length_m: 450.0
+  grade_pct: 1.5
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 2
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  signal: true
+  name: Bölüm 2
+- length_m: 450.0
+  grade_pct: 2.6
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 3
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  name: Bölüm 3
+- length_m: 450.0
+  grade_pct: 3.0
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 4
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  signal: true
+  name: Bölüm 4
+- length_m: 450.0
+  grade_pct: 2.5
+  speed_limit_kmh: 50.0
+  surface: eski_asfalt
+  stop:
+    name: Durak 5
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  name: Bölüm 5
+- length_m: 450.0
+  grade_pct: 1.4
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 6
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  signal: true
+  name: Bölüm 6
+- length_m: 450.0
+  grade_pct: -0.2
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 7
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  name: Bölüm 7
+- length_m: 450.0
+  grade_pct: -1.7
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 8
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  signal: true
+  name: Bölüm 8
+- length_m: 450.0
+  grade_pct: -2.7
+  speed_limit_kmh: 50.0
+  surface: eski_asfalt
+  stop:
+    name: Durak 9
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  name: Bölüm 9
+- length_m: 450.0
+  grade_pct: -3.0
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 10
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  signal: true
+  name: Bölüm 10
+- length_m: 450.0
+  grade_pct: -2.4
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 11
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  name: Bölüm 11
+- length_m: 450.0
+  grade_pct: -1.2
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 12
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  signal: true
+  name: Bölüm 12
+- length_m: 450.0
+  grade_pct: 0.4
+  speed_limit_kmh: 50.0
+  surface: eski_asfalt
+  stop:
+    name: Durak 13
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  name: Bölüm 13
+- length_m: 450.0
+  grade_pct: 1.8
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 14
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  signal: true
+  name: Bölüm 14
+- length_m: 450.0
+  grade_pct: 2.8
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 15
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  name: Bölüm 15
+- length_m: 450.0
+  grade_pct: 3.0
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 16
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  signal: true
+  name: Bölüm 16
+- length_m: 450.0
+  grade_pct: 2.3
+  speed_limit_kmh: 50.0
+  surface: eski_asfalt
+  stop:
+    name: Durak 17
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  name: Bölüm 17
+- length_m: 450.0
+  grade_pct: 1.0
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 18
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  signal: true
+  name: Bölüm 18
+- length_m: 450.0
+  grade_pct: -0.6
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 19
+    dwell_s: 20.0
+    board: 6.0
+    alight: 4.0
+  name: Bölüm 19
+- length_m: 450.0
+  grade_pct: -2.0
+  speed_limit_kmh: 50.0
+  surface: asfalt
+  stop:
+    name: Durak 20
+    dwell_s: 20.0
+    board: 0.0
+    alight: 999.0
+  signal: true
+  name: Bölüm 20
+notes: ''
+source: route builder
