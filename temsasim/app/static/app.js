@@ -582,6 +582,8 @@ const PAGES = {
   arac: pageVehicle, simulasyon: pageSim, surus: pageDrive, hat: pageNetwork, dogrulama: pageValidate,
   guzergah: pageRouteBuilder, senaryo: pageScenarios,
 };
+const PAGE_GRP = { baslangic: "home", kutuphane: "veri", yukle: "veri", bilesen: "veri", arac: "veri", guzergah: "veri", senaryo: "veri",
+  simulasyon: "kos", surus: "kos", hat: "kos", dogrulama: "dogrula" };
 const PAGE_SIGN = { baslangic: "Başlangıç", kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bileşen", arac: "Araç kur", simulasyon: "Simülasyon", surus: "Serbest sürüş", hat: "Hat ve sefer", dogrulama: "Doğrulama",
   guzergah: "Güzergâh", senaryo: "Senaryo" };
 /* The shared toolkit the page modules (network.js, drive.js, routes.js) receive. */
@@ -601,6 +603,7 @@ async function route() {
   if (pageCleanup) { try { pageCleanup(); } catch (e) { console.error(e); } pageCleanup = null; }
   const main = $("#main");
   main.classList.toggle("fullbleed", page === "simulasyon" || page === "surus");
+  main.dataset.grp = PAGE_GRP[page] || "home";
   main.replaceChildren(h("div", { class: "muted" }, "Yükleniyor…"));
   try {
     await overview();
