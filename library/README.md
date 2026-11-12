@@ -79,6 +79,31 @@ yazım hatası varsayılanı yerinde bırakmak yerine yüklemeyi durdurur.
 | Elektrik motoru verim haritası | Tedarikçi / dinamometre (Excel, CSV) | *Veri yükle → Motor verim haritası* |
 | Güzergâh | GPX, mesafe–rakım tablosu, KML (planda) | *Veri yükle → Güzergâh* |
 | Test kayıtları | Test ekibi CAN/Dewesoft (xlsx) | `testlog/<kampanya>/` + `meta.yaml`; *Doğrulama* sayfası |
+| Başka bir kütüphaneden öğe | Meslektaşın "İndir" ile aldığı zip paketi | *Veri yükle → Paket* ya da `python -m temsasim import paket.zip` |
+
+## Kopyalama, indirme, paylaşma
+
+Kütüphane sayfasında her öğenin (araç, bileşen, güzergâh, senaryo) ⋯ menüsü
+aynı dört işi yapar:
+
+- **Kopyala**: yeni adla çoğaltır; bileşenin harita CSV'leri de kopyalanır ve
+  kopya onlara bağlanır, böylece birini düzenlemek ötekini bozmaz.
+- **İndir (zip)**: öğeyi bağımlılıklarıyla paketler. Araç paketi = araç YAML +
+  bütün bileşenleri + haritaları; senaryo paketi = senaryo + güzergâh + araçlar.
+  Zip'in klasör yapısı kütüphaneyle birebir aynıdır (`engine/x.yaml`,
+  `engine/maps/x.csv`), içinde `PAKET.yaml` neyin olduğunu yazar.
+- **Dosyayı gör / düzenle**: YAML'ı olduğu gibi gösterir; kaydetmeden önce
+  yükleyiciden geçirir, geçmezse dosyaya dokunmaz.
+- **Sil**: `.cop_kutusu/` klasörüne taşır; başka bir öğe onu kullanıyorsa
+  reddeder.
+
+"Tümünü indir" bütün kütüphaneyi zip yapar; başka bir bilgisayarda *Veri
+yükle → Paket* ile açılır. Paket alırken var olan öğeler için üç seçenek:
+olanı koru, paketle değiştir (eskisi çöp kutusuna), yeni adla yan yana koy
+(`_2` eki, paket içindeki referanslar da çevrilir).
+
+Komut satırı: `python -m temsasim export vehicle/maraton_13_dizel`,
+`export library`, `import paket.zip --mode rename`, `copy engine/daf_mx_11_h5_330 --name "Deneme"`.
 
 ## Bu kütüphanede ne var
 

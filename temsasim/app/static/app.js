@@ -467,6 +467,90 @@ function pageHead(eyebrow, title, lede, actions) {
     lede ? h("p", { class: "lede" }, lede) : null);
 }
 
+/* ---- menus, copy, download, raw file ----------------------------------- */
+/* One ⋯ menu on every library row: copy, download as a package, open the file,
+   move to the trash. Same order everywhere so the hand learns it once. */
+function menu(label, items, { cls, left, up } = {}) {
+  const d = h("details", { class: "menu" + (left ? " left" : "") + (up ? " up" : "") });
+  const list = h("div", { class: "menu-list", role: "menu" });
+  items.filter(Boolean).forEach(it => {
+    if (it === "-") { list.append(h("hr")); return; }
+    const el = it.href
+      ? h("a", { href: it.href, role: "menuitem", class: it.danger ? "danger" : null, download: it.download != null ? it.download : null, target: it.blank ? "_blank" : null, rel: it.blank ? "noopener" : null, onclick: () => { d.open = false; } }, it.label)
+      : h("button", { type: "button", role: "menuitem", class: it.danger ? "danger" : null, onclick: async () => { d.open = false; try { await it.onclick(); } catch (e) { toast(e.message, "err"); } } }, it.label);
+    if (it.hint) el.append(h("span", { class: "hint" }, it.hint));
+    list.append(el);
+  });
+  d.append(h("summary", { class: "btn" + (cls ? " " + cls : " ghost"), "aria-haspopup": "menu", title: typeof label === "string" ? label : null }, label), list);
+  d.addEventListener("toggle", () => { if (d.open) $$("details.menu[open]").forEach(o => { if (o !== d) o.open = false; }); });
+  return d;
+}
+document.addEventListener("click", e => { if (!e.target.closest("details.menu")) $$("details.menu[open]").forEach(o => (o.open = false)); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") $$("details.menu[open]").forEach(o => (o.open = false)); });
+
+async function copyItem(kind, stem, name) {
+  const n = prompt("Kopyanın adı:", `${name} (kopya)`);
+  if (n == null) return null;
+  const r = await api.post(`/api/copy/${kind}/${encodeURIComponent(stem)}`, { name: n.trim() || null });
+  await overview(true);
+  toast(`Kopyalandı: ${r.files.join(", ")}`);
+  return r;
+}
+const exportUrl = (kind, stem) => `/api/export/${kind}/${encodeURIComponent(stem)}`;
+const DELETE_URL = {
+  vehicle: s => `/api/vehicle/${encodeURIComponent(s)}/delete`,
+  route: s => `/api/route/${encodeURIComponent(s)}/delete`,
+  scenario: s => `/api/scenario/${encodeURIComponent(s)}/delete`,
+};
+async function deleteItem(kind, stem, name) {
+  if (!confirm(`"${name}" silinsin mi?\nDosya kütüphanedeki .cop_kutusu klasörüne taşınır; geri alınabilir.`)) return false;
+  const url = DELETE_URL[kind] ? DELETE_URL[kind](stem) : `/api/component/${kind}/${encodeURIComponent(stem)}/delete`;
+  await api.post(url);
+  await overview(true);
+  toast("Çöp kutusuna taşındı.");
+  return true;
+}
+/* The ⋯ menu for a library item. `after` runs after a copy or delete (the
+   caller usually re-renders). */
+function itemMenu(kind, stem, name, { after, extra, label, up } = {}) {
+  const re = async () => { if (after) await after(); else route(); };
+  const pkg = kind === "vehicle" ? "araç + bileşenler" : kind === "scenario" ? "senaryo + güzergâh + araçlar" : kind === "route" ? "csv + yaml" : "yaml + haritalar";
+  return menu(label || "⋯", [
+    ...(extra || []),
+    { label: "Kopyala", onclick: async () => { if (await copyItem(kind, stem, name)) re(); } },
+    { label: "İndir (zip)", href: exportUrl(kind, stem), download: "", hint: pkg },
+    { label: "Dosyayı gör / düzenle", onclick: () => openFileDialog(kind, stem, name) },
+    "-",
+    { label: "Sil", danger: true, onclick: async () => { if (await deleteItem(kind, stem, name)) re(); } },
+  ], { up });
+}
+
+/* The item's file as text: read it, copy it, hand-edit it. A save is only
+   accepted if the loader takes the result; otherwise the file is untouched. */
+async function openFileDialog(kind, stem, name) {
+  const raw = await api.get(`/api/file/${kind}/${encodeURIComponent(stem)}`);
+  const dlg = h("dialog", {});
+  const close = () => { dlg.close(); dlg.remove(); };
+  const ta = h("textarea", { class: "raw-editor", spellcheck: "false" }, raw.text);
+  const status = h("span", { class: "muted small" }, raw.files.length > 1 ? `Diğer dosyalar: ${raw.files.filter(f => f !== raw.path).join(", ")}` : "");
+  const isYaml = raw.path.endsWith(".yaml");
+  dlg.append(h("div", { class: "dlg-head" }, h("div", {}, h("h2", {}, name || stem), h("div", { class: "muted small num" }, `library/${raw.path}`)), h("span", { class: "spacer" }),
+      h("button", { type: "button", class: "ghost", onclick: close }, "Kapat")),
+    h("div", { class: "dlg-body stack" },
+      isYaml ? h("p", { class: "small muted", style: "margin:0" }, "Satır sonundaki # yorumları kaynağı belgeler; onları koruyun. Birim ekleri: _kw, _rpm, _kmh, _t… Dosya kaydedilmeden önce yükleyiciden geçer.") : null,
+      ta,
+      h("div", { class: "row" },
+        isYaml ? h("button", { class: "primary", type: "button", onclick: e => busy(e.currentTarget, async () => {
+          const r = await api.post(`/api/file/${kind}/${encodeURIComponent(stem)}`, { text: ta.value });
+          await overview(true); toast(`Kaydedildi: ${r.saved}`); close(); route();
+        }) }, "Kaydet") : null,
+        h("button", { type: "button", onclick: async () => { try { await navigator.clipboard.writeText(ta.value); toast("Panoya kopyalandı."); } catch { toast("Pano erişimi yok; metni seçip kopyalayın.", "err"); } } }, "Panoya kopyala"),
+        h("a", { class: "btn", href: exportUrl(kind, stem), download: "" }, "Zip indir"),
+        h("span", { class: "spacer" }), status)));
+  document.body.append(dlg);
+  dlg.showModal();
+}
+
 /* ================================================================ router */
 const PAGES = {
   kutuphane: pageLibrary, yukle: pageUpload, bilesen: pageComponent,
@@ -478,6 +562,7 @@ const PAGE_SIGN = { kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bi
 /* The shared toolkit the page modules (network.js, drive.js, routes.js) receive. */
 function pageKit() {
   return { h, api, store, fmt, parseNum, seg, select, field, numInput, toast, busy, notice, ov: OV, pageHead, lineChart, css, overview, route, kpi,
+    menu, itemMenu, copyItem, exportUrl, openFileDialog, valBadge,
     setCleanup: fn => (pageCleanup = fn), raster: Sign.raster };
 }
 async function pageRouteBuilder(stem) { const mod = await import("/static/routes.js"); return mod.pageRoute(pageKit(), stem); }
@@ -515,38 +600,65 @@ $("#themeBtn").addEventListener("click", () => {
 /* ================================================================ library */
 async function pageLibrary() {
   const ov = await overview(true);
+  const rmod = await import("/static/routes.js");
   const root = h("div", {});
-  root.append(pageHead("Kütüphane", "Bileşenler ve araçlar",
-    "Her bileşen bir kez tanımlanır ve onu kullanan her araç ondan beslenir. Tedarikçiden gerçek harita geldiğinde bir kez yükleyin; bağlı bütün araçlar güncellenir.",
-    [h("a", { class: "btn", href: "#/yukle" }, "Veri yükle"), h("a", { class: "btn", href: "#/arac/yeni" }, "Yeni araç")]));
+  const routes = ov.route_items || [], scenarios = ov.scenarios || [];
+  const nComp = ov.components.reduce((n, g) => n + g.items.length, 0);
+  const newMenu = menu("Yeni", [
+    { label: "Araç", href: "#/arac/yeni", hint: "bileşenlerden" },
+    { label: "Güzergâh", href: "#/guzergah/yeni", hint: "bölüm bölüm" },
+    { label: "Senaryo", href: "#/senaryo/yeni" }, "-",
+    ...ov.components.map(g => ({ label: g.label, href: `#/bilesen/${g.kind}/yeni` })),
+  ], { cls: "primary" });
+  root.append(pageHead("Kütüphane", "Veri kütüphanesi",
+    "Her şey bu klasördeki düz dosyalardır: bir bileşen bir kez tanımlanır, araçlar ona referans verir; güzergâh ve senaryo da aynı kütüphanede durur. Her öğe kopyalanır, zip olarak indirilir ve başka bir bilgisayardaki kütüphaneye 'Veri yükle → Paket' ile alınır.",
+    [h("a", { class: "btn", href: "#/yukle" }, "Veri yükle"), h("a", { class: "btn", href: "#/yukle/paket" }, "Paket al"),
+     h("a", { class: "btn", href: "/api/export/library", download: "", title: "Kütüphanenin tamamı, zip" }, "Tümünü indir"), newMenu]));
 
-  const q = h("input", { type: "search", placeholder: "Ara: bileşen, araç, güzergâh…", style: "max-width:360px" });
-  q.addEventListener("input", () => { const s = q.value.trim().toLocaleLowerCase("tr-TR");
-    $$(".itemlist li, .vehicle-card", root).forEach(el => { el.hidden = s !== "" && !el.textContent.toLocaleLowerCase("tr-TR").includes(s); }); });
-  root.append(h("div", { class: "row", style: "margin:0 0 12px" }, q, h("span", { class: "muted small" }, "Ölçülmedi rozeti: dosya kabul değerleri içeriyor; açıklamasında kaynağı yazar.")));
-  root.append(h("h2", { style: "margin:4px 0 10px" }, "Araçlar"));
+  /* sticky section nav + search over everything */
+  const q = h("input", { type: "search", placeholder: "Ara: ad, özet, rozet…", "aria-label": "Kütüphanede ara" });
+  const nomatch = h("span", { class: "nomatch", hidden: true }, "eşleşme yok");
+  const SECS = [["arac", "Araçlar", ov.vehicles.length], ["guzergah", "Güzergâhlar", routes.length], ["senaryo", "Senaryolar", scenarios.length], ["bilesen", "Bileşenler", nComp]];
+  root.append(h("div", { class: "subnav" },
+    ...SECS.map(([id, l, n]) => h("a", { href: `#/kutuphane`, onclick: e => { e.preventDefault(); const el = $(`#lib-${id}`, root); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); } }, l, h("span", { class: "n" }, n))),
+    h("span", { class: "spacer" }), q, nomatch));
+  q.addEventListener("input", () => {
+    const s = q.value.trim().toLocaleLowerCase("tr-TR");
+    let shown = 0;
+    $$(".itemlist li, .vehicle-card", root).forEach(el => { const hit = s === "" || el.textContent.toLocaleLowerCase("tr-TR").includes(s); el.hidden = !hit; if (hit) shown++; });
+    $$(".panel.group", root).forEach(pn => { pn.hidden = s !== "" && !$$(".itemlist li", pn).some(li => !li.hidden); });
+    nomatch.hidden = shown > 0 || s === "";
+  });
+  const section = (id, title, sub, body) => h("section", { class: "lib-sec", id: `lib-${id}` }, h("div", { class: "sec-head" }, h("h2", {}, title), sub ? h("span", { class: "muted" }, sub) : null), body);
+
+  /* vehicles */
   const vg = h("div", { class: "grid-auto" });
-  if (!ov.vehicles.length) vg.append(h("div", { class: "panel empty" }, "Henüz araç yok. ", h("a", { href: "#/arac/yeni" }, "İlk aracı kurun"), "."));
+  if (!ov.vehicles.length) vg.append(h("div", { class: "panel empty" }, "Henüz araç yok. ", h("a", { href: "#/arac/yeni" }, "İlk aracı kurun"), " ya da bir paket alın."));
   ov.vehicles.forEach(v => {
-    const card = h("div", { class: "panel vehicle-card" },
+    vg.append(h("div", { class: "panel vehicle-card" },
       h("div", {}, h("h3", {}, v.name), h("div", { class: "muted small" }, v.variant || "")),
       v.error ? notice("err", "Dosya okunamadı", [v.error]) : h("div", { class: "small" }, h("span", { class: "badge plain", style: "margin-right:6px" }, v.powertrain_tr || ""), v.summary),
       v.error ? null : h("div", { class: "row" }, v.validated ? h("span", { class: "badge ok" }, "tüm bileşenler doğrulandı")
         : h("span", { class: "badge warn", title: v.unvalidated.join(", ") }, `${v.unvalidated.length} bileşen ölçülmedi`)),
       h("div", { class: "actions" },
-        h("button", { class: "primary", type: "button", onclick: () => { store.set("vehicle", v.stem); location.hash = "#/simulasyon"; } }, "Simüle et"),
-        h("a", { class: "btn", href: `#/arac/${encodeURIComponent(v.stem)}` }, "Düzenle")));
-    vg.append(card);
+        v.error ? null : h("button", { class: "primary", type: "button", onclick: () => { store.set("vehicle", v.stem); location.hash = "#/simulasyon"; } }, "Simüle et"),
+        h("a", { class: "btn", href: `#/arac/${encodeURIComponent(v.stem)}` }, "Düzenle"),
+        h("span", { class: "spacer" }),
+        itemMenu("vehicle", v.stem, v.name))));
   });
-  root.append(vg);
+  root.append(section("arac", "Araçlar", "bileşen seçimleri", vg));
 
-  const rmod = await import("/static/routes.js");
-  root.append(h("div", { class: "grid-2", style: "margin-top:28px" },
-    h("div", { class: "panel" }, h("div", { class: "group-head" }, h("h3", {}, "Güzergâhlar"), h("span", { class: "muted small" }, (ov.route_items || []).length), h("span", { class: "spacer" }), h("a", { class: "btn", href: "#/guzergah/yeni" }, "Oluştur"), h("a", { class: "btn", href: "#/yukle/guzergah" }, "GPX yükle")),
-      rmod.routeList(pageKit(), { onOpen: s => (location.hash = `#/guzergah/${encodeURIComponent(s)}`), compact: true })),
-    h("div", { class: "panel" }, h("div", { class: "group-head" }, h("h3", {}, "Senaryolar"), h("span", { class: "muted small" }, (ov.scenarios || []).length), h("span", { class: "spacer" }), h("a", { class: "btn", href: "#/senaryo/yeni" }, "Yeni senaryo")),
-      rmod.scenarioList(pageKit()))));
-  root.append(h("h2", { style: "margin:28px 0 10px" }, "Bileşenler"));
+  /* routes + scenarios */
+  root.append(section("guzergah", "Güzergâhlar ve senaryolar", "kaydedilen yol her araçta koşar",
+    h("div", { class: "grid-2" },
+      h("div", { class: "panel", id: "lib-guzergah-p" }, h("div", { class: "group-head" }, h("h3", {}, "Güzergâhlar"), h("span", { class: "muted small" }, routes.length), h("span", { class: "spacer" }),
+          h("a", { class: "btn", href: "#/guzergah/yeni" }, "Oluştur"), h("a", { class: "btn", href: "#/yukle/guzergah" }, "GPX yükle")),
+        rmod.routeList(pageKit(), { onOpen: s => (location.hash = `#/guzergah/${encodeURIComponent(s)}`), compact: true })),
+      h("div", { class: "panel", id: "lib-senaryo" }, h("div", { class: "group-head" }, h("h3", {}, "Senaryolar"), h("span", { class: "muted small" }, scenarios.length), h("span", { class: "spacer" }),
+          h("a", { class: "btn", href: "#/senaryo/yeni" }, "Yeni senaryo")),
+        rmod.scenarioList(pageKit())))));
+
+  /* components */
   const cg = h("div", { class: "grid-auto" });
   ov.components.forEach(g => {
     const list = h("ul", { class: "itemlist" });
@@ -560,20 +672,16 @@ async function pageLibrary() {
             it.error ? h("span", { class: "badge err" }, "hatalı dosya") : valBadge(it.validated),
             it.map === "sentetik" ? h("span", { class: "badge plain", title: "Tedarikçi haritası yüklenene kadar kayıp modelinden üretilir" }, "sentetik harita") : null,
             it.map === "ölçülmüş" ? h("span", { class: "badge ok" }, "yüklenen harita") : null)),
-        h("div", { class: "row", style: "gap:4px" },
+        h("div", { class: "acts" },
           h("a", { class: "btn", href: `#/bilesen/${g.kind}/${encodeURIComponent(it.stem)}` }, "Düzenle"),
-          h("button", { class: "ghost danger", type: "button", title: "Çöp kutusuna taşı", onclick: async () => {
-            if (!confirm(`"${it.name}" silinsin mi? Dosya kütüphanedeki .cop_kutusu klasörüne taşınır, geri alınabilir.`)) return;
-            try { await api.post(`/api/component/${g.kind}/${encodeURIComponent(it.stem)}/delete`); toast("Çöp kutusuna taşındı."); route(); }
-            catch (e) { toast(e.message, "err"); }
-          } }, "Sil"))));
+          itemMenu(g.kind, it.stem, it.name))));
     });
-    cg.append(h("div", { class: "panel" },
+    cg.append(h("div", { class: "panel group" },
       h("div", { class: "group-head" }, h("h3", {}, g.label), h("span", { class: "muted small" }, g.items.length), h("span", { class: "spacer" }),
         h("a", { class: "btn", href: `#/bilesen/${g.kind}/yeni` }, "Ekle")),
       list));
   });
-  root.append(cg);
+  root.append(section("bilesen", "Bileşenler", "ölçülmedi rozeti: dosya kabul değeri içeriyor, kaynağı açıklamasında", cg));
   return root;
 }
 
@@ -588,6 +696,7 @@ async function pageUpload(which) {
     ["guzergah", "Güzergâh", "GPX izi ya da mesafe–rakım tablosu. Duraklar GPX noktalarından okunur."],
     ["egri", "Batarya ya da klima eğrisi", "OCV–SOC, COP–sıcaklık gibi iki sütunlu eğriler."],
     ["log", "Araç logu", "CAN / telematik kaydı. Modeli gerçek otobüsle karşılaştırır."],
+    ["paket", "Paket (zip)", "Bir meslektaşın kütüphanesinden 'İndir' ile alınmış zip: araç + bileşenler, güzergâh, senaryo ya da bütün kütüphane. Var olanlara ne yapılacağını sorar."],
   ];
   const cur = which || store.get("uploadTile", "vecto");
   const body = h("div", {});
@@ -605,9 +714,75 @@ async function pageUpload(which) {
   });
   root.append(tiles, body);
   const show = k => {
-    body.replaceChildren(k === "guzergah" ? routeWizard() : k === "egri" ? curveTarget() : k === "vecto" ? vectoWizard() : mapWizard({ mode: "hub" }));
+    body.replaceChildren(k === "guzergah" ? routeWizard() : k === "egri" ? curveTarget() : k === "vecto" ? vectoWizard() : k === "paket" ? packageWizard() : mapWizard({ mode: "hub" }));
   };
   show(cur === "log" ? "harita" : cur);
+  return root;
+}
+
+/* ---- package wizard ------------------------------------------------------- */
+/* A zip made by "İndir" (or a zipped library folder). Step 1 drop it, step 2
+   see every item with "new" / "exists" and choose what happens to the ones
+   that exist, step 3 the result. Nothing is written before step 2's button. */
+function packageWizard() {
+  const root = h("div", {});
+  let st = null;
+  const STEPS = ["Zip", "İçerik ve karar", "Sonuç"];
+  const first = () => root.replaceChildren(steps(STEPS, 0), h("div", { class: "stack" },
+    dropZone({ accept: ".zip", title: "Paketi (zip) bırakın", sub: "Kütüphane sayfasındaki 'İndir' ya da 'Tümünü indir' çıktısı. Klasör yapısı kütüphaneyle aynıdır: engine/x.yaml, engine/maps/x.csv…",
+      onFile: async f => {
+        root.replaceChildren(steps(STEPS, 1), h("div", { class: "muted" }, `${f.name} okunuyor…`));
+        try { st = await api.upload("/api/import/package", f); check(); }
+        catch (e) { first(); root.append(notice("err", "Paket okunamadı.", [e.message])); }
+      } })));
+  const check = () => {
+    const items = st.items;
+    const exists = items.filter(x => x.exists).length;
+    const checks = new Map();
+    let mode = exists ? "skip" : "skip";
+    const modeSeg = seg([["skip", "Olanı koru"], ["overwrite", "Paketle değiştir"], ["rename", "Yeni adla yan yana koy"]], mode, v => (mode = v));
+    const rows = items.map(it => {
+      const cb = h("input", { type: "checkbox", checked: it.error ? null : true, disabled: it.error ? true : null });
+      checks.set(`${it.kind}/${it.stem}`, cb);
+      const tr = h("tr", {},
+        h("td", {}, cb), h("td", {}, it.kind_tr || it.kind), h("td", {}, h("b", {}, it.name), h("div", { class: "small muted" }, it.description || "")),
+        h("td", { class: "num small" }, `${it.kind}/${it.stem}`),
+        h("td", { class: "st" }, it.error ? h("span", { class: "badge err", title: it.error }, "hatalı") : it.exists ? h("span", { class: "badge warn" }, "kütüphanede var") : h("span", { class: "badge ok" }, "yeni"),
+          it.missing ? h("div", { class: "small", style: "color:var(--err)" }, `eksik harita: ${it.missing.join(", ")}`) : null));
+      cb.addEventListener("change", () => tr.classList.toggle("off", !cb.checked));
+      return tr;
+    });
+    const man = st.manifest || {};
+    root.replaceChildren(steps(STEPS, 1), h("div", { class: "stack" },
+      h("div", { class: "kpis" },
+        h("div", {}, h("div", { class: "k" }, "Öğe"), h("div", { class: "v" }, items.length)),
+        h("div", {}, h("div", { class: "k" }, "Yeni"), h("div", { class: "v" }, items.length - exists)),
+        h("div", {}, h("div", { class: "k" }, "Zaten var"), h("div", { class: "v" }, exists)),
+        h("div", {}, h("div", { class: "k" }, "Paket tarihi"), h("div", { class: "v", style: "font-size:16px" }, man.created || "—"))),
+      man.note ? h("p", { class: "small muted", style: "margin:0" }, man.note) : null,
+      st.skipped && st.skipped.length ? notice("warn", "Pakette tanınmayan dosyalar atlandı", st.skipped.slice(0, 12)) : null,
+      h("div", { class: "panel" }, h("div", { class: "scrollx" }, h("table", { class: "data pkg-table" },
+        h("thead", {}, h("tr", {}, ["", "Tür", "Ad", "Dosya", "Durum"].map(c => h("th", {}, c)))), h("tbody", {}, rows)))),
+      h("div", { class: "panel stack" },
+        h("div", { class: "field" }, h("div", { class: "lab" }, "Kütüphanede zaten olanlar için"), modeSeg,
+          h("div", { class: "hint" }, "Olanı koru: var olan dosyaya dokunulmaz. Paketle değiştir: eski dosya çöp kutusuna taşınır. Yeni adla: paketteki öğe _2 ekiyle yazılır, paket içindeki referanslar ona çevrilir.")),
+        h("div", { class: "row" },
+          h("button", { class: "primary", type: "button", onclick: e => busy(e.currentTarget, async () => {
+            const select = [...checks].filter(([, cb]) => cb.checked).map(([k]) => k);
+            if (!select.length) throw new Error("Hiç öğe seçilmedi.");
+            const r = await api.post(`/api/import/package/${st.upload_id}/save`, { mode, select });
+            await overview(true); done(r);
+          }) }, "Kütüphaneye al"),
+          h("button", { type: "button", class: "ghost", onclick: first }, "Başka paket seç")))));
+  };
+  const done = r => {
+    const ren = Object.entries(r.renamed || {});
+    root.replaceChildren(steps(STEPS, 2), h("div", { class: "stack" },
+      r.errors.length ? notice("err", "Bazı dosyalar yükleyiciden geçmedi (yazıldı ama kütüphane onları okuyamıyor)", r.errors) : notice("ok", "Paket alındı", [`${r.written.length} dosya yazıldı`, r.replaced.length ? `${r.replaced.length} öğe değiştirildi (eskisi çöp kutusunda)` : null, r.skipped.length ? `${r.skipped.length} öğe korundu` : null, ren.length ? `yeniden adlandırıldı: ${ren.map(([a, b]) => `${a} → ${b}`).join(", ")}` : null].filter(Boolean)),
+      r.written.length ? h("details", {}, h("summary", { class: "small" }, "Yazılan dosyalar"), h("ul", { class: "small num" }, r.written.map(w => h("li", {}, w)))) : null,
+      h("div", { class: "row" }, h("a", { class: "btn primary", href: "#/kutuphane" }, "Kütüphaneye git"), h("button", { type: "button", class: "ghost", onclick: first }, "Başka paket"))));
+  };
+  first();
   return root;
 }
 
@@ -975,7 +1150,11 @@ async function pageComponent(kind, stem) {
       if (!confirm("Dosya bu değerlerle yeniden yazılacak. Elle eklenmiş yorum satırları korunmaz. Devam edilsin mi?")) return;
       return save(stem, true);
     }) }, "Değişiklikleri kaydet"),
-    h("button", { type: "button", onclick: e => busy(e.currentTarget, () => { const n = prompt("Kopyanın adı:", `${values.name} kopya`); if (n) return save(n, false); }) }, "Kopya olarak kaydet"));
+    h("button", { type: "button", onclick: e => busy(e.currentTarget, () => { const n = prompt("Kopyanın adı:", `${values.name} kopya`); if (n) return save(n, false); }) }, "Kopya olarak kaydet"),
+    menu("Diğer", [
+      { label: "İndir (zip)", href: exportUrl(kind, stem), download: "", hint: "yaml + haritalar" },
+      { label: "Dosyayı gör / düzenle", onclick: () => openFileDialog(kind, stem, values.name) }, "-",
+      { label: "Sil", danger: true, onclick: async () => { if (await deleteItem(kind, stem, values.name)) location.hash = "#/kutuphane"; } }], { up: true }));
   bar.append(h("span", { class: "spacer" }), h("a", { class: "btn ghost", href: "#/kutuphane" }, "Vazgeç"));
   root.append(bar);
   setTimeout(() => {
@@ -1126,7 +1305,12 @@ async function pageVehicle(stem) {
   else bar.append(
     h("button", { class: "primary", type: "button", onclick: e => busy(e.currentTarget, () => { if (confirm("Araç dosyası bu seçimlerle yeniden yazılacak. Devam edilsin mi?")) return save(stem, true); }) }, "Değişiklikleri kaydet"),
     h("button", { type: "button", onclick: e => busy(e.currentTarget, () => { const n = prompt("Yeni varyantın dosya adı:", `${stem}_varyant`); if (n) return save(n, false); }) }, "Varyant olarak kaydet"),
-    h("button", { type: "button", onclick: () => { store.set("vehicle", stem); location.hash = "#/simulasyon"; } }, "Simüle et"));
+    h("button", { type: "button", onclick: () => { store.set("vehicle", stem); location.hash = "#/simulasyon"; } }, "Simüle et"),
+    menu("Diğer", [
+      { label: "İndir (paket)", href: exportUrl("vehicle", stem), download: "", hint: "araç + bileşenler" },
+      { label: "Dosyayı gör / düzenle", onclick: () => openFileDialog("vehicle", stem, cur.name) }, "-",
+      { label: "Sil", danger: true, onclick: async () => { if (await deleteItem("vehicle", stem, cur.name)) location.hash = "#/kutuphane"; } }], { up: true }));
+  bar.append(h("span", { class: "spacer" }), h("a", { class: "btn ghost", href: "#/kutuphane" }, "Kütüphane"));
   root.append(bar);
   return root;
 }

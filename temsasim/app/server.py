@@ -45,6 +45,8 @@ from ..routes import (KINDS_TR as ROUTE_KINDS_TR, RouteSpec, from_route_csv, lis
 from ..scenarios import (KINDS_TR as SCENARIO_KINDS_TR, LOAD_MODES, Scenario, list_scenarios, load_scenario,
                          run_scenario, save_scenario)
 from ..surfaces import SURFACES
+from ..share import (LABELS_TR as SHARE_LABELS_TR, copy_item, export_library, export_zip, import_zip, inspect_zip,
+                     read_raw, write_raw)
 from ..testlog import correlate_diesel, grade_along, list_campaigns, read_can_log, run_campaign
 from ..traffic import LEVELS as TRAFFIC_LEVELS
 from ..units import RPM, air_density
@@ -330,6 +332,21 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                             powertrain=b.get("powertrain") or "battery_electric",
                             fuel_tank_l=b.get("fuel_tank_l"))
         return jsonify({"saved": f"vehicle/{path.name}", "stem": path.stem})
+
+    @app.post("/api/vehicle/<stem>/delete")
+    def delete_vehicle(stem):
+        L = lib()
+        stem = safe_stem(stem)
+        src = L.root / "vehicle" / f"{stem}.yaml"
+        if not src.exists():
+            raise FileNotFoundError(f"vehicle/{stem}.yaml yok")
+        used = [s["stem"] for s in list_scenarios(L.root) if stem in (s.get("vehicles") or [])]
+        if used:
+            raise ValueError(f"Bu aracı kullanan senaryolar var: {', '.join(used)}. Önce onları değiştirin.")
+        trash = L.root / ".cop_kutusu" / "vehicle"; trash.mkdir(parents=True, exist_ok=True)
+        dst = trash / f"{stem}_{time.strftime('%Y%m%d_%H%M%S')}.yaml"
+        shutil.move(str(src), dst)
+        return jsonify({"moved_to": str(dst.relative_to(L.root))})
 
     # ------------------------------------------------------------ simulate
     @app.post("/api/simulate")
@@ -807,6 +824,46 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
         return jsonify({k: v for k, v in out.items() if k != "results"})
 
     # ------------------------------------------------------------ diesel fuel tests (test-team CAN logs)
+    # ------------------------------------------------------------ copy / share
+    @app.post("/api/copy/<kind>/<stem>")
+    def copy_endpoint(kind, stem):
+        b = request.get_json(force=True, silent=True) or {}
+        return jsonify(copy_item(lib_root, kind, stem, b.get("name")))
+
+    @app.get("/api/export/library")
+    def export_library_endpoint():
+        name = f"temsasim_kutuphane_{time.strftime('%Y%m%d')}.zip"
+        return Response(export_library(lib_root), mimetype="application/zip",
+                        headers={"Content-Disposition": f"attachment; filename={name}"})
+
+    @app.get("/api/export/<kind>/<stem>")
+    def export_endpoint(kind, stem):
+        data = export_zip(lib_root, [(kind, stem)], with_deps=request.args.get("deps", "1") != "0")
+        name = f"{safe_stem(stem)}_{kind}.temsasim.zip"
+        return Response(data, mimetype="application/zip", headers={"Content-Disposition": f"attachment; filename={name}"})
+
+    @app.post("/api/import/package")
+    def import_package():
+        f = request.files["file"]
+        data = f.read()
+        info = inspect_zip(lib_root, data)
+        up_id = uploads.put({"zip": data, "name": f.filename})
+        return jsonify({"upload_id": up_id, "file": f.filename, **info})
+
+    @app.post("/api/import/package/<up_id>/save")
+    def import_package_save(up_id):
+        b = request.get_json(force=True, silent=True) or {}
+        return jsonify(import_zip(lib_root, uploads.get(up_id)["zip"], mode=b.get("mode", "skip"), select=b.get("select")))
+
+    @app.get("/api/file/<kind>/<stem>")
+    def raw_file(kind, stem):
+        return jsonify(read_raw(lib_root, kind, stem))
+
+    @app.post("/api/file/<kind>/<stem>")
+    def raw_file_save(kind, stem):
+        b = request.get_json(force=True)
+        return jsonify(write_raw(lib_root, kind, stem, str(b.get("text", ""))))
+
     @app.get("/api/campaigns")
     def campaigns():
         L = lib()

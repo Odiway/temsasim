@@ -37,7 +37,7 @@ bilgisayarda çalışır, şirket ağına açılmaz. İnternet gerekmez.
 
 | Bölüm | Ne yapar |
 |---|---|
-| **Kütüphane** | Tüm araçlar, bileşenler, güzergâhlar ve senaryolar; arama kutusu; hangisi ölçümle doğrulandı, hangisi hâlâ varsayılan. Yapı `library/README.md`'de. |
+| **Kütüphane** | Tüm araçlar, bileşenler, güzergâhlar ve senaryolar tek sayfada; bölüm çubuğu ve arama. Her öğede ⋯ menüsü: kopyala, zip indir (bağımlılıklarıyla), dosyayı gör/düzenle, sil. "Tümünü indir" kütüphanenin zip'i; *Veri yükle → Paket* başka bir kütüphaneden gelen zip'i var/yok kontrolüyle alır. Yapı `library/README.md`'de. |
 | **Veri yükle** | **VECTO dosyaları:** homologasyonun motor, şanzıman, aks, lastik ve araç XML dosyalarını (klasörü olduğu gibi) bırakın; dizel dijital ikiz kurulur, her değerin hangi dosyadan geldiği gösterilir. Ayrıca motor verim haritası, güzergâh (GPX / tablo), batarya ve klima eğrileri. Dosyayı olduğu gibi bırakın: Excel ya da CSV, `;` ya da `,`, ondalık virgül, ızgara ya da uzun liste, rpm ya da rad/s, verim % / kesir ya da kayıp kW, hepsi otomatik algılanır. Önizlemede yanlış görünen bir ayarı tek tıkla değiştirirsiniz; onaylamadan hiçbir şey kaydedilmez. |
 | **Araç kur** | Bileşenleri açılır listelerden seçerek araç ya da varyant oluşturma. Güç aktarma tipi seçilir: bataryalı elektrikli (şasi, aktarma, motor, batarya, klima, yardımcılar, yaşlanma) ya da dizel (şasi, şanzıman+aks+retarder, dizel motor, klima, yardımcılar). |
 | **Güzergâh oluştur** | Yol, bölüm bölüm: uzunluk, eğim, hız sınırı, yüzey, rüzgâr; bölüm sonunda durak (ad, bekleme, biniş/iniş) ya da trafik ışığı. Şablonlar: şehir içi hat (duraklı, ışıklı, tepeli) ve otoyol (tesis duruşlu). Rakım/hız/rüzgâr önizlemesi; kaydedince `library/route/<ad>.yaml` (tanım, yeniden düzenlenir) + `.csv` (çözücünün sürdüğü 10 m ızgara). GPX ile içe aktarılmış bir güzergâh açılınca bölümlere çevrilip düzenlenebilir kopya olur. |
@@ -165,6 +165,10 @@ python -m temsasim correlate                             # list test campaigns
 python -m temsasim correlate --campaign mersin_adana_2026_09 --overlay out/mersin
 
 python -m pytest tests                                   # 157 tests
+python -m temsasim export vehicle/maraton_13_dizel       # zip: vehicle + components + maps
+python -m temsasim import maraton_13_dizel.temsasim.zip --mode rename
+python -m temsasim copy engine/daf_mx_11_h5_330 --name "Deneme motoru"
+
 python -m temsasim gui                                   # the web interface
 ```
 
@@ -305,6 +309,7 @@ temsasim/            solver package
   routes.py          route builder: segment specs -> route YAML + CSV, templates, reversal
   scenarios.py       saved scenarios: route/cycle + vehicles + conditions + load, run and compare
   surfaces.py        road surface rolling-resistance multipliers
+  share.py           copy / export zip / import zip / raw edit of library items
   schema.py          forms generated from the component dataclasses
   app/               local web interface (Flask + one static page, offline)
 library/             TEMSA data: the Maraton twin, coast-down chassis, cycles, routes, lines, test logs (see library/README.md)

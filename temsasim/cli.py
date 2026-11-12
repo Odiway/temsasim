@@ -262,6 +262,53 @@ def cmd_gui(args):
     serve(args.library, port=args.port, open_browser=not args.no_browser)
 
 
+def _kind_stem(what: str) -> tuple[str, str]:
+    if "/" not in what:
+        raise LibraryError(f"'{what}': tür/ad biçiminde yazın, ör. vehicle/maraton_13_dizel")
+    kind, stem = what.split("/", 1)
+    return kind, pathlib.Path(stem).stem
+
+
+def cmd_export(args):
+    from .share import export_library, export_zip
+    root = pathlib.Path(args.library)
+    if args.what == "library":
+        data, out = export_library(root), args.out or f"temsasim_kutuphane.zip"
+    else:
+        kind, stem = _kind_stem(args.what)
+        data, out = export_zip(root, [(kind, stem)]), args.out or f"{stem}.temsasim.zip"
+    pathlib.Path(out).write_bytes(data)
+    print(f"wrote {out} ({len(data) / 1024:.0f} kB)")
+    return 0
+
+
+def cmd_import(args):
+    from .share import LABELS_TR, import_zip, inspect_zip
+    root = pathlib.Path(args.library)
+    data = pathlib.Path(args.zip).read_bytes()
+    info = inspect_zip(root, data)
+    for it in info["items"]:
+        flag = "exists" if it["exists"] else "new"
+        print(f"  {LABELS_TR.get(it['kind'], it['kind']):28} {it['kind']}/{it['stem']:40} {it['name'][:40]:40} {flag}")
+    if info["skipped"]:
+        print(f"  ignored: {', '.join(info['skipped'])}")
+    if args.list:
+        return 0
+    out = import_zip(root, data, mode=args.mode)
+    print(f"written: {len(out['written'])}  replaced: {len(out['replaced'])}  skipped: {len(out['skipped'])}  renamed: {out['renamed'] or '-'}")
+    for e in out["errors"]:
+        print(f"  ERROR {e}")
+    return 1 if out["errors"] else 0
+
+
+def cmd_copy(args):
+    from .share import copy_item
+    kind, stem = _kind_stem(args.what)
+    out = copy_item(pathlib.Path(args.library), kind, stem, args.name)
+    print(f"{kind}/{out['stem']}: {', '.join(out['files'])}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="temsasim", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -355,6 +402,22 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--runs", default=None, help="comma-separated run keys")
     sp.add_argument("--overlay", default=None, help="write per-run measured/simulated CSVs into this folder")
     sp.set_defaults(func=cmd_correlate)
+
+    sp = sub.add_parser("export", help="zip a library item with everything it references (or the whole library)")
+    sp.add_argument("what", help="kind/stem, e.g. vehicle/maraton_13_dizel, or 'library'")
+    sp.add_argument("-o", "--out", default=None, help="zip file to write (default: <stem>.temsasim.zip)")
+    sp.set_defaults(func=cmd_export)
+
+    sp = sub.add_parser("import", help="bring a package zip into the library")
+    sp.add_argument("zip")
+    sp.add_argument("--mode", default="skip", choices=["skip", "overwrite", "rename"], help="what to do with items that exist")
+    sp.add_argument("--list", action="store_true", help="show the package contents and stop")
+    sp.set_defaults(func=cmd_import)
+
+    sp = sub.add_parser("copy", help="duplicate a library item under a new name")
+    sp.add_argument("what", help="kind/stem, e.g. engine/daf_mx_11_h5_330")
+    sp.add_argument("--name", default=None)
+    sp.set_defaults(func=cmd_copy)
 
     sp = sub.add_parser("gui", help="open the web interface in a browser")
     sp.add_argument("--port", type=int, default=8765)

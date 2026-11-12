@@ -100,7 +100,7 @@ export async function pageRoute(U, stem) {
     nameIn.value = s.name || ""; stemIn.value = isEditable && s.stem ? s.stem : ""; descIn.value = s.description || "";
     $i(elev0).value = String(s.start_elevation_m ?? 50).replace(".", ","); setKind(s.kind || "serbest");
     origStem = isEditable ? s.stem : null;
-    drawSegments(); preview();
+    drawSegments(); preview(); drawMore();
   }
 
   const save = async (asCopy) => {
@@ -120,6 +120,8 @@ export async function pageRoute(U, stem) {
     }
   };
 
+  const moreBox = h("span", {});
+  const drawMore = () => moreBox.replaceChildren(origStem ? U.itemMenu("route", origStem, nameIn.value || origStem, { label: "Diğer", up: true, after: () => { location.hash = "#/kutuphane"; } }) : "");
   const tplBtn = (label, kindKey, q) => h("button", { type: "button", onclick: e => busy(e.currentTarget, async () => { const r = await api.get(`/api/route/template/${kindKey}${q || ""}`); loadSpec(r.spec, true); stemIn.value = ""; }) }, label);
   const left = h("div", { class: "stack" },
     h("div", { class: "panel stack" },
@@ -135,6 +137,7 @@ export async function pageRoute(U, stem) {
       h("button", { class: "primary", type: "button", onclick: e => busy(e.currentTarget, () => save(false)) }, origStem ? "Kaydet" : "Kütüphaneye kaydet"),
       h("button", { type: "button", onclick: e => busy(e.currentTarget, () => save(true)) }, "Kopya olarak kaydet"),
       h("button", { type: "button", onclick: () => { const b = collect(); store.set("newScenarioRoute", b.stem || ""); location.hash = "#/senaryo/yeni"; } }, "Bu güzergâhla senaryo kur"),
+      moreBox,
       h("span", { class: "spacer" }), h("a", { class: "btn ghost", href: "#/kutuphane" }, "Vazgeç")));
   const right = h("div", { class: "stack" }, totals, chartBox, warnBox,
     h("div", { class: "panel" }, h("h3", {}, "Kütüphanedeki güzergâhlar"), routeList(U, { onOpen: s => { location.hash = `#/guzergah/${encodeURIComponent(s)}`; } })));
@@ -161,13 +164,10 @@ export function routeList(U, { onOpen, compact } = {}) {
     list.append(h("li", {}, h("div", { class: "main" }, h("div", { class: "name" }, r.name),
       h("div", { class: "sum" }, r.error ? r.error : `${fmt(r.length_km, 2)} km · ${r.stops} durak · ${r.signals} ışık · tırmanış ${fmt(r.climb_m, 0)} m · ${r.elev_min}–${r.elev_max} m · ort. sınır ${r.mean_speed_limit_kmh} km/h`),
       r.description && !compact ? h("div", { class: "sum muted" }, r.description) : null, badges),
-      h("div", { class: "row", style: "gap:4px" },
+      h("div", { class: "acts" },
         h("button", { type: "button", class: "btn", onclick: () => onOpen(r.stem) }, r.editable ? "Düzenle" : "Aç / kopyala"),
         h("button", { type: "button", class: "btn", onclick: () => { U.store.set("simRoute", r.stem); U.store.set("dutyKind", "route"); location.hash = "#/simulasyon"; } }, "Simüle et"),
-        h("button", { type: "button", class: "ghost danger", title: "Çöp kutusuna taşı", onclick: async () => {
-          if (!confirm(`"${r.name}" silinsin mi? Dosyalar library/.cop_kutusu altına taşınır.`)) return;
-          try { await api.post(`/api/route/${encodeURIComponent(r.stem)}/delete`); toast("Çöp kutusuna taşındı."); await U.overview(true); U.route(); } catch (e) { toast(e.message, "err"); }
-        } }, "Sil"))));
+        U.itemMenu("route", r.stem, r.name, { extra: [{ label: "Bu güzergâhla senaryo kur", onclick: () => { U.store.set("newScenarioRoute", r.stem); location.hash = "#/senaryo/yeni"; } }] }))));
   });
   return list;
 }
@@ -271,12 +271,9 @@ export function scenarioList(U) {
   items.forEach(s => list.append(h("li", {}, h("div", { class: "main" }, h("div", { class: "name" }, s.name),
     h("div", { class: "sum" }, s.error ? s.error : s.summary), h("div", { class: "badges" }, h("span", { class: "badge plain" }, s.kind_tr || ""), ...(s.vehicles || []).map(v => h("span", { class: "badge plain" }, v))),
     s.description ? h("div", { class: "sum muted" }, s.description) : null),
-    h("div", { class: "row", style: "gap:4px" },
+    h("div", { class: "acts" },
       h("a", { class: "btn", href: `#/senaryo/${encodeURIComponent(s.stem)}` }, "Aç"),
-      h("button", { type: "button", class: "ghost danger", title: "Çöp kutusuna taşı", onclick: async () => {
-        if (!confirm(`"${s.name}" silinsin mi?`)) return;
-        try { await api.post(`/api/scenario/${encodeURIComponent(s.stem)}/delete`); toast("Çöp kutusuna taşındı."); await U.overview(true); U.route(); } catch (e) { toast(e.message, "err"); }
-      } }, "Sil")))));
+      U.itemMenu("scenario", s.stem, s.name)))));
   return list;
 }
 
