@@ -285,7 +285,7 @@ export function scenarioList(U) {
 }
 
 function resultTable(U, r, body) {
-  const { h, fmt, notice, store } = U;
+  const { h, fmt, notice, store, menu, downloadTable, toast } = U;
   const rows = r.rows;
   const anyD = rows.some(x => x.powertrain === "diesel"), anyE = rows.some(x => x.powertrain !== "diesel");
   const best = Math.min(...rows.map(x => x.energy_kwh_per_km));
@@ -313,8 +313,17 @@ function resultTable(U, r, body) {
       h("button", { type: "button", class: "btn", onclick: () => open3d(x) }, "3B izle"),
       U.menu("İndir", [{ label: "Rapor (HTML)", href: `/report/${x.report_id}/html`, download: "" }, { label: "Zaman serisi (CSV)", href: `/report/${x.report_id}/csv`, download: "" }]))));
   const warns = rows.flatMap(x => x.warnings.map(w => h("li", {}, h("b", {}, x.name + ": "), w)));
+  const EXPORT_COLS = [["name", "Araç"], ["variant", "Varyant"], ["powertrain_tr", "Güç aktarma"], ["distance_km", "Mesafe km", 2], ["duration_min", "Süre dk", 1],
+    ["mean_speed_kmh", "Ort. hız km/h", 1], ["l_per_100km", "Yakıt l/100 km", 2], ["fuel_l", "Yakıt l", 2], ["battery_kwh", "Batarya kWh", 2],
+    ["energy_kwh_per_km", "Enerji kWh/km", 3], ["co2_g_per_km", "CO₂ g/km", 0], ["range_km", "Menzil km", 0], ["regen_kwh", "Rejenerasyon kWh", 2],
+    ["idle_fuel_l", "Rölanti yakıtı l", 2], ["hvac_share", "Klima payı", 2], ["stops", "Durak"], ["achievable", "Görev tamamlandı"], ["warnings", "Uyarılar"]];
+  const exportBody = fmtOut => ({ format: fmtOut, title: body.name || "Senaryo sonucu", subtitle: `${r.cycle} · ${r.environment}`,
+    columns: EXPORT_COLS.map(([key, label, decimals]) => ({ key, label, decimals })), rows: rows.map(x => ({ ...x, powertrain_tr: x.powertrain === "diesel" ? "Dizel" : "Bataryalı elektrikli", warnings: x.warnings || [] })) });
   return h("div", { class: "stack" },
-    h("div", { class: "row" }, h("b", {}, "Sonuç"), h("span", { class: "muted small" }, `${r.cycle} · ${r.environment}`)),
+    h("div", { class: "row" }, h("b", {}, "Sonuç"), h("span", { class: "muted small" }, `${r.cycle} · ${r.environment}`), h("span", { class: "spacer" }),
+      menu("Tabloyu dışa aktar", [
+        { label: "Excel (.xlsx)", onclick: () => downloadTable(exportBody("xlsx")) },
+        { label: "CSV (Excel için ; ayraçlı)", onclick: () => downloadTable(exportBody("csv")) }], { left: true })),
     anyD && anyE ? notice("", "Not", ["Elektrikli ve dizel araç aynı tabloda: kWh/km sütunu dizelde yakıtın alt ısıl değeridir, ikisini kıyaslamak için odur."]) : null,
     h("div", { class: "scrollx" }, h("table", { class: "data" }, h("thead", {}, h("tr", {}, cols.map(c => h("th", {}, c)))), h("tbody", {}, rows.map(row)))),
     warns.length ? h("details", { class: "tele-warn" }, h("summary", {}, "Uyarılar"), h("ul", {}, warns)) : null);

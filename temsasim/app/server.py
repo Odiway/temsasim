@@ -842,6 +842,51 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                            render=lambda res: put_report(res, daily_km=float(sc.daily_km or 200)))
         return jsonify({k: v for k, v in out.items() if k != "results"})
 
+    @app.post("/api/export/table")
+    def export_table():
+        """A result table the page already shows, as an Excel sheet or CSV.
+        Body: {title, subtitle, columns:[{key,label}], rows:[{...}], format}."""
+        b = request.get_json(force=True)
+        fmt = (b.get("format") or "xlsx").lower()
+        cols = b.get("columns") or []
+        rows = b.get("rows") or []
+        title = str(b.get("title") or "tablo")
+        name = f"{safe_stem(title)}_{time.strftime('%Y%m%d_%H%M')}"
+        if fmt == "csv":
+            import csv
+            import io
+            buf = io.StringIO(); buf.write("\ufeff")
+            w = csv.writer(buf, delimiter=";", lineterminator="\n")
+            w.writerow([title]); w.writerow([str(b.get("subtitle") or "")])
+            w.writerow([c["label"] for c in cols])
+            for r in rows:
+                w.writerow([_tr_cell(r.get(c["key"])) for c in cols])
+            return Response(buf.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment; filename={name}.csv"})
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font
+        from openpyxl.utils import get_column_letter
+        import io
+        wb = Workbook(); ws = wb.active; ws.title = "Sonuç"
+        ws["A1"] = title; ws["A1"].font = Font(bold=True, size=13)
+        ws["A2"] = str(b.get("subtitle") or ""); ws["A2"].font = Font(italic=True, color="666666")
+        ws.append([])
+        ws.append([c["label"] for c in cols])
+        for cell in ws[4]:
+            cell.font = Font(bold=True); cell.alignment = Alignment(horizontal="center", wrap_text=True)
+        for r in rows:
+            ws.append([r.get(c["key"]) if isinstance(r.get(c["key"]), (int, float)) or r.get(c["key"]) is None else str(r.get(c["key"])) for c in cols])
+        for i, c in enumerate(cols, start=1):
+            width = max([len(str(c["label"]))] + [len(str(r.get(c["key"], ""))) for r in rows]) + 2
+            ws.column_dimensions[get_column_letter(i)].width = min(60, max(10, width))
+            if c.get("decimals") is not None:
+                for row in ws.iter_rows(min_row=5, min_col=i, max_col=i):
+                    for cell in row:
+                        cell.number_format = "0" if c["decimals"] == 0 else "0." + "0" * int(c["decimals"])
+        ws.freeze_panes = "A5"
+        out = io.BytesIO(); wb.save(out)
+        return Response(out.getvalue(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={"Content-Disposition": f"attachment; filename={name}.xlsx"})
+
     # ------------------------------------------------------------ diesel fuel tests (test-team CAN logs)
     # ------------------------------------------------------------ trash
     @app.get("/api/trash")
@@ -1243,6 +1288,17 @@ def _series_csv(result) -> str:
     for i in range(n):
         w.writerow([_cell(a[i]) for a in arr])
     return buf.getvalue()
+
+
+def _tr_cell(v):
+    """CSV for Excel in Turkish locale: decimal comma, lists joined."""
+    if isinstance(v, bool):
+        return "evet" if v else "hayır"
+    if isinstance(v, float):
+        return f"{v:.3f}".rstrip("0").rstrip(".").replace(".", ",")
+    if isinstance(v, list):
+        return " | ".join(str(x) for x in v)
+    return "" if v is None else v
 
 
 def _cell(v):

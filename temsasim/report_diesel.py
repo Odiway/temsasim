@@ -14,7 +14,7 @@ import pathlib
 import numpy as np
 
 from .diesel import DieselResult
-from .messages import localise, tr_num
+from .messages import describe_tr, localise, tr_num
 from .units import KWH, RPM
 
 HVAC_TR = {"heat_pump": "ısı pompalı", "hybrid": "ısı pompası + yedek ısıtıcılı",
@@ -201,8 +201,8 @@ def render_diesel_report(result: DieselResult, *, lang: str = "tr", daily_km: fl
 
     env_text = (f"{_fmt(env.ambient_c, 0)} °C dış sıcaklık · {_fmt(env.solar_irradiance_w_per_m2, 0)} W/m² güneş · "
                 f"{'gece' if env.night else 'gündüz'}")
-    comp = [("Şasi", v.chassis.describe()), ("Motor", eng.describe()), ("Şanzıman ve aks", tr.describe()),
-            ("Kabin ve klima", v.hvac.describe()), ("Yardımcılar", v.auxiliaries.describe())]
+    comp = [("Şasi", describe_tr(v.chassis)), ("Motor", describe_tr(eng)), ("Şanzıman ve aks", describe_tr(tr)),
+            ("Kabin ve klima", describe_tr(v.hvac)), ("Yardımcılar", describe_tr(v.auxiliaries))]
     comp_rows = "".join(f"<tr><td>{esc(a)}</td><td class=small>{esc(b)}</td></tr>" for a, b in comp)
 
     charts = [
@@ -267,7 +267,7 @@ table.bal td.num {{ text-align:right; font-variant-numeric:tabular-nums; white-s
     <p class="note">Koşu boyunca toplam ısı; pozitif kabini ısıtır, negatif soğutur. Dizel araçta ısıtma önce motor soğutma suyundan karşılanır.</p>
     <table class="bal"><tbody>{cab_rows}</tbody></table></div>
   <div class="card"><h2>Kullanılan bileşenler</h2>
-    <p class="note">Her satırda verinin ölçülmüş mü (VALIDATED) yoksa kabul mü (UNVALIDATED) olduğu görünür.</p>
+    <p class="note">Her satırın sonunda verinin ölçülmüş mü [ölçüldü] yoksa kabul mü [kabul değeri] olduğu yazar.</p>
     <table class="bal"><tbody>{comp_rows}</tbody></table></div>
 </div>
 <div class="card"><h2>Kabuller</h2><ul class="small">{assume_html}</ul></div>

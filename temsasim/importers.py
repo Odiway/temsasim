@@ -622,7 +622,17 @@ def import_route(data: bytes, filename: str, *, default_speed_kmh: float = 50.0,
                  stop_spacing_m: float | None = None) -> RouteImport:
     """GPX track (with waypoints as stops) or a table of distance/elevation."""
     name = filename.lower()
-    if name.endswith(".gpx") or data.lstrip()[:5] in (b"<?xml", b"<gpx "):
+    if name.endswith(".kmz"):
+        import zipfile
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            kml = next((n for n in z.namelist() if n.lower().endswith(".kml")), None)
+            if kml is None:
+                raise ValueError("KMZ içinde .kml dosyası yok.")
+            data, name = z.read(kml), kml.lower()
+    head = data.lstrip()[:200].lower()
+    if name.endswith(".kml") or b"<kml" in head:
+        r = _import_kml(data, default_speed_kmh)
+    elif name.endswith(".gpx") or b"<gpx" in head or head.startswith(b"<?xml"):
         r = _import_gpx(data, default_speed_kmh)
     else:
         r = _import_route_table(read_table(data, filename), default_speed_kmh)
@@ -687,6 +697,64 @@ def _import_gpx(data: bytes, default_speed_kmh: float) -> RouteImport:
             f"{len(ignored)} nokta güzergâha 60 m'den uzak olduğu için durak sayılmadı: "
             + ", ".join(ignored) + ". Durak ise konumunu kontrol edin.")
     return RouteImport(d, ele, np.full(d.size, default_speed_kmh), stops, warnings, "gpx")
+
+
+def _import_kml(data: bytes, default_speed_kmh: float) -> RouteImport:
+    """KML (Google Earth / My Maps): the LineString is the track, Point
+    placemarks within 60 m of it are stops. Coordinates are lon,lat[,alt]."""
+    root = ET.fromstring(data)
+
+    def local(tag):
+        return tag.split("}")[-1]
+
+    lines, points = [], []
+    for el in root.iter():
+        if local(el.tag) == "LineString":
+            c = el.find("./{*}coordinates")
+            if c is not None and c.text:
+                lines.append(c.text)
+        elif local(el.tag) == "Placemark":
+            pt = el.find(".//{*}Point/{*}coordinates")
+            if pt is not None and pt.text:
+                nm = el.find("./{*}name")
+                points.append((pt.text, nm.text if nm is not None and nm.text else "adsız"))
+    if not lines:
+        raise ValueError("KML dosyasında bir çizgi (LineString) bulunamadı.")
+    trip = []
+    for text in lines:
+        for tok in text.split():
+            parts = tok.split(",")
+            if len(parts) >= 2:
+                trip.append((float(parts[1]), float(parts[0]), float(parts[2]) if len(parts) > 2 and parts[2] else float("nan")))
+    if len(trip) < 2:
+        raise ValueError("KML çizgisinde en az iki nokta olmalı.")
+    lat = np.array([t[0] for t in trip]); lon = np.array([t[1] for t in trip]); ele = np.array([t[2] for t in trip])
+    warnings = []
+    if np.all(np.isnan(ele)) or np.nanmax(np.abs(ele)) < 1e-6:
+        ele = np.zeros(lat.size)
+        warnings.append("KML'de yükseklik yok (ya da hepsi 0): güzergâh düz kabul edildi. Eğim enerji tüketimini ciddi etkiler; "
+                        "yükseklikli bir iz (GPX) ya da mesafe–rakım tablosu daha iyidir.")
+    else:
+        ele = np.where(np.isnan(ele), np.interp(np.arange(ele.size), np.flatnonzero(~np.isnan(ele)), ele[~np.isnan(ele)]), ele)
+    seg = np.r_[0.0, _haversine(lat[:-1], lon[:-1], lat[1:], lon[1:])]
+    d = np.cumsum(seg)
+    keep = np.r_[True, np.diff(d) > 0.5]
+    lat, lon, ele, d = lat[keep], lon[keep], ele[keep], d[keep]
+    along = d.copy()
+    d, ele = _regrid(d, ele, 10.0)
+    stops, ignored = [], []
+    for text, nm in points:
+        parts = text.strip().split(",")
+        wl, wn = float(parts[1]), float(parts[0])
+        dist = _haversine(wl, wn, lat, lon)
+        k = int(np.argmin(dist))
+        if dist[k] <= 60.0:
+            stops.append(float(along[k]))
+        else:
+            ignored.append(f"{nm} ({dist[k]:.0f} m)")
+    if ignored:
+        warnings.append(f"{len(ignored)} nokta güzergâha 60 m'den uzak olduğu için durak sayılmadı: " + ", ".join(ignored) + ".")
+    return RouteImport(d, ele, np.full(d.size, default_speed_kmh), stops, warnings, "kml")
 
 
 def _regrid(d, y, step):

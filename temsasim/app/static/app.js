@@ -508,6 +508,16 @@ async function copyItem(kind, stem, name) {
   return r;
 }
 const exportUrl = (kind, stem) => `/api/export/${kind}/${encodeURIComponent(stem)}`;
+/* POST a table the page shows and save the file the server sends back */
+async function downloadTable(body) {
+  const r = await fetch("/api/export/table", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { let j = null; try { j = await r.json(); } catch { /* */ } throw new Error((j && j.error) || `Sunucu hatası (${r.status})`); }
+  const blob = await r.blob();
+  const cd = r.headers.get("Content-Disposition") || "";
+  const m = /filename=([^;]+)/.exec(cd);
+  const a = h("a", { href: URL.createObjectURL(blob), download: m ? m[1].trim() : "tablo" });
+  document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
 const DELETE_URL = {
   vehicle: s => `/api/vehicle/${encodeURIComponent(s)}/delete`,
   route: s => `/api/route/${encodeURIComponent(s)}/delete`,
@@ -573,7 +583,7 @@ const PAGE_SIGN = { baslangic: "Başlangıç", kutuphane: "Kütüphane", yukle: 
 /* The shared toolkit the page modules (network.js, drive.js, routes.js) receive. */
 function pageKit() {
   return { h, api, store, fmt, parseNum, seg, select, field, numInput, toast, busy, notice, ov: OV, pageHead, lineChart, css, overview, route, kpi,
-    menu, itemMenu, copyItem, exportUrl, openFileDialog, valBadge, whenEl,
+    menu, itemMenu, copyItem, exportUrl, openFileDialog, valBadge, whenEl, downloadTable,
     setCleanup: fn => (pageCleanup = fn), raster: Sign.raster };
 }
 async function pageRouteBuilder(stem) { const mod = await import("/static/routes.js"); return mod.pageRoute(pageKit(), stem); }
@@ -780,7 +790,7 @@ async function pageUpload(which) {
   const TILES = [
     ["vecto", "VECTO dosyaları (dizel araç)", "Homologasyonun motor, şanzıman, aks, lastik ve araç XML dosyaları. Klasörü olduğu gibi bırakın; dijital ikiz kurulur."],
     ["harita", "Motor verim haritası", "Tedarikçi ya da dinamometre verisi. Verim (% ya da kesir) veya kayıp gücü."],
-    ["guzergah", "Güzergâh", "GPX izi ya da mesafe–rakım tablosu. Duraklar GPX noktalarından okunur."],
+    ["guzergah", "Güzergâh", "GPX ya da KML/KMZ izi, ya da mesafe–rakım tablosu. Duraklar GPX/KML noktalarından okunur."],
     ["egri", "Batarya ya da klima eğrisi", "OCV–SOC, COP–sıcaklık gibi iki sütunlu eğriler."],
     ["log", "Araç logu", "CAN / telematik kaydı. Modeli gerçek otobüsle karşılaştırır."],
     ["paket", "Paket (zip)", "Bir meslektaşın kütüphanesinden 'İndir' ile alınmış zip: araç + bileşenler, güzergâh, senaryo ya da bütün kütüphane. Var olanlara ne yapılacağını sorar."],
@@ -1059,8 +1069,8 @@ function routeWizard() {
     } catch (e) { first(); root.append(notice("err", "Güzergâh okunamadı.", [e.message])); }
   };
   const first = () => root.replaceChildren(steps(["Dosya", "Kontrol et", "Kaydet"], 0), h("div", { class: "stack" },
-    dropZone({ accept: ".gpx,.csv,.txt,.xlsx", title: "GPX ya da tablo dosyasını bırakın",
-      sub: "GPX: iz noktaları + (varsa) durak noktaları. Tablo: mesafe (m ya da km), rakım, isteğe bağlı hız limiti ve durak sütunu.",
+    dropZone({ accept: ".gpx,.kml,.kmz,.csv,.txt,.xlsx", title: "GPX, KML/KMZ ya da tablo dosyasını bırakın",
+      sub: "GPX/KML: iz + (varsa) durak noktaları (Google Earth, My Maps). Tablo: mesafe (m ya da km), rakım, isteğe bağlı hız limiti ve durak sütunu.",
       onFile: f => { file = f; load(); } }),
     h("div", { class: "formgrid" },
       field("Durak aralığı", spacing, { hint: "Yalnızca dosyada durak yoksa kullanılır." }),

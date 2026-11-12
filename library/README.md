@@ -77,7 +77,7 @@ yazım hatası varsayılanı yerinde bırakmak yerine yüklemeyi durdurur.
 | Dizel motor, şanzıman, aks, lastik | Homologasyonun VECTO XML dosyaları | *Veri yükle → VECTO dosyaları* ya da `python -m temsasim vecto-import` |
 | Kütle, CdxA, koltuk, boyut | Tamamlanmış araç dosyası, CFD raporu, tartı | VECTO içe aktarma; elle düzeltme formdan |
 | Elektrik motoru verim haritası | Tedarikçi / dinamometre (Excel, CSV) | *Veri yükle → Motor verim haritası* |
-| Güzergâh | GPX, mesafe–rakım tablosu, KML (planda) | *Veri yükle → Güzergâh* |
+| Güzergâh | GPX, KML/KMZ (Google Earth, My Maps), mesafe–rakım tablosu; ya da güzergâh oluşturucu | *Veri yükle → Güzergâh*, *Güzergâh oluştur* |
 | Test kayıtları | Test ekibi CAN/Dewesoft (xlsx) | `testlog/<kampanya>/` + `meta.yaml`; *Doğrulama* sayfası |
 | Başka bir kütüphaneden öğe | Meslektaşın "İndir" ile aldığı zip paketi | *Veri yükle → Paket* ya da `python -m temsasim import paket.zip` |
 

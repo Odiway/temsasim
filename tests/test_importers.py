@@ -231,3 +231,28 @@ def test_can_log_with_datetimes_voltage_current_and_reversed_sign():
     assert np.all(log.battery_power_w > 0)          # flipped to discharge-positive
     assert log.speed_mps.max() == pytest.approx(30 / 3.6)
     assert any("gerilim × akım" in n for n in notes)
+
+
+KML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Hat 5</name>
+<Placemark><name>Otogar</name><Point><coordinates>35.3200,37.0000,20</coordinates></Point></Placemark>
+<Placemark><name>Uzak nokta</name><Point><coordinates>35.4000,37.0500,20</coordinates></Point></Placemark>
+<Placemark><name>iz</name><LineString><coordinates>
+35.3200,37.0000,20 35.3250,37.0000,25 35.3300,37.0000,31 35.3350,37.0000,36 35.3400,37.0000,30 35.3450,37.0000,22
+</coordinates></LineString></Placemark>
+<Placemark><name>Son durak</name><Point><coordinates>35.3450,37.0000,22</coordinates></Point></Placemark>
+</Document></kml>"""
+
+
+def test_kml_line_with_point_stops_and_kmz():
+    import io
+    import zipfile
+    r = import_route(KML, "hat5.kml")
+    assert r.source_format == "kml" and 2.0 < r.distance_m[-1] / 1000 < 2.5
+    assert len(r.stops_m) == 2 and r.elevation_m.max() - r.elevation_m.min() > 10
+    assert any("Uzak nokta" in w for w in r.warnings)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("doc.kml", KML)
+    r2 = import_route(buf.getvalue(), "hat5.kmz")
+    assert r2.source_format == "kml" and abs(r2.distance_m[-1] - r.distance_m[-1]) < 1

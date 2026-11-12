@@ -136,3 +136,30 @@ def test_trash_endpoints_restore_and_purge(lib_root):
     assert c.post("/api/scenario/otoyol_kis_gecesi/delete").status_code == 200
     assert c.post("/api/trash/purge").get_json()["removed"] == 1 and c.get("/api/trash").get_json()["items"] == []
     assert c.get("/favicon.ico").status_code == 200
+
+
+def test_table_export_xlsx_and_csv(lib_root):
+    from temsasim.app.server import create_app
+    c = create_app(lib_root).test_client()
+    body = {"title": "Deneme", "subtitle": "x", "columns": [{"key": "name", "label": "Araç"}, {"key": "l", "label": "l/100 km", "decimals": 2}, {"key": "ok", "label": "Tamam"}],
+            "rows": [{"name": "Maraton", "l": 23.456, "ok": True}, {"name": "B", "l": None, "ok": False}]}
+    x = c.post("/api/export/table", json={**body, "format": "xlsx"})
+    assert x.status_code == 200 and x.data[:2] == b"PK" and ".xlsx" in x.headers["Content-Disposition"]
+    from openpyxl import load_workbook
+    import io
+    ws = load_workbook(io.BytesIO(x.data)).active
+    assert ws["A4"].value == "Araç" and ws["B5"].value == 23.456
+    s = c.post("/api/export/table", json={**body, "format": "csv"})
+    assert s.status_code == 200 and "23,456" in s.get_data(as_text=True) and "evet" in s.get_data(as_text=True)
+
+
+def test_report_components_are_turkish(lib_root):
+    from temsasim.library import Library
+    from temsasim.cycle import Environment
+    from temsasim.simulator import run
+    from temsasim.report_diesel import render_diesel_report
+    L = Library(lib_root)
+    v = L.load_vehicle("maraton_13_dizel")
+    res = run(v, L.load_cycle("cbdbus"), Environment(ambient_c=20))
+    html = render_diesel_report(res)
+    assert "[ölçüldü]" in html and "UNVALIDATED" not in html and "lastik RRC" in html

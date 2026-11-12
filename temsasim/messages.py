@@ -27,6 +27,28 @@ def localise(items, lang: str = "en") -> list:
     return [str(x) for x in items]
 
 
+_DESCRIBE_TR = [
+    ("[VALIDATED]", "[ölçüldü]"), ("[UNVALIDATED]", "[kabul değeri]"), ("[CALIBRATED]", "[kalibre edildi]"),
+    ("[LITERATURE COEFFICIENTS]", "[literatür katsayıları]"),
+    ("coast-down (measured)", "coast-down (ölçülmüş)"), ("tyre RRC x ", "lastik RRC × "), (" axles,", " aks,"),
+    ("physical Cr/Cd", "fiziksel Cr/Cd"), (" kerb", " boş kütle"), ("diesel,", "dizel,"), ("idle ", "rölanti "),
+    (" map=none", " harita yok"), (" map=", " harita: "), ("gears ", "vites "), (" x ", " × "), (" final", " son oran"),
+    (" kW heat / ", " kW ısıtma / "), (" kW cool ", " kW soğutma "), ("hotel + steering + air", "otel yükü + direksiyon + hava"),
+    (" kW pk / ", " kW tepe / "), (" kW cont", " kW sürekli"), (" kWh nominal / ", " kWh anma / "), (" kWh usable", " kWh kullanılabilir"),
+    ("EOL at ", "ömür sonu "), ("heat_pump", "ısı pompası"), ("resistive", "rezistif"), ("fuel_fired", "yakıtlı ısıtıcı"),
+    ("central_motor", "merkezi motor"), ("hub_motor", "tekerlek içi motor"), ("direct_drive", "doğrudan aks"),
+]
+
+
+def describe_tr(obj) -> str:
+    """A component's one-line ``describe()`` with its English tokens turned
+    into Turkish, for the reports. The English text stays the CLI's."""
+    text = obj.describe() if hasattr(obj, "describe") else str(obj)
+    for en, tr in _DESCRIBE_TR:
+        text = text.replace(en, tr)
+    return text
+
+
 def tr_num(v: float, d: int = 1) -> str:
     """Turkish number formatting: 1.234,5"""
     s = f"{v:,.{d}f}"
