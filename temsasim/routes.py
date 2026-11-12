@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import csv
 import pathlib
+import time
 from dataclasses import asdict, dataclass, field
 
 import numpy as np
@@ -196,7 +197,8 @@ def list_routes(library_root) -> list:
     if not root.exists():
         return out
     for p in sorted(root.glob("*.csv")):
-        item = {"stem": p.stem, "name": p.stem, "editable": (root / f"{p.stem}.yaml").exists(), "kind": "", "source": "csv"}
+        item = {"stem": p.stem, "name": p.stem, "editable": (root / f"{p.stem}.yaml").exists(), "kind": "", "source": "csv",
+                "modified": time.strftime("%Y-%m-%d %H:%M", time.localtime(p.stat().st_mtime))}
         try:
             r = Route.from_csv(p)
             climb = float(np.sum(np.clip(np.diff(r.elevation_m), 0, None)))

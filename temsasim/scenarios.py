@@ -20,6 +20,7 @@ has (range on the pack, litres), plus the full report of each run.
 from __future__ import annotations
 
 import pathlib
+import time
 from dataclasses import replace
 from dataclasses import dataclass, field
 
@@ -104,6 +105,7 @@ def list_scenarios(library_root) -> list:
             sc = load_scenario(library_root, p.stem)
             out.append({"stem": p.stem, "name": sc.name, "kind": sc.kind, "kind_tr": KINDS_TR.get(sc.kind, ""),
                         "description": sc.description, "vehicles": sc.vehicles, "duty": sc.duty, "summary": sc.summary_tr(),
+                        "modified": time.strftime("%Y-%m-%d %H:%M", time.localtime(p.stat().st_mtime)),
                         "conditions": sc.conditions, "load": sc.load, "traffic": sc.traffic})
         except Exception as exc:
             out.append({"stem": p.stem, "name": p.stem, "error": str(exc)})

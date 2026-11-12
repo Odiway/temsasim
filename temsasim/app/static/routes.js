@@ -79,7 +79,7 @@ export async function pageRoute(U, stem) {
       const r = await api.post("/api/route/preview", collect());
       const p = r.preview, t = p.totals;
       totals.replaceChildren(
-        kp("Uzunluk", fmt(t.length_km, 2), "km"), kp("Tırmanış / iniş", `${fmt(t.climb_m, 0)} / ${fmt(t.descent_m, 0)}`, "m"),
+        kp("Uzunluk", fmt(t.length_km, 2), "km"), kp("Tırmanış / iniş", `${fmt(Math.abs(t.climb_m), 0)} / ${fmt(Math.abs(t.descent_m), 0)}`, "m"),
         kp("Eğim aralığı", `${fmt(t.min_grade_pct, 1)} … ${fmt(t.max_grade_pct, 1)}`, "%"), kp("Durak", t.stops, ""), kp("Işık", t.signals, ""),
         kp("Biniş toplamı", fmt(t.boardings, 0), "yolcu"), kp("Ort. hız sınırı", fmt(t.mean_speed_limit_kmh, 0), "km/h"));
       const x = p.distance_km;
@@ -121,7 +121,10 @@ export async function pageRoute(U, stem) {
   };
 
   const moreBox = h("span", {});
-  const drawMore = () => moreBox.replaceChildren(origStem ? U.itemMenu("route", origStem, nameIn.value || origStem, { label: "Diğer", up: true, after: () => { location.hash = "#/kutuphane"; } }) : "");
+  const scenarioItem = { label: "Bu güzergâhla senaryo kur", onclick: () => { const b = collect(); store.set("newScenarioRoute", b.stem || ""); location.hash = "#/senaryo/yeni"; } };
+  const drawMore = () => moreBox.replaceChildren(origStem
+    ? U.itemMenu("route", origStem, nameIn.value || origStem, { label: "Diğer", up: true, extra: [scenarioItem, "-"], after: () => { location.hash = "#/kutuphane"; } })
+    : U.menu("Diğer", [scenarioItem], { up: true }));
   const tplBtn = (label, kindKey, q) => h("button", { type: "button", onclick: e => busy(e.currentTarget, async () => { const r = await api.get(`/api/route/template/${kindKey}${q || ""}`); loadSpec(r.spec, true); stemIn.value = ""; }) }, label);
   const left = h("div", { class: "stack" },
     h("div", { class: "panel stack" },
@@ -136,7 +139,6 @@ export async function pageRoute(U, stem) {
     h("div", { class: "savebar" },
       h("button", { class: "primary", type: "button", onclick: e => busy(e.currentTarget, () => save(false)) }, origStem ? "Kaydet" : "Kütüphaneye kaydet"),
       h("button", { type: "button", onclick: e => busy(e.currentTarget, () => save(true)) }, "Kopya olarak kaydet"),
-      h("button", { type: "button", onclick: () => { const b = collect(); store.set("newScenarioRoute", b.stem || ""); location.hash = "#/senaryo/yeni"; } }, "Bu güzergâhla senaryo kur"),
       moreBox,
       h("span", { class: "spacer" }), h("a", { class: "btn ghost", href: "#/kutuphane" }, "Vazgeç")));
   const right = h("div", { class: "stack" }, totals, chartBox, warnBox,
@@ -160,7 +162,7 @@ export function routeList(U, { onOpen, compact } = {}) {
   items.forEach(r => {
     const badges = h("div", { class: "badges" }, h("span", { class: "badge plain" }, r.kind_tr || "içe aktarılmış"),
       r.has_wind ? h("span", { class: "badge plain" }, "rüzgâr") : null, r.has_surface ? h("span", { class: "badge plain" }, "yüzey") : null,
-      r.boardings ? h("span", { class: "badge plain" }, `${r.boardings} biniş`) : null, r.error ? h("span", { class: "badge err" }, "hatalı dosya") : null);
+      r.boardings ? h("span", { class: "badge plain" }, `${r.boardings} biniş`) : null, r.error ? h("span", { class: "badge err" }, "hatalı dosya") : null, U.whenEl(r.modified));
     list.append(h("li", {}, h("div", { class: "main" }, h("div", { class: "name" }, r.name),
       h("div", { class: "sum" }, r.error ? r.error : `${fmt(r.length_km, 2)} km · ${r.stops} durak · ${r.signals} ışık · tırmanış ${fmt(r.climb_m, 0)} m · ${r.elev_min}–${r.elev_max} m · ort. sınır ${r.mean_speed_limit_kmh} km/h`),
       r.description && !compact ? h("div", { class: "sum muted" }, r.description) : null, badges),
@@ -269,7 +271,7 @@ export function scenarioList(U) {
   if (!items.length) return h("p", { class: "muted small" }, "Henüz senaryo yok. Bir güzergâh ve araç seçip kaydedin.");
   const list = h("ul", { class: "itemlist" });
   items.forEach(s => list.append(h("li", {}, h("div", { class: "main" }, h("div", { class: "name" }, s.name),
-    h("div", { class: "sum" }, s.error ? s.error : s.summary), h("div", { class: "badges" }, h("span", { class: "badge plain" }, s.kind_tr || ""), ...(s.vehicles || []).map(v => h("span", { class: "badge plain" }, v))),
+    h("div", { class: "sum" }, s.error ? s.error : s.summary), h("div", { class: "badges" }, h("span", { class: "badge plain" }, s.kind_tr || ""), ...(s.vehicles || []).map(v => h("span", { class: "badge plain" }, v)), U.whenEl(s.modified)),
     s.description ? h("div", { class: "sum muted" }, s.description) : null),
     h("div", { class: "acts" },
       h("a", { class: "btn", href: `#/senaryo/${encodeURIComponent(s.stem)}` }, "Aç"),
@@ -302,7 +304,8 @@ function resultTable(U, r, body) {
     h("td", { class: "n" }, `%${fmt(100 * x.hvac_share, 0)}`),
     h("td", {}, h("div", { class: "row", style: "gap:4px" },
       h("a", { class: "btn", href: `/report/${x.report_id}`, target: "_blank", rel: "noopener" }, "Tam rapor"),
-      h("button", { type: "button", class: "btn", onclick: () => open3d(x) }, "3B izle"))));
+      h("button", { type: "button", class: "btn", onclick: () => open3d(x) }, "3B izle"),
+      U.menu("İndir", [{ label: "Rapor (HTML)", href: `/report/${x.report_id}/html`, download: "" }, { label: "Zaman serisi (CSV)", href: `/report/${x.report_id}/csv`, download: "" }]))));
   const warns = rows.flatMap(x => x.warnings.map(w => h("li", {}, h("b", {}, x.name + ": "), w)));
   return h("div", { class: "stack" },
     h("div", { class: "row" }, h("b", {}, "Sonuç"), h("span", { class: "muted small" }, `${r.cycle} · ${r.environment}`)),

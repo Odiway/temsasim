@@ -206,7 +206,11 @@ const Sign = (() => {
 
 function vehicleCode(stem) {
   if (!stem) return "SİM";
-  return stem.replace(/^(citybus|city_bus|bus|otobus)_/i, "").replace(/_/g, " ").slice(0, 14);
+  const v = OV && OV.vehicles ? OV.vehicles.find(x => x.stem === stem) : null;
+  const words = (v && v.name ? v.name : stem.replace(/^(citybus|city_bus|bus|otobus)_/i, "").replace(/_/g, " ")).split(/\s+/);
+  let out = "";
+  for (const w of words) { if ((out + " " + w).trim().length > 14) break; out = (out + " " + w).trim(); }
+  return out || words[0].slice(0, 14);
 }
 
 /* ================================================================ state */
@@ -441,6 +445,13 @@ function seg(options, value, onChange) {
 const CONF = { high: ["ok", "emin"], medium: ["plain", "tahmin"], low: ["warn", "kontrol edin"] };
 function confBadge(c) { const [k, t] = CONF[c] || CONF.medium; return h("span", { class: "badge " + k }, t); }
 function valBadge(ok) { return ok ? h("span", { class: "badge ok" }, "doğrulandı") : h("span", { class: "badge warn" }, "ölçülmedi"); }
+/* "2026-11-12 09:40" -> a small muted "12.11.2026" with the full stamp as tooltip */
+function whenEl(iso) {
+  if (!iso) return null;
+  const [d] = iso.split(" ");
+  const [y, m, dd] = d.split("-");
+  return h("span", { class: "when", title: `son değişiklik ${iso}` }, `${dd}.${m}.${y}`);
+}
 function steps(labels, now) {
   return h("ol", { class: "steps" }, labels.map((l, i) => h("li", { "data-state": i < now ? "done" : i === now ? "now" : "todo" }, h("span", {}, i + 1), l)));
 }
@@ -553,24 +564,24 @@ async function openFileDialog(kind, stem, name) {
 
 /* ================================================================ router */
 const PAGES = {
-  kutuphane: pageLibrary, yukle: pageUpload, bilesen: pageComponent,
+  baslangic: pageHome, kutuphane: pageLibrary, yukle: pageUpload, bilesen: pageComponent,
   arac: pageVehicle, simulasyon: pageSim, surus: pageDrive, hat: pageNetwork, dogrulama: pageValidate,
   guzergah: pageRouteBuilder, senaryo: pageScenarios,
 };
-const PAGE_SIGN = { kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bileşen", arac: "Araç kur", simulasyon: "Simülasyon", surus: "Serbest sürüş", hat: "Hat ve sefer", dogrulama: "Doğrulama",
+const PAGE_SIGN = { baslangic: "Başlangıç", kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bileşen", arac: "Araç kur", simulasyon: "Simülasyon", surus: "Serbest sürüş", hat: "Hat ve sefer", dogrulama: "Doğrulama",
   guzergah: "Güzergâh", senaryo: "Senaryo" };
 /* The shared toolkit the page modules (network.js, drive.js, routes.js) receive. */
 function pageKit() {
   return { h, api, store, fmt, parseNum, seg, select, field, numInput, toast, busy, notice, ov: OV, pageHead, lineChart, css, overview, route, kpi,
-    menu, itemMenu, copyItem, exportUrl, openFileDialog, valBadge,
+    menu, itemMenu, copyItem, exportUrl, openFileDialog, valBadge, whenEl,
     setCleanup: fn => (pageCleanup = fn), raster: Sign.raster };
 }
 async function pageRouteBuilder(stem) { const mod = await import("/static/routes.js"); return mod.pageRoute(pageKit(), stem); }
 async function pageScenarios(stem) { const mod = await import("/static/routes.js"); return mod.pageScenario(pageKit(), stem); }
 
 async function route() {
-  const parts = (location.hash || "#/kutuphane").replace(/^#\/?/, "").split("/").map(decodeURIComponent);
-  const page = PAGES[parts[0]] ? parts[0] : "kutuphane";
+  const parts = (location.hash || "#/baslangic").replace(/^#\/?/, "").split("/").map(decodeURIComponent);
+  const page = PAGES[parts[0]] ? parts[0] : "baslangic";
   $$("nav.rail a").forEach(a => { if (a.dataset.page === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
   Sign.set(vehicleCode(store.get("vehicle")), PAGE_SIGN[page]);
   if (pageCleanup) { try { pageCleanup(); } catch (e) { console.error(e); } pageCleanup = null; }
@@ -596,6 +607,43 @@ $("#themeBtn").addEventListener("click", () => {
   Sign.draw(); route();
 });
 { const t = store.get("theme"); if (t) document.documentElement.setAttribute("data-theme", t); }
+
+/* ================================================================ home */
+/* One screen that says what the tool does, in the order it is used, and
+   where the library stands: counts, what is still unmeasured, the latest
+   test campaign. Everything here is a link into the real pages. */
+async function pageHome() {
+  const ov = await overview(true);
+  let camps = [];
+  try { camps = (await api.get("/api/campaigns")).campaigns || []; } catch { /* no test logs */ }
+  const root = h("div", {});
+  root.append(pageHead("Başlangıç", "Otobüs enerji simülatörü",
+    "Kütüphanedeki araç dosyalarından, bir güzergâh ya da senaryo üzerinde enerji ve yakıt tüketimini hesaplar; sonucu test ekibinin ölçümleriyle karşılaştırır. Her şey bu bilgisayardaki düz dosyalardır."));
+  const step = (n, title, text, links) => h("div", { class: "panel step" }, h("div", { class: "n" }, n), h("h3", {}, title), h("p", {}, text),
+    h("div", { class: "links" }, links.map(([l, href]) => h("a", { href }, l))));
+  root.append(h("div", { class: "flow" },
+    step("1 · Veri", "Araç ve bileşenler", "VECTO dosyaları, tedarikçi haritaları, elle girilen değerler. Bir bileşen bir kez tanımlanır.", [["Kütüphane", "#/kutuphane"], ["Veri yükle", "#/yukle"], ["Araç kur", "#/arac/yeni"]]),
+    step("2 · Görev", "Güzergâh ve senaryo", "Yol bölüm bölüm; durak, ışık, yüzey, rüzgâr. Senaryo = yol + araçlar + koşullar + yük.", [["Güzergâh oluştur", "#/guzergah/yeni"], ["Senaryolar", "#/senaryo"]]),
+    step("3 · Koş", "Simülasyon", "Görevi araçta koş, 3B izle, raporu al. Serbest sürüşle hisset, hat ve sefer için günü hesapla.", [["Simülasyon", "#/simulasyon"], ["Serbest sürüş", "#/surus"], ["Hat ve sefer", "#/hat"]]),
+    step("4 · Doğrula", "Ölçümle karşılaştır", "Test ekibinin CAN kayıtları modelden geçer; fark nerede toplanıyorsa düzeltilecek bileşen odur.", [["Doğrulama", "#/dogrulama"], ["Hesap haritası", "/static/hesap-haritasi.html"]])));
+  const unval = ov.components.reduce((n, g) => n + g.items.filter(i => !i.validated && !i.error).length, 0);
+  const nComp = ov.components.reduce((n, g) => n + g.items.length, 0);
+  const scen = ov.scenarios || [], rts = ov.route_items || [];
+  const status = h("div", { class: "panel" }, h("h2", {}, "Kütüphanenin durumu"),
+    h("div", { class: "kpis", style: "margin-top:10px" },
+      kpi("Araç", ov.vehicles.length), kpi("Bileşen", nComp), kpi("Ölçülmemiş bileşen", unval), kpi("Güzergâh", rts.length), kpi("Senaryo", scen.length)),
+    unval ? h("p", { class: "small muted", style: "margin:10px 0 0" }, "Ölçülmemiş: dosya kabul değeri içeriyor; sonuç yol göstericidir. Kaynağı kütüphanede açıklamasında yazar.") : null,
+    camps.length ? h("div", { style: "margin-top:14px" }, h("div", { class: "section-title" }, "Test kampanyaları"),
+      h("ul", { class: "home-list" }, camps.map(c => h("li", {}, h("span", { class: "name", title: c.report || "" }, c.campaign || c.name), h("span", { class: "muted small" }, `${c.runs || 0} koşu · ${c.dates || ""}`), h("a", { class: "btn", href: "#/dogrulama" }, "Karşılaştır"))))) : null);
+  const quick = h("div", { class: "panel" }, h("div", { class: "row" }, h("h2", {}, "Hızlı başla"), h("span", { class: "spacer" }), h("a", { class: "btn", href: "#/senaryo/yeni" }, "Yeni senaryo")),
+    scen.length ? h("ul", { class: "home-list", style: "margin-top:8px" }, scen.slice(0, 6).map(s => h("li", {}, h("span", { class: "name", title: s.summary }, s.name), h("span", { class: "muted small" }, s.kind_tr || ""),
+      h("a", { class: "btn", href: `#/senaryo/${encodeURIComponent(s.stem)}` }, "Aç")))) : h("p", { class: "muted small" }, "Henüz senaryo yok."),
+    h("div", { class: "section-title" }, "Araçlar"),
+    ov.vehicles.length ? h("ul", { class: "home-list" }, ov.vehicles.slice(0, 6).map(v => h("li", {}, h("span", { class: "name" }, v.name), h("span", { class: "muted small" }, v.powertrain_tr || ""),
+      h("button", { type: "button", class: "btn", onclick: () => { store.set("vehicle", v.stem); location.hash = "#/simulasyon"; } }, "Simüle et")))) : h("p", { class: "muted small" }, "Henüz araç yok."));
+  root.append(h("div", { class: "home-grid" }, status, quick));
+  return root;
+}
 
 /* ================================================================ library */
 async function pageLibrary() {
@@ -639,7 +687,7 @@ async function pageLibrary() {
       h("div", {}, h("h3", {}, v.name), h("div", { class: "muted small" }, v.variant || "")),
       v.error ? notice("err", "Dosya okunamadı", [v.error]) : h("div", { class: "small" }, h("span", { class: "badge plain", style: "margin-right:6px" }, v.powertrain_tr || ""), v.summary),
       v.error ? null : h("div", { class: "row" }, v.validated ? h("span", { class: "badge ok" }, "tüm bileşenler doğrulandı")
-        : h("span", { class: "badge warn", title: v.unvalidated.join(", ") }, `${v.unvalidated.length} bileşen ölçülmedi`)),
+        : h("span", { class: "badge warn", title: v.unvalidated.join(", ") }, `${v.unvalidated.length} bileşen ölçülmedi`), h("span", { class: "spacer" }), whenEl(v.modified)),
       h("div", { class: "actions" },
         v.error ? null : h("button", { class: "primary", type: "button", onclick: () => { store.set("vehicle", v.stem); location.hash = "#/simulasyon"; } }, "Simüle et"),
         h("a", { class: "btn", href: `#/arac/${encodeURIComponent(v.stem)}` }, "Düzenle"),
@@ -671,7 +719,8 @@ async function pageLibrary() {
           h("div", { class: "badges" },
             it.error ? h("span", { class: "badge err" }, "hatalı dosya") : valBadge(it.validated),
             it.map === "sentetik" ? h("span", { class: "badge plain", title: "Tedarikçi haritası yüklenene kadar kayıp modelinden üretilir" }, "sentetik harita") : null,
-            it.map === "ölçülmüş" ? h("span", { class: "badge ok" }, "yüklenen harita") : null)),
+            it.map === "ölçülmüş" ? h("span", { class: "badge ok" }, "yüklenen harita") : null,
+            whenEl(it.modified))),
         h("div", { class: "acts" },
           h("a", { class: "btn", href: `#/bilesen/${g.kind}/${encodeURIComponent(it.stem)}` }, "Düzenle"),
           itemMenu(g.kind, it.stem, it.name))));
@@ -1198,7 +1247,7 @@ function curveField(f, v, lab, docBox, controls, cellsSeries) {
   let points = v && v.points ? v.points : null, source = v && v.source, reset = false;
   const box = h("div", { class: "subfield", "data-curve": f.name });
   const xPct = f.name === "ocv_curve" || f.name === "resistance_soc_factor";
-  const xLabel = xPct ? "SOC" : "sıcaklık (°C)";
+  const xLabel = xPct ? "SOC" : /load|drag|torque|speed|rpm/.test(f.name) ? "devir (rpm)" : "sıcaklık (°C)";
   const isDefault = () => f.default && JSON.stringify(points) === JSON.stringify(f.default.points);
   controls[f.name] = () => reset || !points || isDefault() ? null : { points, source };
   const draw = (warn) => box.replaceChildren(h("div", { class: "row", style: "align-items:flex-start" },
@@ -1304,7 +1353,7 @@ async function pageVehicle(stem) {
   if (isNew) bar.append(h("button", { class: "primary", type: "button", onclick: e => busy(e.currentTarget, () => save(`${nameIn.value} ${varIn.value}`, false)) }, "Aracı kaydet"));
   else bar.append(
     h("button", { class: "primary", type: "button", onclick: e => busy(e.currentTarget, () => { if (confirm("Araç dosyası bu seçimlerle yeniden yazılacak. Devam edilsin mi?")) return save(stem, true); }) }, "Değişiklikleri kaydet"),
-    h("button", { type: "button", onclick: e => busy(e.currentTarget, () => { const n = prompt("Yeni varyantın dosya adı:", `${stem}_varyant`); if (n) return save(n, false); }) }, "Varyant olarak kaydet"),
+    h("button", { type: "button", onclick: e => busy(e.currentTarget, () => { const n = prompt("Yeni varyantın adı (ör. 400 kWh / ısı pompası):", varIn.value ? `${varIn.value} v2` : "varyant"); if (n) { varIn.value = n; return save(`${nameIn.value} ${n}`, false); } }) }, "Varyant olarak kaydet"),
     h("button", { type: "button", onclick: () => { store.set("vehicle", stem); location.hash = "#/simulasyon"; } }, "Simüle et"),
     menu("Diğer", [
       { label: "İndir (paket)", href: exportUrl("vehicle", stem), download: "", hint: "araç + bileşenler" },
@@ -1677,7 +1726,7 @@ async function pageSim() {
       red: stat("Kırmızı ışıkta"), jam: stat("Sıkışıklıkta") };
     H.split = h("div", { class: "split" });
     H.splitLegend = h("div", { class: "legend split-legend" });
-    H.powerChart = powerStrip(tl);
+    H.powerChart = powerStrip(tl, diesel);
     H.feed = h("ol", { class: "feed" });
     const total = tl.d[tl.d.length - 1];
     H.total = total;
@@ -1701,7 +1750,8 @@ async function pageSim() {
           h("div", { class: "tele-sub" }, `${pl.profile.name} · ${fmt(p.ambient, 0)} °C · ${fmt(p.passengers, 0)} yolcu${p.night ? " · gece" : ""}` +
             (pl.traffic && pl.traffic.traffic && pl.traffic.traffic !== "yok" ? ` · trafik ${pl.traffic.traffic_label.toLocaleLowerCase("tr-TR")}` : ""))),
         h("span", { class: "spacer" }),
-        h("a", { class: "btn tele-report", href: `/report/${r.report_id}`, target: "_blank", rel: "noopener" }, "Tam rapor")),
+        h("a", { class: "btn tele-report", href: `/report/${r.report_id}`, target: "_blank", rel: "noopener" }, "Tam rapor"),
+        menu("İndir", [{ label: "Rapor (HTML)", href: `/report/${r.report_id}/html`, download: "" }, { label: "Zaman serisi (CSV)", href: `/report/${r.report_id}/csv`, download: "", hint: "Excel ; ayraçlı" }], { cls: "tele-report" })),
       h("div", { class: "hud-body tele-body" },
         !r.achievable ? notice("err", "Araç bu görevi takip edemedi.", ["Bir bileşen sınırı yetersiz; bkz. tam rapor."]) : null,
         h("div", { class: "gauges" }, H.speed.el, H.soc.el),
@@ -1730,10 +1780,11 @@ async function pageSim() {
   }
 
   /* power over distance: faint for the whole route, solid up to the bus */
-  function powerStrip(tl) {
+  function powerStrip(tl, dieselStrip) {
     const W = 320, Hh = 74, pad = 2;
     const svg = s("svg", { viewBox: `0 0 ${W} ${Hh}`, class: "strip", preserveAspectRatio: "none" });
-    const D = tl.d, P = tl.p_batt, dmax = D[D.length - 1] || 1;
+    // diesel: shaft power only; engine braking is not energy coming back
+    const D = tl.d, P = dieselStrip ? tl.p_batt.map(v => Math.max(0, v)) : tl.p_batt, dmax = D[D.length - 1] || 1;
     const lo = Math.min(0, ...P), hi = Math.max(1, ...P);
     const sx = d => d / dmax * W, sy = v => pad + (1 - (v - lo) / (hi - lo)) * (Hh - 2 * pad);
     const step = Math.max(1, Math.floor(D.length / 700));
@@ -1762,10 +1813,12 @@ async function pageSim() {
     H.speed.set(st.v, fmt(st.v, 0));
     const km = st.d / 1000;
     if (H.diesel) {
+      // a diesel never recovers energy: engine braking shows as 0 kW shaft power
+      // with its own label, never as a negative (green) figure
       H.soc.set(st.rpm || 0, fmt(st.rpm || 0, 0), css("--s1"));
-      H.battNum.textContent = `${st.p_batt >= 0 ? "" : "−"}${fmt(Math.abs(st.p_batt), 1)} kW`;
-      H.battNum.style.color = st.p_batt < 0 ? css("--s6") || "#0ca30c" : css("--s1");
-      H.battLab.textContent = st.p_batt < -0.5 ? "motor freni (yakıt kesik)" : st.p_batt > 0.5 ? "motor mili gücü" : st.v < 0.5 ? "rölanti" : "boşta";
+      H.battNum.textContent = `${fmt(Math.max(0, st.p_batt), 1)} kW`;
+      H.battNum.style.color = css("--s1");
+      H.battLab.textContent = st.p_batt < -0.5 ? `motor freni ${fmt(-st.p_batt, 0)} kW (yakıt kesik)` : st.p_batt > 0.5 ? "motor mili gücü" : st.v < 0.5 ? "rölanti" : "boşta";
       H.rows.trac.set(Math.max(0, st.p_motor), css("--s1"));
       H.rows.hvac.set(st.p_hvac, css("--s2"));
       H.rows.aux.set(st.p_aux, css("--s3"));

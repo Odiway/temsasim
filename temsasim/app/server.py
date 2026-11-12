@@ -94,6 +94,11 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
     def lib() -> Library:
         return Library(lib_root)          # fresh each call: files may change on disk
 
+    def put_report(result, **kw) -> str:
+        """The rendered page and the result itself, so the same run can also be
+        handed out as a CSV of its time series."""
+        return reports.put({"html": _render(result, **kw), "result": result})
+
     # ------------------------------------------------------------ errors
     @app.errorhandler(Exception)
     def _err(exc):
@@ -126,7 +131,7 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                 try:
                     obj = L.load_component(f"{kind}/{stem}.yaml", kind)
                     items.append({"stem": stem, "name": getattr(obj, "name", stem),
-                                  "summary": _summary(kind, obj),
+                                  "summary": _summary(kind, obj), "modified": _mtime(L.root / kind / f"{stem}.yaml"),
                                   "validated": bool(getattr(obj, "validated", False)),
                                   "map": _map_kind(obj)})
                 except Exception as exc:          # show broken files, don't hide them
@@ -152,6 +157,7 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                     "rolling_source": ("coast-down" if v.chassis.uses_coastdown else
                                        "lastik sertifikası (RRC)" if v.chassis.axles else "şasi dosyası"),
                     "validated": v.validated, "unvalidated": v.unvalidated_components(),
+                    "modified": _mtime(L.root / "vehicle" / f"{stem}.yaml"),
                     "summary": summary})
             except Exception as exc:
                 vehicles.append({"stem": stem, "name": stem, "error": str(exc)})
@@ -357,7 +363,7 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
         cyc = _cycle_from(L, b, veh)
         env = _env_from(b)
         result = run(veh, cyc, env)
-        rid = reports.put(_render(result, daily_km=float(b.get("daily_km") or 200)))
+        rid = put_report(result, daily_km=float(b.get("daily_km") or 200))
         base = 0.0
         if b.get("route"):
             base = float(Route.from_csv(L.root / "route" / f"{b['route']}.csv").elevation_m[0])
@@ -490,7 +496,7 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                          surface_factor=np.asarray(b.get("surface") or np.ones(n), dtype=float))
         env = _env_from(b)
         result = run(veh, cyc, env)
-        rid = reports.put(_render(result, daily_km=float(b.get("daily_km") or 200)))
+        rid = put_report(result, daily_km=float(b.get("daily_km") or 200))
         tt = result.totals
         if veh.is_diesel:
             keys = ("fuel_energy_kwh", "engine_shaft_kwh", "engine_loss_kwh", "heater_fuel_kwh",
@@ -645,7 +651,20 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
 
     @app.get("/report/<rid>")
     def get_report(rid):
-        return Response(reports.get(rid), mimetype="text/html")
+        return Response(reports.get(rid)["html"], mimetype="text/html")
+
+    @app.get("/report/<rid>/html")
+    def download_report(rid):
+        rep = reports.get(rid)
+        name = f"rapor_{safe_stem(rep['result'].vehicle.name)}_{rid}.html"
+        return Response(rep["html"], mimetype="text/html", headers={"Content-Disposition": f"attachment; filename={name}"})
+
+    @app.get("/report/<rid>/csv")
+    def download_series(rid):
+        rep = reports.get(rid)
+        res = rep["result"]
+        name = f"zaman_serisi_{safe_stem(res.vehicle.name)}_{rid}.csv"
+        return Response(_series_csv(res), mimetype="text/csv", headers={"Content-Disposition": f"attachment; filename={name}"})
 
     # ------------------------------------------------------------ VECTO files
     @app.post("/api/import/vecto")
@@ -820,7 +839,7 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
         sc = load_scenario(L.root, b["stem"]) if b.get("stem") and not b.get("scenario") else Scenario.from_dict(b.get("scenario") or b, stem=b.get("stem") or "")
         vehicles = b.get("vehicles") or None
         out = run_scenario(L, sc, vehicles=vehicles,
-                           render=lambda res: reports.put(_render(res, daily_km=float(sc.daily_km or 200))))
+                           render=lambda res: put_report(res, daily_km=float(sc.daily_km or 200)))
         return jsonify({k: v for k, v in out.items() if k != "results"})
 
     # ------------------------------------------------------------ diesel fuel tests (test-team CAN logs)
@@ -1126,6 +1145,40 @@ def _tuned(veh, tune):
                    motor=replace(veh.motor, **parts["motor"]),
                    battery=replace(veh.battery, **parts["battery"]),
                    control=replace(veh.control, **parts["control"]))
+
+
+def _mtime(path: pathlib.Path) -> str | None:
+    try:
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(path.stat().st_mtime))
+    except OSError:
+        return None
+
+
+def _series_csv(result) -> str:
+    """Every per-sample series of a run as one CSV (semicolon, dot decimal,
+    UTF-8 BOM) so Excel opens it as columns; powers in kW, energies as they are."""
+    import csv
+    import io
+    s = result.series
+    n = len(s["time_s"])
+    cols = [k for k, v in s.items() if hasattr(v, "__len__") and len(v) == n]
+    buf = io.StringIO()
+    buf.write("\ufeff")
+    w = csv.writer(buf, delimiter=";", lineterminator="\n")
+    w.writerow([f"# {result.vehicle.name} · {result.cycle.name} · dt={result.dt_s} s · temsasim"])
+    w.writerow(cols)
+    arr = [np.asarray(s[k]) for k in cols]
+    for i in range(n):
+        w.writerow([_cell(a[i]) for a in arr])
+    return buf.getvalue()
+
+
+def _cell(v):
+    if isinstance(v, (bool, np.bool_)):
+        return int(v)
+    if isinstance(v, (float, np.floating)):
+        return f"{float(v):.4g}" if abs(v) < 1e-3 else f"{float(v):.3f}"
+    return v
 
 
 def _render(result, **kw) -> str:

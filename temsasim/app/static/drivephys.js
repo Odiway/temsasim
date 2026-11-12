@@ -181,7 +181,10 @@ export function createDriver(P, world, { passengers = 0 } = {}) {
     if (dir < 0 && sp > REVERSE_MAX * 0.85) fDrive *= Math.max(0, (REVERSE_MAX - sp) / (REVERSE_MAX * 0.15));   // reverse governor
     // braking: the motor takes what it can as regen, friction brakes the rest
     let fReq = st.brk * mTot * 4.5;
-    if (!inp.up && !inp.down && sp > 1) fReq += mTot * 0.25;                // gentle lift-off regen
+    // lift-off: an electric bus regenerates gently, a diesel is slowed by the
+    // engine with the fuel cut; neither is the friction brake
+    const fLift = (!inp.up && !inp.down && sp > 1) ? mTot * 0.25 : 0;
+    fReq += fLift;
     if (st.doors) fReq += mTot * 3;                                          // door brake: no rolling off with doors open
     if (dir < 0 && sp > REVERSE_MAX + 0.1) fReq += mTot * 3 * Math.min(1, (sp - REVERSE_MAX - 0.1) / 0.5);   // and it brakes, downhill too
     let fRegenMax = sp > 0.5 ? Math.min(tMax(w) * ratio / r, mot.max_regen_power_w / sp) : 0;
@@ -215,10 +218,12 @@ export function createDriver(P, world, { passengers = 0 } = {}) {
     st.v = vNew; st.a = a; st.t += dt; st.dist += Math.abs(vNew) * dt;
     st.soc -= pBatt * dt / (P.battery.nominal_kwh * 3.6e6);
     st.soc = Math.max(0, Math.min(1, st.soc));
-    st.p_batt = pBatt; st.p_motor = pMotor; st.p_aux = pAux; st.p_fric = fFric * sp;
+    const fFricReal = P.powertrain === "diesel" ? Math.max(0, fFric - fLift) : fFric;
+    st.p_batt = pBatt; st.p_motor = pMotor; st.p_aux = pAux; st.p_fric = fFricReal * sp;
+    st.p_engbrake = P.powertrain === "diesel" ? Math.min(fFric, fLift) * sp : 0;
     st.e_batt += pBatt * dt; st.e_aux += pAux * dt; st.e_hvac += pHvac * dt; st.e_thermal += pTherm * dt;
     if (pMotor > 0) st.e_trac += pMotor * dt; else st.e_regen -= pMotor * dt;
-    st.e_fric += fFric * sp * dt;
+    st.e_fric += fFricReal * sp * dt;
     st.gradePct = gradePct; st.kSurf = kSurf;
 
     // the record the full model replays, every half second. The model drives

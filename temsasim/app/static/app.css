@@ -53,6 +53,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   background: var(--bg); color: var(--ink);
@@ -242,7 +243,26 @@ details.menu .menu-list .hint { font-size: 11.5px; color: var(--muted); font-fam
 .itemlist .main { flex: 1; min-width: 0; }
 .itemlist .name { font: 600 14.5px var(--display); }
 .itemlist .sum { font-size: 12.5px; color: var(--ink-2); margin-top: 1px; }
-.itemlist .badges { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+.itemlist .badges { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; align-items: center; }
+.when { font: 11.5px var(--mono); color: var(--muted); }
+.itemlist .badges .when { margin-left: auto; }
+
+/* ------------------------------------------------------------ home */
+.flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1000px) { .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.flow .step { position: relative; padding: 16px 18px 14px; }
+.flow .step .n { font: 600 11px var(--cond); letter-spacing: .09em; text-transform: uppercase; color: var(--amber-ink); }
+.flow .step h3 { margin: 4px 0 6px; font-size: 17px; }
+.flow .step p { margin: 0 0 10px; font-size: 13px; color: var(--ink-2); }
+.flow .step .links { display: flex; flex-wrap: wrap; gap: 6px; }
+.flow .step .links a { font: 600 12.5px var(--display); text-decoration: none; padding: 4px 9px; border: 1px solid var(--rule); border-radius: 4px; }
+.flow .step .links a:hover { border-color: var(--ink-2); }
+.home-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+@media (max-width: 1000px) { .home-grid { grid-template-columns: 1fr; } }
+.home-list { list-style: none; margin: 0; padding: 0; }
+.home-list li { display: flex; gap: 10px; align-items: center; padding: 7px 0; border-top: 1px solid var(--rule-2); font-size: 13px; }
+.home-list li:first-child { border-top: 0; }
+.home-list li .name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vehicle-card { display: flex; flex-direction: column; gap: 8px; }
 .vehicle-card .actions { display: flex; gap: 6px; margin-top: 4px; align-items: center; flex-wrap: wrap; }
 .vehicle-card .actions .spacer { flex: 1; }
@@ -270,7 +290,8 @@ details.menu .menu-list .hint { font-size: 11.5px; color: var(--muted); font-fam
 .steps li[data-state="now"] { color: var(--ink); border-top-color: var(--amber); font-weight: 600; }
 .steps li span { font-family: var(--mono); margin-right: 6px; }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+@media (max-width: 760px) { .tiles { grid-template-columns: 1fr; } }
 .tile { text-align: left; display: block; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); cursor: pointer; font: inherit; color: inherit; }
 .tile:hover { border-color: var(--ink-2); }
 .tile[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
