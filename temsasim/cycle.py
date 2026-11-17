@@ -441,6 +441,19 @@ class Route:
         pax_fn = None
         if occupancy is not None:
             pax_fn = occupancy if callable(occupancy) else (lambda f, _o=float(occupancy): _o)
+        if pax_fn is not None and self.stop_positions_m and not isinstance(occupancy, (int, float)):
+            # People get on and off at stops, not along the road: a smooth
+            # occupancy profile is sampled at the stops and held in between.
+            L0 = max(float(self.distance_m[-1]), 1e-9)
+            levels = [(float(s) / L0, float(pax_fn(float(s) / L0))) for s in sorted(self.stop_positions_m)]
+            first = levels[0][1] if levels else 0.0
+
+            def pax_fn(f, _lv=levels, _first=first):
+                val = _first
+                for fp, lv in _lv:
+                    if f >= fp - 1e-9:
+                        val = lv
+                return val
 
         times, speeds, positions, doors, meta = drive(
             self, level=traffic, laps=laps, accel_mps2=accel_mps2, decel_mps2=decel_mps2,

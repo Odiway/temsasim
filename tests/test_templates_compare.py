@@ -149,3 +149,25 @@ def test_compare_report(client):
     assert client.get(f"/report/{j['report_id']}/csv").status_code == 400
     r = client.post("/api/compare/report", json={"runs": [{"report_id": ids[0]}]})
     assert r.status_code == 400
+
+
+def test_constant_speed_duty_and_stepwise_passengers(client):
+    ov = client.get("/api/overview").get_json()
+    v = next(x for x in ov["vehicles"] if not x.get("error"))
+    assert v["capacity"] > 0
+    r = client.post("/api/simulate", json={"vehicle": v["stem"], "constant": {"speed_kmh": 60, "grade_pct": 12, "distance_km": 2}, "passengers": 20})
+    assert r.status_code == 200, r.get_json()
+    j = r.get_json()
+    tl = j["play"]["timeline"]
+    assert 1.9 <= j["kpi"]["distance_km"] <= 2.1 and max(tl["v"]) <= 61
+    assert max(tl["grade"]) > 11
+    r = client.get("/api/preview?constant_speed=80&constant_grade=2&constant_km=3")
+    assert r.status_code == 200 and abs(r.get_json()["length_m"] - 3000) < 20
+    r = client.post("/api/simulate", json={"vehicle": v["stem"], "constant": {"speed_kmh": 500}})
+    assert r.status_code == 400
+    # passengers change at stops only on a route
+    route = next(x for x in ov["route_items"] if x["stops"] >= 3)["stem"]
+    r = client.post("/api/simulate", json={"vehicle": v["stem"], "route": route, "passengers": 40, "occupancy_mode": "profile"})
+    pax = r.get_json()["play"]["timeline"]["pax"]
+    levels = sorted(set(round(p) for p in pax))
+    assert 2 <= len(levels) <= next(x for x in ov["route_items"] if x["stem"] == route)["stops"] + 2

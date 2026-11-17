@@ -1647,7 +1647,14 @@ async function pageSim() {
   const vSel = select(vehicles.map(v => [v.stem, `${v.name} — ${v.variant}`]), store.get("vehicle", vehicles[0].stem));
   let dutyKind = ov.routes.length ? store.get("dutyKind", "route") : "cycle";
   const dutySel = h("select", {});
+  // steady-speed test: speed, grade, distance instead of a road file
+  const cst = { speed: numInput(store.get("simCstSpeed", 80), { unit: "km/h" }), grade: numInput(store.get("simCstGrade", 0), { unit: "%" }), km: numInput(store.get("simCstKm", 10), { unit: "km" }) };
+  const cstBox = h("div", { class: "cmp-3", hidden: true }, field("Hız", cst.speed), field("Eğim", cst.grade, { hint: "−30 … +30 %. Sabit; tırmanış testi için yeterli." }), field("Mesafe", cst.km));
+  const cstVals = () => ({ speed_kmh: parseNum($("input", cst.speed).value) || 80, grade_pct: parseNum($("input", cst.grade).value) || 0, distance_km: parseNum($("input", cst.km).value) || 10 });
+  Object.values(cst).forEach(el => el.addEventListener("change", () => { const c = cstVals(); store.set("simCstSpeed", c.speed_kmh); store.set("simCstGrade", c.grade_pct); store.set("simCstKm", c.distance_km); S.play = null; idleTele(); playBtn.disabled = true; loadPreview(); }));
   const fillDuty = () => {
+    cstBox.hidden = dutyKind !== "constant"; dutySel.hidden = dutyKind === "constant";
+    if (dutyKind === "constant") return;
     const list = dutyKind === "route" ? ov.routes : ov.cycles;
     const want = dutyKind === "route" ? store.get("simRoute", list[0]) : store.get("simCycle", "cbdbus");
     dutySel.replaceChildren(...list.map(n => h("option", { value: n, selected: n === want ? true : null }, n)));
@@ -1656,10 +1663,10 @@ async function pageSim() {
   let trafficLevel = store.get("simTraffic", "orta");
   const trafficBox = h("div", {});
   const drawTraffic = () => trafficBox.replaceChildren(
-    h("div", { class: "lab simx-lab" }, "Trafik", h("span", { class: "qm", title: dutyKind === "route" ? "Işıklar, kuyruklar ve dur-kalk tüketime dahil edilir." : "Standart çevrimlerin hız profili, kaydedildiği andaki trafiği zaten içerir." }, "?")),
+    h("div", { class: "lab simx-lab" }, "Trafik", h("span", { class: "qm", title: dutyKind === "route" ? "Işıklar, kuyruklar ve dur-kalk tüketime dahil edilir." : dutyKind === "constant" ? "Sabit hız testinde trafik yok." : "Standart çevrimlerin hız profili, kaydedildiği andaki trafiği zaten içerir." }, "?")),
     dutyKind === "route"
       ? seg(ov.traffic_levels, trafficLevel, v => { trafficLevel = v; store.set("simTraffic", v); })
-      : h("div", { class: "hint" }, "Çevrim trafiği içerir."));
+      : h("div", { class: "hint" }, dutyKind === "constant" ? "Sabit hız: trafik yok." : "Çevrim trafiği içerir."));
   drawTraffic();
   const repeat = numInput(store.get("simRepeat", 1));
   const amb = h("input", { type: "range", min: -25, max: 45, step: 1, value: store.get("simAmb", 20), "aria-label": "Dış sıcaklık" });
@@ -1670,6 +1677,16 @@ async function pageSim() {
   amb.addEventListener("input", () => { updRanges(); if (stage && !S.play) stage.setEnv({ ambient: +amb.value }); });
   sol.addEventListener("input", updRanges); updRanges();
   const pax = numInput(store.get("simPax", 40), { unit: "kişi" });
+  const paxHint = h("div", { class: "hint" });
+  const capOf = () => (vehicles.find(x => x.stem === vSel.value) || {}).capacity || 0;
+  const paxInfo = () => { const c = capOf(); paxHint.textContent = c ? `Azami ${c} yolcu (${(vehicles.find(x => x.stem === vSel.value) || {}).seats || 0} oturan); şehir içi aşırı yükte +10 kişiye izin verilir.` : ""; };
+  const paxClamp = () => {
+    const c = capOf(); let n = parseNum($("input", pax).value) || 0;
+    if (c && n > c + 10) { n = c + 10; $("input", pax).value = String(n); toast(`Yolcu sayısı aracın kapasitesiyle sınırlandı: ${c} + 10 aşırı yük.`); }
+    else if (c && n > c) toast(`Aşırı yük: ${n - c} kişi kapasitenin üstünde (en fazla +10).`);
+    return n;
+  };
+  vSel.addEventListener("change", paxInfo); paxInfo();
   // tyre rolling resistance for this run only; blank = the vehicle's own value
   const roll = numInput(store.get("simRoll", ""), { placeholder: "" });
   const rollHint = h("div", { class: "hint" });
@@ -1687,15 +1704,16 @@ async function pageSim() {
   const cmpSel = select([["", "— yok —"], ...vehicles.map(v => [v.stem, `${v.name} — ${v.variant}`])], "");
 
   const params = () => {
-    store.set("simAmb", +amb.value); store.set("simSol", +sol.value); store.set("simPax", parseNum($("input", pax).value));
-    store.set("dutyKind", dutyKind); store.set(dutyKind === "route" ? "simRoute" : "simCycle", dutySel.value);
+    const nPax = paxClamp();
+    store.set("simAmb", +amb.value); store.set("simSol", +sol.value); store.set("simPax", nPax);
+    store.set("dutyKind", dutyKind); if (dutyKind !== "constant") store.set(dutyKind === "route" ? "simRoute" : "simCycle", dutySel.value);
     store.set("simRepeat", parseNum($("input", repeat).value) || 1); store.set("simOcc", occMode);
     store.set("vehicle", vSel.value);
     const rollV = parseNum($("input", roll).value); store.set("simRoll", $("input", roll).value);
-    return { vehicle: vSel.value, [dutyKind === "route" ? "route" : "cycle"]: dutySel.value,
+    return { vehicle: vSel.value, ...(dutyKind === "constant" ? { constant: cstVals() } : { [dutyKind === "route" ? "route" : "cycle"]: dutySel.value }),
       tune: Number.isNaN(rollV) || !rollV ? {} : { rolling_c0: rollV },
       repeat: parseNum($("input", repeat).value) || 1, ambient: +amb.value, solar: +sol.value,
-      passengers: parseNum($("input", pax).value) || 0, occupancy_mode: occMode, night: night.checked,
+      passengers: nPax, occupancy_mode: occMode, night: night.checked,
       hvac_off: (store.set("simHvacOff", hvacOff.checked), hvacOff.checked),
       daily_km: parseNum($("input", daily).value) || 200,
       traffic: dutyKind === "route" ? trafficLevel : "yok" };
@@ -1729,13 +1747,13 @@ async function pageSim() {
       (ov.scenarios || []).length ? field("Kayıtlı senaryo", scSel) : null,
       field("Araç", vSel),
       h("div", {}, h("div", { class: "lab simx-lab" }, "Görev"),
-        seg([["route", "Güzergâh"], ["cycle", "Standart çevrim"]], dutyKind, v => { dutyKind = v; fillDuty(); drawTraffic(); loadPreview(); }),
-        h("div", { style: "margin-top:8px" }, dutySel),
+        seg([["route", "Güzergâh"], ["cycle", "Standart çevrim"], ["constant", "Sabit hız"]], dutyKind, v => { dutyKind = v; fillDuty(); drawTraffic(); S.play = null; idleTele(); playBtn.disabled = true; loadPreview(); }),
+        h("div", { style: "margin-top:8px" }, dutySel, cstBox),
         h("div", { class: "hint" }, h("a", { href: "#/yukle/guzergah" }, "Yeni güzergâh yükle"))),
       trafficBox,
       h("div", { class: "field" }, h("div", { class: "lab" }, "Dış sıcaklık", h("span", { class: "spacer" }), ambOut), amb),
       h("div", { class: "field" }, h("div", { class: "lab" }, "Güneş ışınımı", h("span", { class: "spacer" }), solOut), sol),
-      h("div", {}, field("Yolcu", pax), h("div", { style: "margin-top:6px" }, seg([["profile", "Yol boyunca değişken"], ["constant", "Sabit"]], occMode, v => (occMode = v)))),
+      h("div", {}, field("Yolcu", pax), paxHint, h("div", { style: "margin-top:6px" }, seg([["profile", "Duraklarda değişken (zirve)"], ["constant", "Sabit"]], occMode, v => (occMode = v)))),
       h("div", {}, field("Lastik yuvarlanma katsayısı", roll), rollHint),
       h("label", { class: "check" }, night, h("span", {}, "Gece (aydınlatma ve farlar açık)")),
       h("label", { class: "check" }, hvacOff, h("span", {}, "Klima kapalı (yakıt testi koşulu: bütün alıcılar kapalı)")),
@@ -1816,7 +1834,8 @@ async function pageSim() {
 
   async function loadPreview() {
     if (!stage || S.play) return;
-    const q = dutyKind === "route" ? `route=${encodeURIComponent(dutySel.value)}` : `cycle=${encodeURIComponent(dutySel.value)}`;
+    const c = cstVals();
+    const q = dutyKind === "constant" ? `constant_speed=${c.speed_kmh}&constant_grade=${c.grade_pct}&constant_km=${c.distance_km}` : dutyKind === "route" ? `route=${encodeURIComponent(dutySel.value)}` : `cycle=${encodeURIComponent(dutySel.value)}`;
     try {
       const prof = await api.get(`/api/preview?${q}`);
       S.profile = prof;
@@ -1919,7 +1938,7 @@ async function pageSim() {
     } finally { loading.hidden = true; }
   }));
 
-  const runLabel = p => `${(vehicles.find(v => v.stem === p.vehicle) || {}).name || p.vehicle} · ${p.route || p.cycle} · ${fmt(p.ambient, 0)} °C`;
+  const runLabel = p => `${(vehicles.find(v => v.stem === p.vehicle) || {}).name || p.vehicle} · ${p.route || p.cycle || (p.constant ? `sabit ${fmt(p.constant.speed_kmh, 0)} km/h` : "")} · ${fmt(p.ambient, 0)} °C`;
   const addCompare = async p => {
     const mod = await import("/static/compare.js");
     const k = mod.addToCompare(store, p, p.route ? "route" : "cycle");
@@ -1977,14 +1996,14 @@ async function pageSim() {
     H.battNum = h("div", { class: "batt-num num" });
     H.battLab = h("div", { class: "batt-lab" });
     H.rows = diesel ? {
-      trac: flowRow("Motor mili", veh.motor_kw), hvac: flowRow("Klima", Math.max(veh.hvac_kw, 10)),
-      aux: flowRow("Yardımcı + fan", 12), therm: flowRow("Sürtünmeli fren", veh.motor_kw),
+      trac: flowRow("Krank", veh.motor_kw), hvac: flowRow("Klima", Math.max(veh.hvac_kw, 10)),
+      aux: flowRow("PTO + fan", 12), therm: flowRow("Fren", veh.motor_kw),
     } : {
       trac: flowRow("Çekiş", veh.motor_kw), hvac: flowRow("Klima", Math.max(veh.hvac_kw, 10)),
       aux: flowRow("Yardımcı", 12), therm: flowRow("Paket ısıl", 15),
     };
     H.stats = diesel ? { dist: stat("Mesafe"), cons: stat("Ortalama tüketim"), used: stat("Yakıt"), regen: stat("Vites"),
-      cabin: stat("Kabin"), pack: stat("Anlık yakıt"), pax: stat("Yolcu"), grade: stat("Eğim"),
+      cabin: stat("Kabin"), pack: stat("Anlık tüketim"), pax: stat("Yolcu"), grade: stat("Eğim"),
       red: stat("Kırmızı ışıkta"), jam: stat("Sıkışıklıkta") } : { dist: stat("Mesafe"), cons: stat("Ortalama tüketim"), used: stat("Harcanan"), regen: stat("Geri kazanılan"),
       cabin: stat("Kabin"), pack: stat("Paket"), pax: stat("Yolcu"), grade: stat("Eğim"),
       red: stat("Kırmızı ışıkta"), jam: stat("Sıkışıklıkta") };
@@ -2023,10 +2042,10 @@ async function pageSim() {
         h("section", { class: "tele-sec" }, h("div", { class: "sec-t" }, "Güç akışı"),
           h("div", { class: "batt" }, H.battNum, H.battLab),
           Object.values(H.rows).map(x => x.el),
-          h("div", { class: "hint", style: "margin-top:2px" }, "Çubuk: tüketicinin kendi kapasitesine göre kullanımı")),
+          h("div", { class: "hint", style: "margin-top:2px" }, diesel ? "Çubuk: tüketicinin kendi kapasitesine göre kullanımı. PTO: fan, hava kompresörü, direksiyon pompası, alternatör." : "Çubuk: tüketicinin kendi kapasitesine göre kullanımı")),
         h("section", { class: "tele-sec" }, h("div", { class: "sec-t" }, "Şu ana kadar"), h("div", { class: "stats" }, Object.values(H.stats).map(x => x.el))),
         h("section", { class: "tele-sec" }, h("div", { class: "sec-t" }, "Enerji nereye gitti"), H.split, H.splitLegend),
-        h("section", { class: "tele-sec" }, h("div", { class: "sec-t" }, diesel ? "Motor gücü, güzergâh boyunca" : "Batarya gücü, güzergâh boyunca"), H.powerChart.el),
+        h("section", { class: "tele-sec" }, h("div", { class: "sec-t" }, diesel ? "Krank gücü, güzergâh boyunca" : "Batarya gücü, güzergâh boyunca"), H.powerChart.el),
         h("section", { class: "tele-sec" }, h("div", { class: "sec-t" }, `Olaylar (${pl.events.length})`), H.feed),
         h("section", { class: "tele-sec tele-final" }, h("div", { class: "sec-t" }, "Koşunun tamamı"),
           diesel ? h("div", { class: "stats" },
@@ -2035,7 +2054,7 @@ async function pageSim() {
             h("div", { class: "stat" }, h("span", {}, "Depoyla menzil"), h("b", { class: "num" }, `${fmt(k.range_km, 0)} km`)),
             h("div", { class: "stat" }, h("span", {}, "Rölanti yakıtı"), h("b", { class: "num" }, `${fmt(k.idle_fuel_l, 2)} l · %${fmt(k.idle_fraction * 100, 0)} süre`)),
             h("div", { class: "stat" }, h("span", {}, "Ortalama devir"), h("b", { class: "num" }, `${fmt(k.mean_rpm, 0)} rpm · ${k.shifts} vites`)),
-            h("div", { class: "stat" }, h("span", {}, "Sürtünmeli fren"), h("b", { class: "num" }, `${fmt(k.friction_brake_kwh, 2)} kWh`)))
+            h("div", { class: "stat" }, h("span", {}, "Fren (retarder + balata)"), h("b", { class: "num" }, `${fmt(k.friction_brake_kwh, 2)} kWh`)))
           : h("div", { class: "stats" },
             h("div", { class: "stat" }, h("span", {}, "Tüketim"), h("b", { class: "num" }, `${fmt(k.kwh_per_km, 3)} kWh/km`)),
             h("div", { class: "stat" }, h("span", {}, "Menzil"), h("b", { class: "num" }, `${fmt(k.range_km, 0)} km`)),
@@ -2084,7 +2103,7 @@ async function pageSim() {
       H.soc.set(st.rpm || 0, fmt(st.rpm || 0, 0), css("--s1"));
       H.battNum.textContent = `${fmt(Math.max(0, st.p_batt), 1)} kW`;
       H.battNum.style.color = css("--s1");
-      H.battLab.textContent = st.p_batt < -0.5 ? `motor freni ${fmt(-st.p_batt, 0)} kW (yakıt kesik)` : st.p_batt > 0.5 ? "motor mili gücü" : st.v < 0.5 ? "rölanti" : "boşta";
+      H.battLab.textContent = st.p_batt < -0.5 ? `motor freni ${fmt(-st.p_batt, 0)} kW (yakıt kesik)` : st.p_batt > 0.5 ? "krank gücü (motorun ürettiği, PTO dahil)" : st.v < 0.5 ? "rölanti" : "boşta";
       H.rows.trac.set(Math.max(0, st.p_motor), css("--s1"));
       H.rows.hvac.set(st.p_hvac, css("--s2"));
       H.rows.aux.set(st.p_aux, css("--s3"));
@@ -2094,7 +2113,7 @@ async function pageSim() {
       H.stats.used.set(`${fmt(st.e_used, 2)} l · depo %${fmt(st.soc, 0)}`);
       H.stats.regen.set(st.gear > 0 ? `${Math.round(st.gear)}` : "N");
       H.stats.cabin.set(`${fmt(st.cabin, 1)} °C`);
-      H.stats.pack.set(`${fmt(st.fuel_lph || 0, 1)} l/h`);
+      H.stats.pack.set(st.v > 5 ? `${fmt((st.fuel_lph || 0) / st.v * 100, 1)} l/100 km · ${fmt(st.fuel_lph || 0, 1)} l/h` : `${fmt(st.fuel_lph || 0, 1)} l/h`);
       H.stats.pax.set(fmt(st.pax, 0));
       H.stats.grade.set(`%${fmt(st.grade, 1)}`);
     } else {
@@ -2123,8 +2142,8 @@ async function pageSim() {
     H.stats.jam.set(`${fmt(jamS, 0)} s`);
     // cumulative split: net traction, climate, auxiliaries, pack thermal (diesel: shaft work, climate, aux, brakes)
     const parts = H.diesel
-      ? [["Motor mili (net)", Math.max(0, st.e_trac - st.e_hvac - st.e_aux), css("--s1")], ["Klima", st.e_hvac, css("--s2")],
-         ["Yardımcı + fan", st.e_aux, css("--s3")], ["Sürtünmeli fren", st.e_brake || 0, "#d03b3b"]]
+      ? [["Krank (net)", Math.max(0, st.e_trac - st.e_hvac - st.e_aux), css("--s1")], ["Klima", st.e_hvac, css("--s2")],
+         ["PTO + fan", st.e_aux, css("--s3")], ["Fren", st.e_brake || 0, "#d03b3b"]]
       : [["Çekiş (net)", Math.max(0, st.e_trac - st.e_regen), css("--s1")], ["Klima", st.e_hvac, css("--s2")],
          ["Yardımcı", st.e_aux, css("--s3")], ["Paket ısıl", st.e_thermal, css("--s4")]];
     const tot = parts.reduce((a, q) => a + q[1], 0) || 1;
@@ -2221,7 +2240,7 @@ async function openTrafficCompare(p) {
       lineChart({ x, series: [{ label: "Tüketim", color: css("--s1"), y: rows.map(q => q[ck]) }], xLabel: "trafik seviyesi", yLabel: `Tüketim (${cu})`, xFmt: lab, yFmt: v => fmt(v, cd), markers: true, height: 220 }),
       lineChart({ x, series: [{ label: "Ortalama hız", color: css("--s2"), y: rows.map(q => q.mean_kmh) }], xLabel: "trafik seviyesi", yLabel: "Ortalama hız (km/h)", xFmt: lab, yFmt: v => fmt(v, 1), markers: true, height: 200 }),
       h("div", { class: "scrollx" }, h("table", { class: "data" },
-        h("thead", {}, h("tr", {}, ["Trafik", "Ort. hız", "Süre", cu, dz ? "kWh yakıt/h" : "kWh/h", "Menzil", "Klima kWh", "Yardımcı kWh", "Sürtünmeli fren kWh", "Kırmızı ışık", "Sıkışıklık"].map(c => h("th", {}, c)))),
+        h("thead", {}, h("tr", {}, ["Trafik", "Ort. hız", "Süre", cu, dz ? "kWh yakıt/h" : "kWh/h", "Menzil", "Klima kWh", "Yardımcı kWh", "Fren kWh", "Kırmızı ışık", "Sıkışıklık"].map(c => h("th", {}, c)))),
         h("tbody", {}, rows.map(q => h("tr", {},
           h("td", {}, h("b", {}, q.label)),
           h("td", { class: "n" }, `${fmt(q.mean_kmh, 1)} km/h`), h("td", { class: "n" }, `${fmt(q.minutes, 1)} dk`),

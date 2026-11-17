@@ -190,7 +190,7 @@ export async function pageCompare(U) {
       ["Klima payı", f => `%${fmt(f.k.hvac_share * 100, 0)}`, "hvacShare"],
       ["Klima enerjisi", f => `${fmt(f.hvac, 2)} kWh`, "hvac"],
       ["Yardımcı tüketiciler", f => `${fmt(f.aux, 2)} kWh`, "aux"],
-      [anyD ? "Sürtünmeli fren / paket ısıl" : "Paket ısıl yönetim", f => `${fmt(f.brake, 2)} kWh`, "brake"],
+      [anyD ? "Fren (retarder + balata) / paket ısıl" : "Paket ısıl yönetim", f => `${fmt(f.brake, 2)} kWh`, "brake"],
       ["Geri kazanılan", f => f.dz ? "—" : `${fmt(f.regen, 2)} kWh`, ["regen", false, f => !f.dz]],
       ["Görev tamamlandı", f => f.r.achievable ? "evet" : "hayır", null],
     ];
@@ -221,7 +221,7 @@ export async function pageCompare(U) {
       lineChart({ x: X, series: F.map(f => ({ label: LETTERS[f.i], color: f.color, y: onGrid(f, key, scaleOf ? scaleOf(f) : 1) })), xLabel: "km", yLabel: "", xFmt: v => fmt(v, 1), yFmt, height: 220 }));
     const split = h("div", { class: "panel" }, h("div", { class: "section-title" }, "Enerji nereye gitti"),
       F.map(f => {
-        const parts = [["Çekiş (net)", f.trac, f.color], ["Klima", f.hvac, css("--s4")], ["Yardımcı", f.aux, css("--s3")], [f.dz ? "Sürtünmeli fren" : "Paket ısıl", f.brake, css("--err")]];
+        const parts = [[f.dz ? "Krank (net)" : "Çekiş (net)", f.trac, f.color], ["Klima", f.hvac, css("--s4")], [f.dz ? "PTO + fan" : "Yardımcı", f.aux, css("--s3")], [f.dz ? "Fren" : "Paket ısıl", f.brake, css("--err")]];
         const tot = parts.reduce((a, q) => a + q[1], 0) || 1;
         return h("div", { class: "cmp-split" }, h("div", { class: "lab" }, h("span", { class: "cmp-letter", style: `--slot:${f.color}` }, LETTERS[f.i]), " ", f.label),
           h("div", { class: "split" }, parts.map(([nm, v, c]) => h("i", { title: `${nm}: ${fmt(v, 2)} kWh`, style: `flex:${Math.max(v, 0.0001)};background:${c}` }))),
@@ -270,7 +270,8 @@ export async function pageCompare(U) {
    compare slot (or replace the last one when all four are taken). */
 export function addToCompare(store, p, dutyKind) {
   let slots = store.get("cmp.slots", []); if (!Array.isArray(slots)) slots = [];
-  const s = { vehicle: p.vehicle, dutyKind, duty: p.route || p.cycle, traffic: p.traffic || "yok", ambient: p.ambient, solar: p.solar,
+  if (p.constant) { dutyKind = "cycle"; }            // the compare cards know routes and cycles; a steady-speed run keeps its vehicle and conditions
+  const s = { vehicle: p.vehicle, dutyKind, duty: p.route || p.cycle || "cbdbus", traffic: p.traffic || "yok", ambient: p.ambient, solar: p.solar,
     passengers: p.passengers, occupancy_mode: p.occupancy_mode, night: !!p.night, hvac_off: !!p.hvac_off, label: "" };
   slots.push(s);
   while (slots.length > 4) slots.shift();

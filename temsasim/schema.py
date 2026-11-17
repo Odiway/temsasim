@@ -202,6 +202,8 @@ LABELS_TR = {
     "downshift_speed_rads": "Vites küçültme devri", "upshift_speed_rads": "Vites büyütme devri",
     "torque_reserve": "Tork rezervi", "min_shift_interval_s": "İki vites arası asgari süre",
     "start_speed_mps": "Kalkış vitesi hız sınırı",
+    "eco_upshift_speed_rads": "Kısmi yükte erken vites büyütme alt devri", "partial_load_share": "Kısmi yük payı (tam yükün oranı)", "lug_speed_rads": "Yük altında vites küçültme devri",
+    "launch_gear": "Standart kalkış vitesi", "launch_gear_max": "Azami kalkış vitesi (hafif kalkış)",
     # chassis additions
     "cda_m2": "Sürükleme alanı CdxA (ölçülmüş)",
 }

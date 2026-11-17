@@ -183,7 +183,7 @@ export async function pageScenario(U, stem) {
   const vehicles = ov.vehicles.filter(v => !v.error);
   const routes = ov.route_items || [];
   const KINDS = ov.scenario_kinds || [["sehir_ici", "Şehir içi"], ["otoyol", "Otoyol"], ["serbest", "Serbest"]];
-  const LOADS = ov.load_modes || [["profile", "Yol boyunca değişken"], ["constant", "Sabit yolcu"], ["stops", "Duraklardan"], ["mass", "Test kütlesi"]];
+  const LOADS = (ov.load_modes || [["profile", "Duraklarda değişken (zirve)"], ["constant", "Sabit yolcu"], ["stops", "Duraklardan (biniş/iniş)"], ["mass", "Test kütlesi"]]).map(([k, l]) => [k, k === "profile" ? "Duraklarda değişken (zirve)" : l]);
   const isNew = !stem || stem === "yeni";
   let sc = { name: "", kind: "serbest", description: "", duty: { route: store.get("newScenarioRoute") || (routes[0] && routes[0].stem) || "", direction: "gidis", laps: 1 },
     vehicles: vehicles.some(v => v.stem === store.get("newScenarioVehicle")) ? [store.get("newScenarioVehicle")] : vehicles.length ? [vehicles[0].stem] : [], conditions: { ambient_c: 20, solar: 0, night: false, hvac_off: false, headwind_mps: 0, pressure_hpa: 1013.25 },
@@ -207,8 +207,13 @@ export async function pageScenario(U, stem) {
                          : h("div", { class: "formgrid" }, field("Çevrim", cycleSel), field("Tekrar", laps)));
   drawDuty();
   const vehBoxes = {};
+  const capNote = h("div", { class: "hint" });
+  const capInfo = () => { const sel = vehicles.filter(v => vehBoxes[v.stem] && vehBoxes[v.stem].checked); const caps = sel.map(v => v.capacity || 0).filter(Boolean);
+    capNote.textContent = caps.length ? `Kapasite: ${sel.map(v => `${v.name} ${v.capacity}`).join(", ")} yolcu; şehir içi aşırı yükte +10'a kadar izin verilir.` : ""; };
   const vehList = h("div", { class: "sc-vehicles" }, ...vehicles.map(v => { const cb = h("input", { type: "checkbox", checked: sc.vehicles.includes(v.stem) ? true : null }); vehBoxes[v.stem] = cb;
-    return h("label", { class: "check" }, cb, h("span", {}, h("b", {}, v.name), h("span", { class: "muted" }, ` · ${v.variant} · ${v.powertrain_tr}`))); }));
+    cb.addEventListener("change", capInfo);
+    return h("label", { class: "check" }, cb, h("span", {}, h("b", {}, v.name), h("span", { class: "muted" }, ` · ${v.variant} · ${v.powertrain_tr}${v.capacity ? ` · ${v.capacity} yolcu` : ""}`))); }));
+  setTimeout(capInfo, 0);
   const amb = numInput(sc.conditions.ambient_c, { unit: "°C" }); const sol = numInput(sc.conditions.solar, { unit: "W/m²" }); const wind = numInput(sc.conditions.headwind_mps, { unit: "m/s" });
   const pres = numInput(sc.conditions.pressure_hpa || 1013.25, { unit: "hPa" });
   const night = h("input", { type: "checkbox", checked: sc.conditions.night ? true : null }); const hvacOff = h("input", { type: "checkbox", checked: sc.conditions.hvac_off ? true : null });
@@ -227,7 +232,9 @@ export async function pageScenario(U, stem) {
     const rv = parseNum(roll.querySelector("input").value);
     return { name: n, scenario_kind: kind, description: descIn.value,
       duty: dutyKind === "route" ? { route: routeSel.value, direction, laps: parseNum(laps.querySelector("input").value) || 1 } : { cycle: cycleSel.value, repeat: parseNum(laps.querySelector("input").value) || 1 },
-      vehicles: vs, conditions: { ambient_c: parseNum(amb.querySelector("input").value) || 0, solar: parseNum(sol.querySelector("input").value) || 0, night: night.checked, hvac_off: hvacOff.checked,
+      vehicles: vs, ...(() => { const caps = vs.map(st => (vehicles.find(v => v.stem === st) || {}).capacity || 0).filter(Boolean); const cap = caps.length ? Math.max(...caps) : 0; const n = parseNum(pax.querySelector("input").value) || 0;
+        if (cap && (loadMode === "profile" || loadMode === "constant") && n > cap + 10) { pax.querySelector("input").value = String(cap + 10); toast(`Yolcu sayısı ${cap} + 10 aşırı yükle sınırlandı.`); } return {}; })(),
+      conditions: { ambient_c: parseNum(amb.querySelector("input").value) || 0, solar: parseNum(sol.querySelector("input").value) || 0, night: night.checked, hvac_off: hvacOff.checked,
         headwind_mps: parseNum(wind.querySelector("input").value) || 0, pressure_hpa: parseNum(pres.querySelector("input").value) || 1013.25 },
       load: { mode: loadMode, passengers: parseNum(pax.querySelector("input").value) || 0, mass_kg: parseNum(mass.querySelector("input").value) || null },
       traffic, overrides: Number.isNaN(rv) || !rv ? {} : { rolling_c0: rv }, daily_km: parseNum(daily.querySelector("input").value) || 200 };
@@ -255,7 +262,7 @@ export async function pageScenario(U, stem) {
     h("div", { class: "panel stack" },
       h("div", { class: "formgrid" }, field("Ad", nameIn), h("div", { class: "field" }, h("div", { class: "lab" }, "Tür"), kindSeg), h("div", { class: "wide" }, field("Açıklama", descIn))),
       h("h3", {}, "Görev"), dutyBox,
-      h("h3", {}, "Araçlar"), vehList,
+      h("h3", {}, "Araçlar"), vehList, capNote,
       h("h3", {}, "Koşullar"), h("div", { class: "formgrid" }, field("Dış sıcaklık", amb), field("Güneş ışınımı", sol), field("Rüzgâr (karşıdan +)", wind, { hint: "Güzergâhın kendi rüzgârına eklenir." }), field("Basınç", pres),
         h("label", { class: "check" }, night, h("span", {}, "Gece")), h("label", { class: "check" }, hvacOff, h("span", {}, "Klima kapalı (test koşulu)"))),
       loadBox,

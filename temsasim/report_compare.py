@@ -129,7 +129,7 @@ def render_compare(runs: list, *, title: str = "Karşılaştırma") -> str:
         ("Klima payı", "hvac_share", lambda f: f"%{_f(100 * f['hvac_share'], 0)}", "hvac_share"),
         ("Klima enerjisi", "hvac_kwh", lambda f: f"{_f(f['hvac_kwh'], 2)} kWh", "hvac_kwh"),
         ("Yardımcı tüketiciler", "aux_kwh", lambda f: f"{_f(f['aux_kwh'], 2)} kWh", "aux_kwh"),
-        ("Sürtünmeli fren kaybı", "brake_kwh", lambda f: f"{_f(f['brake_kwh'], 2)} kWh", "brake_kwh"),
+        ("Fren kaybı (retarder + balata)", "brake_kwh", lambda f: f"{_f(f['brake_kwh'], 2)} kWh", "brake_kwh"),
         ("Geri kazanılan", "regen_kwh", lambda f: f"{_f(f['regen_kwh'], 2)} kWh" if f["powertrain"] != "diesel" else "—", ("regen_kwh", False)),
         ("Görev tamamlandı", "achievable", lambda f: "evet" if f["achievable"] else "hayır", None),
     ]
@@ -154,8 +154,9 @@ def render_compare(runs: list, *, title: str = "Karşılaştırma") -> str:
     # energy split bars
     split_rows = []
     for i, f in enumerate(facts):
-        parts = [("Çekiş (net)", max(f["traction_kwh"], 0.0), cols[i]), ("Klima", f["hvac_kwh"], "#d99a00"),
-                 ("Yardımcı", f["aux_kwh"], "#6f4fc0"), ("Sürtünmeli fren", f["brake_kwh"], "#b0261b")]
+        dz = f["powertrain"] == "diesel"
+        parts = [("Krank (net)" if dz else "Çekiş (net)", max(f["traction_kwh"], 0.0), cols[i]), ("Klima", f["hvac_kwh"], "#d99a00"),
+                 ("PTO + fan" if dz else "Yardımcı", f["aux_kwh"], "#6f4fc0"), ("Fren" if dz else "Paket ısıl", f["brake_kwh"], "#b0261b")]
         tot = sum(p[1] for p in parts) or 1.0
         bar = "".join(f'<i title="{n}: {_f(v, 2)} kWh" style="flex:{max(v, 1e-6):.4f};background:{c}"></i>' for n, v, c in parts)
         legend = " · ".join(f'<span style="color:{c}">■</span> {n} {_f(v, 1)} kWh (%{_f(v / tot * 100, 0)})' for n, v, c in parts)

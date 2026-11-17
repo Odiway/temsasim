@@ -838,6 +838,7 @@ F_eğim = m·g·sinθ   (her zaman)
 v ≤ 0,01 m/s → F_yuv = F_hava = 0
 ρ = p / (287,058·(T + 273,15))</div>
       <p class="defs"><b>Varsayılan:</b> boş 12 000 kg · yolcu 68 kg · c0 0,007 · Cd 0,62 · A 7,5 m² · r 0,478 m</p>
+      <p class="defs"><b>Yolcu kütlesi ve sayısı (kaynak):</b> 68 kg/yolcu BM/AEK R107 (M2/M3 sınıf araçlar) ve 2018/858 teknik kütle hesabındaki değerdir; VECTO otobüs beyanı da 68 kg kullanır. Azami yolcu sayısı aracın oturan + ayakta kapasitesidir (<code>seats</code> + <code>standees</code>); arayüz şehir içi aşırı yük için +10 kişiye izin verir, fazlası reddedilir. Yolcu sayısı yalnızca duraklarda değişir (biniş/iniş ya da zirve profilinin duraklarda örneklenmesi); yol boyunca sürekli değişmez.</p>
       <p>Yüzey çarpanı k yalnız F_yuv'u ölçekler. Coast-down yolunda eğim açısı A terimine uygulanmaz.</p>
       <div class="src">chassis.py L104–157 · units.py L35–42</div></div>
 

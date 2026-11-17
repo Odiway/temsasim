@@ -101,7 +101,7 @@ export async function pageDrive(U) {
           (surfaces.length ? surfaces : [{ key: s.surface, label: s.surface, factor: 1 }]).map(o =>
             h("option", { value: o.key, selected: o.key === s.surface ? true : null }, `${o.label} (×${fmt(o.factor, 2)})`)));
         len.addEventListener("change", () => { s.len = Math.max(20, Math.min(5000, parseNum(len.value) || 20)); len.value = String(s.len); changed(); });
-        gr.addEventListener("change", () => { s.grade = Math.max(-15, Math.min(15, parseNum(gr.value) || 0)); gr.value = String(s.grade).replace(".", ","); changed(); });
+        gr.addEventListener("change", () => { s.grade = Math.max(-25, Math.min(25, parseNum(gr.value) || 0)); gr.value = String(s.grade).replace(".", ","); changed(); });
         sf.addEventListener("change", () => { s.surface = sf.value; changed(); });
         const del = h("button", { type: "button", class: "ghost drv-del", title: "Bölümü sil", disabled: segs.length < 2 ? true : null,
           onclick: () => { segs.splice(i, 1); drawSegs(); changed(); } }, "×");
@@ -142,7 +142,7 @@ export async function pageDrive(U) {
 
   const modeSeg = seg([["test", "Test yolu"], ["city", "Halk otobüsü görevi"]], mode, m => { mode = m; store.set("drvMode", m); showMode(); changed(); });
   const testBox = h("div", {}, h("div", { class: "lab simx-lab" }, "Yol"), presets, profile, segBox,
-    h("div", { class: "hint" }, "Yüzey çarpanı yuvarlanma direncini ölçekler; değerler ağır taşıt lastikleri için tipik değerlerdir, ölçülmedi."));
+    h("div", { class: "hint" }, "Eğim −25 … +25 %. Yüzey çarpanı yuvarlanma direncini ölçekler; değerler ağır taşıt lastikleri için tipik değerlerdir, ölçülmedi."));
   const cityBox = h("div", { class: "stack" },
     h("div", {}, h("div", { class: "lab simx-lab" }, "Hat"),
       seg(Object.values(LINES).map(l => [l.code, `${l.code} · ${l.name}`]), lineSel, v => { lineSel = v; store.set("drvLine", v); changed(); })),
@@ -209,7 +209,7 @@ export async function pageDrive(U) {
   const xraySeg = seg(XRAY, "off", m => stage && stage.setXray(m));
   const xrayBar = h("div", { class: "hud simx-cams simx-xray", title: "Röntgen görünümü (X tuşu)" }, h("span", { class: "simx-xray-lab" }, "Röntgen"), xraySeg);
   const legend = h("div", { class: "hud drv-keys" },
-    ...[["W ↑", "gaz"], ["S ↓", "fren"], ["A D ← →", "direksiyon"], ["G", "ileri / geri vites"], ["E", "kapılar"], ["R", "başa dön / görevi yeniden başlat"], ["1–5", "kamera"], ["X", "röntgen"]]
+    ...[["W ↑", "gaz"], ["S ↓", "fren"], ["A D ← →", "direksiyon"], ["C", "hız sabitleyici"], ["G", "ileri / geri vites"], ["E", "kapılar"], ["R", "başa dön / görevi yeniden başlat"], ["1–5", "kamera"], ["X", "röntgen"]]
       .map(([k, t]) => h("span", {}, h("kbd", {}, k), " ", t)));
   const canvasHost = h("div", { class: "simx-canvas", tabindex: 0 });
   const loading = h("div", { class: "simx-loading", hidden: true }, h("div", { class: "simx-spinner" }), h("span", {}, "Hazırlanıyor…"));
@@ -232,7 +232,9 @@ export async function pageDrive(U) {
         const dz = P.powertrain === "diesel";
         if (stage && stage.setPowertrain) stage.setPowertrain(P.powertrain);
         S.soc.el.querySelector(".lab").textContent = dz ? "Yakıt deposu" : "Şarj durumu";
-        S.trac.el.querySelector("span").textContent = dz ? "Motor mili" : "Çekiş / rejen";
+        S.trac.el.querySelector("span").textContent = dz ? "Krank" : "Çekiş / rejen";
+        S.aux.el.querySelector("span").textContent = dz ? "PTO + fan" : "Yardımcı";
+        S.fric.el.querySelector("span").textContent = dz ? "Fren" : "Sürtünmeli fren";
         S.used.el.querySelector("span").textContent = dz ? "Yakıt (tahmin)" : "Harcanan (tahmin)";
       }
       paxNow = p.passengers; finished = false;
@@ -277,11 +279,11 @@ export async function pageDrive(U) {
           h("a", { class: "btn", href: `/report/${r.report_id}`, target: "_blank" }, "Tam rapor")),
         h("div", { class: "drv-res-row" }, h("span", {}, "Yakıt"), h("b", { class: "num" }, `${fmt(r.kpi.fuel_l, 2)} l`), h("span", { class: "muted small" }, `canlı tahmin ${fmt(liveL, 2)} l`)),
         h("div", { class: "drv-res-row" }, h("span", {}, "Rölantide"), h("b", { class: "num" }, `${fmt(r.kpi.idle_fuel_l, 2)} l`)),
-        line("Yakıt enerjisi (alt ısıl değer)", k.fuel_energy_kwh), line("Motor mili işi", k.engine_shaft_kwh), line("Motor kayıpları", k.engine_loss_kwh),
-        line("Kabin içi termal yönetim", k.hvac_kwh + k.heater_fuel_kwh), line("Yardımcı sistemler ve fan", k.auxiliary_kwh + k.fan_kwh),
+        line("Yakıt enerjisi (alt ısıl değer)", k.fuel_energy_kwh), line("Krank işi", k.engine_shaft_kwh), line("Motor kayıpları", k.engine_loss_kwh),
+        line("Kabin içi termal yönetim", k.hvac_kwh + k.heater_fuel_kwh), line("PTO: fan, kompresör, alternatör", k.auxiliary_kwh + k.fan_kwh),
         h("div", { class: "sec-t", style: "margin-top:8px" }, "Tekerlekte nereye gitti"),
         line("Yuvarlanma direnci (yüzey dahil)", k.rolling_kwh), line("Hava direnci", k.aero_kwh),
-        line("Eğim (net)", k.grade_kwh), line("Sürtünmeli fren", k.friction_brake_kwh), line("Motor freni", k.engine_brake_kwh),
+        line("Eğim (net)", k.grade_kwh), line("Fren (retarder + balata)", k.friction_brake_kwh), line("Motor freni", k.engine_brake_kwh),
         line("Şanzıman + aks kayıpları", k.gearbox_loss_kwh + k.axle_loss_kwh),
         r.warnings && r.warnings.length ? h("details", { class: "tele-warn" }, h("summary", {}, `${r.warnings.length} uyarı`), h("ul", {}, r.warnings.map(w => h("li", {}, w)))) : null);
       return;
@@ -310,6 +312,7 @@ export async function pageDrive(U) {
     if (e.repeat) return;
     if (e.code === "KeyE" && drv) { if (Math.abs(drv.st.v) > 0.5) toast("Kapılar ancak otobüs durunca açılır."); else drv.toggleDoors(); }
     else if (e.code === "KeyG" && drv) { if (drv.toggleReverse() == null) toast("Vites değiştirmek için önce durun."); }
+    else if (e.code === "KeyC" && drv) { const c = drv.toggleCruise(); if (c == null && Math.abs(drv.st.v) < 2) toast("Hız sabitleyici için önce hızlanın."); }
     else if (e.code === "KeyR" && drv) resetBtn.click();
     else if (e.code === "KeyX" && stage) {
       const i = XRAY.findIndex(([k]) => k === xrayMode()), next = XRAY[(i + 1) % XRAY.length][0];
@@ -340,7 +343,7 @@ export async function pageDrive(U) {
       drv.setPassengers(mission.pax); paxNow = mission.pax;
       extra = { t: D.t, mission, night: night.checked };
     }
-    const live = { v: Math.abs(D.v) * 3.6, p_batt: D.p_batt / 1e3, p_motor: D.p_motor / 1e3, p_hvac: P.hvac_w / 1e3, p_aux: D.p_aux / 1e3,
+    const live = { v: Math.abs(D.v) * 3.6, p_batt: (P.powertrain === "diesel" ? D.p_crank : D.p_batt) / 1e3, p_motor: (P.powertrain === "diesel" ? D.p_crank : D.p_motor) / 1e3, p_hvac: P.hvac_w / 1e3, p_aux: D.p_aux / 1e3,
       p_thermal: P.pack_thermal_w / 1e3, regen_lost: D.p_fric / 1e3, doors: D.doors, accel: D.v < -0.01 ? -D.a : D.a, cabin: P.cabin_c, pack: P.pack_c,
       soc: D.soc * 100, pax: paxNow };
     stage.frame(D, live, dt, extra);
@@ -349,7 +352,8 @@ export async function pageDrive(U) {
   function hud(D) {
     S.speed.set(fmt(Math.abs(D.v) * 3.6, 0)); S.soc.set(fmt(D.soc * 100, 1));
     for (const g of gearEl.children) g.classList.toggle("on", g.dataset.g === (D.dir < 0 ? "R" : "D"));
-    const pm = D.p_motor / 1e3, peak = P.motor.peak_power_w / 1e3;
+    const dz = P.powertrain === "diesel";
+    const pm = (dz ? D.p_crank : D.p_motor) / 1e3, peak = P.motor.peak_power_w / 1e3;
     S.trac.set(`${fmt(pm, 0)} kW`, pm / peak, pm < 0 ? "#2fbf71" : "#3987e5");
     S.hvac.set(`${fmt(P.hvac_w / 1e3, 1)} kW`, P.hvac_w / 30e3, "#eb6834");
     S.aux.set(`${fmt(D.p_aux / 1e3, 1)} kW`, D.p_aux / 15e3, "#8b9298");
@@ -372,7 +376,8 @@ export async function pageDrive(U) {
       S.surf.set(`${surfLabel(sg.surface)} ×${fmt(D.kSurf ?? 1, 2)}`);
       S.doors.set(D.doors ? "açık" : "kapalı");
     }
-    let m = mode === "test" && D.atEnd && road && D.s > road.L / 2 ? "Yolun sonu. R ile başa dönün ya da geri dönüş yapın."
+    let m = D.cruise != null ? `Hız sabitleyici: ${fmt(D.cruise * 3.6, 0)} km/h (C ile kapatın; fren de kapatır)`
+      : mode === "test" && D.atEnd && road && D.s > road.L / 2 ? "Yolun sonu. R ile başa dönün ya da geri dönüş yapın."
       : D.scrape ? "Kaldırıma sürtünüyorsunuz." : D.blocked ? "Önünüz kapalı: geri vitese alın (G) ve manevra yapın."
       : D.dir < 0 ? "Geri vites: en fazla 10 km/h. İleri vites için durup G'ye basın."
       : mode === "test" && D.doors ? "Kapılar açık: dış hava kabine giriyor. Kapatmak için E." : "";

@@ -30,7 +30,7 @@ from .cycle import Environment, Route
 from .vecto_xml import safe_name
 
 KINDS_TR = {"sehir_ici": "Şehir içi", "otoyol": "Otoyol / şehirlerarası", "serbest": "Serbest", "test": "Test tekrarı"}
-LOAD_MODES = {"profile": "Yol boyunca değişken (zirve)", "constant": "Sabit yolcu", "stops": "Duraklardan (biniş/iniş)",
+LOAD_MODES = {"profile": "Duraklarda değişken (zirve)", "constant": "Sabit yolcu", "stops": "Duraklardan (biniş/iniş)",
               "mass": "Test kütlesi (kg)"}
 
 

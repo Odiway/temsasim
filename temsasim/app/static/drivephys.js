@@ -34,7 +34,7 @@ export const PRESETS = {
 /* ---------------------------------------------------------------- road */
 export function buildRoad(segs, surfaces) {
   const factor = Object.fromEntries((surfaces || []).map(s => [s.key, s.factor]));
-  const clean = segs.map(s => ({ len: Math.max(20, +s.len || 0), grade: Math.max(-15, Math.min(15, +s.grade || 0)),
+  const clean = segs.map(s => ({ len: Math.max(20, +s.len || 0), grade: Math.max(-25, Math.min(25, +s.grade || 0)),
                                  surface: s.surface || "asfalt" }));
   const starts = [];
   let L = 0;
@@ -128,7 +128,7 @@ export function createDriver(P, world, { passengers = 0 } = {}) {
       thr: 0, brk: 0, steer: 0, doors: 0, dir: 1,
       soc: P.battery.soc_start, dist: 0,
       e_batt: 0, e_trac: 0, e_regen: 0, e_hvac: 0, e_aux: 0, e_thermal: 0, e_fric: 0,
-      p_batt: 0, p_motor: 0, p_aux: 0, p_fric: 0, scrape: false, atEnd: false, kerb: false, blocked: false,
+      p_batt: 0, p_motor: 0, p_crank: 0, p_aux: 0, p_fric: 0, cruise: null, scrape: false, atEnd: false, kerb: false, blocked: false,
       trace: { t: [], v: [], grade_pct: [], surface: [], doors: [], pax: [] }, nextRec: 0,
     });
   }
@@ -143,8 +143,17 @@ export function createDriver(P, world, { passengers = 0 } = {}) {
   function one(inp, dt) {
     // pedals and wheel ease in and out like a driver's foot and hands
     const ease = (x, target, up, down) => x + Math.max(-down * dt, Math.min(up * dt, target - x));
-    st.thr = ease(st.thr, inp.up && !st.doors ? 1 : 0, 1.6, 4);
-    st.brk = ease(st.brk, inp.down ? 1 : 0, 3, 6);
+    // cruise control: a proportional foot on the pedals; the driver's own
+    // brake, the doors or reverse cancel it, the throttle overrides it
+    if (st.cruise != null && (inp.down || st.doors || st.dir < 0)) st.cruise = null;
+    let thrT = inp.up && !st.doors ? 1 : 0, brkT = inp.down ? 1 : 0;
+    if (st.cruise != null && !inp.up) {
+      const e = st.cruise - Math.abs(st.v);
+      thrT = Math.max(0, Math.min(1, 0.25 + 0.45 * e));
+      brkT = e < -1.0 ? Math.min(0.5, -(e + 1.0) * 0.15) : 0;
+    }
+    st.thr = ease(st.thr, thrT, st.cruise != null ? 3 : 1.6, 4);
+    st.brk = ease(st.brk, brkT, 3, 6);
     st.steer = ease(st.steer, (inp.right ? 1 : 0) - (inp.left ? 1 : 0), 1.4, 2.2);
 
     // v is signed: + forward along the bus's heading, - in reverse
@@ -220,6 +229,9 @@ export function createDriver(P, world, { passengers = 0 } = {}) {
     st.soc = Math.max(0, Math.min(1, st.soc));
     const fFricReal = P.powertrain === "diesel" ? Math.max(0, fFric - fLift) : fFric;
     st.p_batt = pBatt; st.p_motor = pMotor; st.p_aux = pAux; st.p_fric = fFricReal * sp;
+    // diesel: the crankshaft power the engine actually produces (the "motor"
+    // figure is fuel power, because the live model's machine is the whole engine)
+    st.p_crank = P.powertrain === "diesel" ? fDrive * sp / etaDl + (pMotor > 0 ? pAux : 0) : pMotor;
     st.p_engbrake = P.powertrain === "diesel" ? Math.min(fFric, fLift) * sp : 0;
     st.e_batt += pBatt * dt; st.e_aux += pAux * dt; st.e_hvac += pHvac * dt; st.e_thermal += pTherm * dt;
     if (pMotor > 0) st.e_trac += pMotor * dt; else st.e_regen -= pMotor * dt;
@@ -237,6 +249,8 @@ export function createDriver(P, world, { passengers = 0 } = {}) {
     }
   }
 
+  /* cruise control at the current speed (or off) */
+  function toggleCruise() { if (st.cruise != null || Math.abs(st.v) < 2 || st.dir < 0) { st.cruise = null; return null; } st.cruise = Math.abs(st.v); return st.cruise; }
   function toggleDoors() { if (Math.abs(st.v) < 0.5) st.doors = st.doors ? 0 : 1; return st.doors; }
   /* D <-> R, only at a standstill, as on the bus's push-button selector */
   function toggleReverse() { if (Math.abs(st.v) > 0.3) return null; st.dir = -st.dir; st.thr = 0; return st.dir; }
@@ -244,5 +258,5 @@ export function createDriver(P, world, { passengers = 0 } = {}) {
   /* people get on and off at stops: the mass the motor moves changes with them */
   function setPassengers(n) { pax = Math.max(0, n); mass = P.mass_kg + pax * P.passenger_mass_kg; mTot = mass + (P.m_eq_kg || 0); }
 
-  return { st, step, reset, toggleDoors, toggleReverse, setPassengers, get mass() { return mass; }, get pax() { return pax; } };
+  return { st, step, reset, toggleDoors, toggleReverse, toggleCruise, setPassengers, get mass() { return mass; }, get pax() { return pax; } };
 }

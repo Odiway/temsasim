@@ -85,6 +85,24 @@ class Transmission:
     min_shift_interval_s: float = 2.0
     start_speed_mps: float = 2.2
     """Below this road speed the box is in its launch gear."""
+    eco_upshift_speed_rads: float = 950.0 * RPM
+    """At partial load the box may shift up early, as long as the new gear
+    keeps the engine at or above this speed. This is what puts a coach in top
+    gear at ~1000 rpm on the motorway without ever letting the engine lug at
+    the downshift line in town."""
+    partial_load_share: float = 0.60
+    """"Partial load" for the early upshift: the input torque the new gear
+    needs is at most this share of the full-load torque at its engine speed."""
+    lug_speed_rads: float = 875.0 * RPM
+    """Under load the box shifts down before the engine falls to this speed;
+    the line slides towards ``downshift_speed_rads`` as the load gets lighter,
+    so a coach cruising at ~1000 rpm in top gear is left alone while a bus
+    pulling away in a tall gear at 830 rpm is not."""
+    launch_gear: int = 3
+    """The gear the box pulls away in on a normal start (1-based). Heavier
+    starts drop to 2 or 1 (the AMT's clutch-protection logic); light ones may
+    go up to ``launch_gear_max``."""
+    launch_gear_max: int = 5
 
     source: str = "unspecified"
     validated: bool = False
@@ -172,16 +190,35 @@ class Transmission:
                 limit = min(limit, float(self.gear_max_torque_nm[g]))
             return t_in <= (1.0 - self.torque_reserve) * limit
 
-        # launch: the highest gear whose engine speed at the start speed is
-        # still above the downshift line, with torque in hand
+        def share(g):
+            """Input torque the gear needs as a share of the full-load torque there."""
+            w = max(n_eng(g), engine.idle_speed_rads)
+            _, t_in, _ = self.gearbox_input(out_speed_rads, out_torque_nm, g)
+            limit = engine.max_torque(w)
+            if self.gear_max_torque_nm:
+                limit = min(limit, float(self.gear_max_torque_nm[g]))
+            return t_in / max(limit, 1.0)
+
+        # launch: the standard launch gear, one or two lower when the start is
+        # heavy (laden, uphill), up to launch_gear_max when it is light. Judged
+        # on the torque the gear would need at the start speed.
         if speed_mps < self.start_speed_mps and out_torque_nm > 0:
-            w_start = self.start_speed_mps / max(speed_mps, 0.3) * out_speed_rads if speed_mps > 0.3 else None
-            best = 0
-            for g in range(n):
-                w_at_start = (w_start if w_start is not None else out_speed_rads) * float(self.gear_ratios[g])
-                if w_at_start >= lo and torque_ok(g):
-                    best = g
-            return best
+            w_ref = self.start_speed_mps / max(speed_mps, 0.3) * out_speed_rads if speed_mps > 0.3 else out_speed_rads
+
+            def launch_share(g):
+                w = max(w_ref * float(self.gear_ratios[g]), engine.idle_speed_rads)
+                _, t_in, _ = self.gearbox_input(w_ref, out_torque_nm, g)
+                limit = engine.max_torque(w)
+                if self.gear_max_torque_nm:
+                    limit = min(limit, float(self.gear_max_torque_nm[g]))
+                return t_in / max(limit, 1.0)
+            g = min(max(int(self.launch_gear), 1), n) - 1
+            while g > 0 and launch_share(g) > 1.0 - self.torque_reserve:
+                g -= 1
+            top = min(max(int(self.launch_gear_max), 1), n) - 1
+            while g < top and launch_share(g + 1) <= 0.25:
+                g += 1
+            return g
 
         window = [g for g in range(n) if lo <= n_eng(g) <= hi]
         if not window:
@@ -200,21 +237,34 @@ class Transmission:
             return max(window) if n_eng(current) > hi else min(window)
 
         good = [g for g in window if torque_ok(g)]
-        if good:
-            target = max(good)
-        else:
-            # Even the lowest gear in the window lacks torque: drop one more
-            # gear, accepting a higher engine speed, before declaring a shortfall.
-            target = min(window)
-            if target > 0 and n_eng(target - 1) <= 1.08 * hi:
-                target -= 1
-
+        eco = self.eco_upshift_speed_rads
         if current in good:
+            # Hold the gear (hysteresis), except for the early upshift at
+            # partial load. Skipping gears is allowed: the highest gear that
+            # satisfies the eco rules is taken, as an AMT does on a light bus.
             if since_shift_s < self.min_shift_interval_s:
                 return current
-            if target > current and n_eng(target) < lo + 0.1 * (hi - lo):
-                return current          # do not upshift into the bottom of the window
-            return target
+            lug = lo + (self.lug_speed_rads - lo) * min(1.0, share(current) / max(self.partial_load_share, 1e-6))
+            if n_eng(current) < lug:
+                # lugging under load (coasted down into the gear): the smallest
+                # downshift that brings the engine back above the eco line
+                down = [g for g in good if g < current and n_eng(g) >= eco]
+                return max(down) if down else current
+            up = [g for g in good if g > current and n_eng(g) >= eco and share(g) <= self.partial_load_share]
+            return max(up) if up else current
+        if good:
+            if n_eng(current) > hi or current >= n:
+                # over-revving: up to the highest gear that still keeps the
+                # engine at the eco line, never straight down to the lug line
+                cand = [g for g in good if n_eng(g) >= eco] or good
+                return max(cand)
+            # lugging or short of torque: the smallest downshift that restores both
+            return max(good)
+        # Even the lowest gear in the window lacks torque: drop one more
+        # gear, accepting a higher engine speed, before declaring a shortfall.
+        target = min(window)
+        if target > 0 and n_eng(target - 1) <= 1.08 * hi:
+            target -= 1
         return target
 
     def describe(self) -> str:

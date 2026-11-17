@@ -144,6 +144,7 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
         for stem in L.list_kind("vehicle"):
             try:
                 v = L.load_vehicle(stem)
+                capacity = int(v.passenger_capacity)
                 if v.is_diesel:
                     summary = (f"dizel {_tr(v.engine.rated_power_w / 1e3)} kW · "
                                f"{v.transmission.transmission_type} {v.transmission.n_gears} vites · "
@@ -156,6 +157,7 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                 vehicles.append({
                     "stem": stem, "name": v.name, "variant": v.variant, "powertrain": v.powertrain,
                     "powertrain_tr": POWERTRAINS.get(v.powertrain, v.powertrain),
+                    "capacity": capacity, "seats": int(v.seats), "standees": int(v.standees),
                     "rolling_c0": round(v.chassis.rolling_coefficient(v.chassis.kerb_mass_kg), 5),
                     "rolling_source": ("coast-down" if v.chassis.uses_coastdown else
                                        "lastik sertifikası (RRC)" if v.chassis.axles else "şasi dosyası"),
@@ -557,6 +559,10 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
     def preview():
         """Road geometry for the idle scene, before anything has been run."""
         L = lib()
+        if request.args.get("constant_speed"):
+            return jsonify(profile_from_route(_constant_route({"speed_kmh": request.args.get("constant_speed"),
+                                                                "grade_pct": request.args.get("constant_grade"),
+                                                                "distance_km": request.args.get("constant_km")})))
         if request.args.get("route"):
             return jsonify(profile_from_route(Route.from_csv(
                 L.root / "route" / f"{safe_stem(request.args['route'])}.csv")))
@@ -1505,6 +1511,9 @@ def _cycle_from(L: Library, b: dict, veh):
     elif n > 0:
         occ = (lambda f, peak=n: peak * 4.0 * f * (1.0 - f))
     rep = max(1, int(b.get("repeat") or 1))
+    if b.get("constant"):
+        # steady-speed test: so many km at this speed on this grade, no stops
+        return _constant_route(b["constant"]).to_cycle(vehicle=veh, occupancy=occ, traffic="yok", laps=rep)
     if b.get("route"):
         route = Route.from_csv(L.root / "route" / f"{b['route']}.csv")
         level = b.get("traffic") or "yok"
@@ -1516,6 +1525,23 @@ def _cycle_from(L: Library, b: dict, veh):
     if occ is not None:
         cyc = cyc.with_occupancy(occ)
     return cyc.repeat(rep) if rep > 1 else cyc
+
+
+def _constant_route(c: dict) -> Route:
+    """A straight test road: one speed, one grade, one length. The driver
+    model accelerates to the speed and holds it; no stops, no lights."""
+    v = float(c.get("speed_kmh") or 50.0)
+    g = float(c.get("grade_pct") or 0.0)
+    km = float(c.get("distance_km") or 5.0)
+    if not (1.0 <= v <= 130.0):
+        raise ValueError("Sabit hız 1–130 km/h arasında olmalı.")
+    if not (-30.0 <= g <= 30.0):
+        raise ValueError("Eğim −30 … +30 % arasında olmalı.")
+    if not (0.2 <= km <= 300.0):
+        raise ValueError("Mesafe 0,2–300 km arasında olmalı.")
+    d = np.arange(0.0, km * 1000.0 + 1e-6, 10.0)
+    return Route(d, d * g / 100.0, np.full(d.size, v / 3.6), [], name=f"sabit {v:g} km/h, %{g:g} egim, {km:g} km",
+                 source="constant")
 
 
 def _env_from(b: dict) -> Environment:

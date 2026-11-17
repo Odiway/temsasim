@@ -70,7 +70,14 @@ def test_transmission_stages_add_losses_and_choose_sane_gears():
     assert g >= 9
     # launching from rest picks a low gear
     g0 = tr.choose_gear(1.0 / 0.5068 * tr.axle_ratio, 4000.0, e, 0, 10.0, 1.0)
-    assert g0 <= 3
+    assert g0 <= 4                      # 5th at most, as the real AMT on a light start
+    # a heavy start (laden, uphill) drops below the standard 3rd
+    g_heavy = tr.choose_gear(1.0 / 0.5068 * tr.axle_ratio, 40000.0, e, 0, 10.0, 1.0)
+    assert g_heavy <= 1
+    # in a high gear at 36 km/h the engine would lug at ~830 rpm: not chosen
+    w36 = 36 / 3.6 / 0.5068 * tr.axle_ratio
+    g36 = tr.choose_gear(w36, 800.0, e, 8, 10.0, 36 / 3.6)
+    assert w36 * tr.gear_ratios[g36] >= tr.eco_upshift_speed_rads * 0.99
 
 
 def test_chassis_axle_table_gives_load_corrected_rolling_resistance():
