@@ -134,6 +134,13 @@ class HVAC:
     control_time_constant_s: float = 420.0
     passenger_sensible_w: float = 80.0
 
+    cabin_model: str = ""
+    """Optional ``cabin/<file>.yaml`` layered cabin model (kabin termal modeli
+    page). When set, the library loader derives cabin volume, glazing and
+    opaque areas, their U values, the interior thermal mass and the SHGC from
+    the layer stacks and overrides the fields above, so the lumped model and
+    the CAE thermal model share one source."""
+
     source: str = "unspecified"
     validated: bool = False
     notes: str = ""

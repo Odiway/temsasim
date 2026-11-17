@@ -361,8 +361,8 @@ function lineSvg({ x, series, xLabel, yLabel, xFmt = v => fmt(v, 0), yFmt = v =>
   const labels = [];
   series.forEach(sr => {
     const pts = sr.y.map((v, i) => v == null ? null : [sx(x[i]), sy(v)]).filter(Boolean);
-    s("path", { d: pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" "), fill: "none", stroke: sr.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
-    if (markers) pts.forEach(p => s("circle", { cx: p[0], cy: p[1], r: 4, fill: sr.color, stroke: css("--panel"), "stroke-width": 2 }, svg));
+    if (!sr.markersOnly) s("path", { d: pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" "), fill: "none", stroke: sr.color, "stroke-width": sr.thin ? 1.2 : 2, "stroke-dasharray": sr.dashed ? "6 4" : null, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+    if (markers || sr.markers) pts.forEach(p => s("circle", { cx: p[0], cy: p[1], r: sr.markers ? 5 : 4, fill: sr.color, stroke: css("--panel"), "stroke-width": 2 }, svg));
     const last = pts[pts.length - 1];
     if (last && series.length > 1) labels.push({ y: last[1] + 4, t: sr.label });
   });
@@ -596,12 +596,12 @@ async function openFileDialog(kind, stem, name) {
 const PAGES = {
   baslangic: pageHome, kutuphane: pageLibrary, yukle: pageUpload, bilesen: pageComponent,
   arac: pageVehicle, simulasyon: pageSim, surus: pageDrive, hat: pageNetwork, dogrulama: pageValidate,
-  guzergah: pageRouteBuilder, senaryo: pageScenarios, bicimler: pageFormats, karsilastir: pageCompare,
+  guzergah: pageRouteBuilder, senaryo: pageScenarios, bicimler: pageFormats, karsilastir: pageCompare, kabin: pageCabin,
 };
-const PAGE_GRP = { baslangic: "home", kutuphane: "veri", yukle: "veri", bilesen: "veri", arac: "veri", guzergah: "veri", senaryo: "veri", bicimler: "veri",
+const PAGE_GRP = { baslangic: "home", kutuphane: "veri", yukle: "veri", bilesen: "veri", arac: "veri", guzergah: "veri", senaryo: "veri", bicimler: "veri", kabin: "veri",
   simulasyon: "kos", surus: "kos", hat: "kos", karsilastir: "kos", dogrulama: "dogrula" };
 const PAGE_SIGN = { baslangic: "Başlangıç", kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bileşen", arac: "Araç kur", simulasyon: "Simülasyon", surus: "Serbest sürüş", hat: "Hat ve sefer", dogrulama: "Doğrulama",
-  guzergah: "Güzergâh", senaryo: "Senaryo", bicimler: "Veri biçimleri", karsilastir: "Çoklu koşu" };
+  guzergah: "Güzergâh", senaryo: "Senaryo", bicimler: "Veri biçimleri", karsilastir: "Çoklu koşu", kabin: "Kabin termal" };
 /* The shared toolkit the page modules (network.js, drive.js, routes.js) receive. */
 /* A data table: columns [{label, n (numeric), acts}] and an empty body to fill. */
 function dataTable(cols) {
@@ -616,6 +616,7 @@ function pageKit() {
 }
 async function pageFormats(group) { const mod = await import("/static/formats.js"); return mod.pageFormats(pageKit(), group); }
 async function pageCompare() { const mod = await import("/static/compare.js"); return mod.pageCompare(pageKit()); }
+async function pageCabin(stem) { const mod = await import("/static/cabin.js"); return mod.pageCabin(pageKit(), stem); }
 /* The home roadmap sends people to a builder or an upload page; when that page
    saves, it comes back here instead of its usual next page. */
 function rmGo(hash) { store.set("rmReturn", true); location.hash = hash; }

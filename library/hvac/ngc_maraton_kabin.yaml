@@ -1,0 +1,27 @@
+# NGC Maraton klima bileşeni: zarf (UA, cam/opak alan, iç ısıl kütle, SHGC) cabin/ngc_maraton.yaml katman
+# modelinden türetilir (cabin_model alanı); yükleyici dosyadaki zarf alanlarını onunla ezer.
+kind: hvac
+name: NGC Maraton kabin (katman modelinden)
+description: >
+  Kabin zarfı A1319 NGC Maraton termal konfor CFD raporunun katman modelinden (cabin/ngc_maraton.yaml);
+  klima donanımı MY25 Maraton ile aynı A/C ünitesi (rapor): 12 üfleyici ≈ 1,82 kg/s + 0,1 kg/s buz çözücü.
+  Soğutma kapasitesi ve COP tedarikçi verisiyle doğrulanmalı.
+cabin_model: cabin/ngc_maraton.yaml
+system_type: fuel_fired
+backup_heat_source: fuel_fired
+fresh_air_m3_per_h_per_passenger: 10.0
+fresh_air_minimum_m3_per_h: 300.0
+door_count: 2
+door_width_m: 0.9
+door_height_m: 1.95
+door_discharge_coefficient: 0.5
+heating_capacity_kw: 32.0
+cooling_capacity_kw: 32.0
+fuel_fired_efficiency: 0.85
+fuel_fired_parasitic_w: 300.0
+blower_power_w: 1200.0
+condenser_fan_power_w: 900.0
+setpoint_heating_c: 20.0
+setpoint_cooling_c: 24.0
+validated: false
+notes: Zarf değerleri kabin katman modelinden; alanlar ve araç yönü orada KABUL olarak işaretli.

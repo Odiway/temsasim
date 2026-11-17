@@ -32,8 +32,8 @@ import yaml
 from .schema import COMPONENT_KINDS, KIND_LABELS_TR, safe_stem
 from .vehicle import SLOTS_BY_POWERTRAIN
 
-ITEM_KINDS = list(COMPONENT_KINDS) + ["vehicle", "route", "scenario", "line", "cycle"]
-LABELS_TR = {**KIND_LABELS_TR, "route": "Güzergâh", "scenario": "Senaryo", "line": "Hat", "cycle": "Çevrim"}
+ITEM_KINDS = ["cabin"] + list(COMPONENT_KINDS) + ["vehicle", "route", "scenario", "line", "cycle"]
+LABELS_TR = {**KIND_LABELS_TR, "route": "Güzergâh", "scenario": "Senaryo", "line": "Hat", "cycle": "Çevrim", "cabin": "Kabin katman modeli"}
 PACKAGE_VERSION = 1
 _SKIP_DIRS = {".cop_kutusu", "__pycache__"}
 
@@ -110,6 +110,10 @@ def item_deps(root: pathlib.Path, kind: str, stem: str) -> list[tuple[str, str]]
         raw = _yaml(root / "line" / f"{stem}.yaml")
         if raw.get("route"):
             out.append(("route", pathlib.Path(str(raw["route"])).stem))
+    elif kind == "hvac":
+        raw = _yaml(root / "hvac" / f"{stem}.yaml")
+        if raw.get("cabin_model"):
+            out.append(("cabin", pathlib.Path(str(raw["cabin_model"])).stem))
     return out
 
 

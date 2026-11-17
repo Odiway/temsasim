@@ -111,6 +111,14 @@ _CATALOGUE = [
                   ("conditions", "ambient_c, solar, night, hvac_off, headwind_mps, pressure_hpa"),
                   ("load", "mode: profile | constant | stops | mass"), ("traffic", "yok, akici, orta, yogun, tikali")],
          notes=["Araç ve güzergâh adları kütüphanedekiyle aynı olmalı."]),
+    dict(key="cabin", group="arac", label="Kabin katman modeli", filename="kabin_sablonu.yaml",
+         family="importer", upload="#/yukle/dosya", upload_label="Veri yükle → YAML dosyası (ya da Kabin termal sayfası)",
+         description="Kabin yüzeyleri (tavan, yan panel, cam, taban…) dıştan içe malzeme katmanlarıyla; üfleyici debisi ve üfleme sıcaklığı; CFD/test referansı. Klima bileşenine bağlanınca UA, cam alanı, iç kütle ve SHGC buradan türetilir.",
+         columns=[("materials.<ad>", "density_kg_m3, cp_j_kgk, k_w_mk"), ("surfaces[].layers", "material, thickness_mm (dıştan içe)"),
+                  ("surfaces[].orientation", "roof | side_left | side_right | front | rear | floor"), ("outer / outer_c", "ambient ya da fixed (motor bölmesi 80 °C)"),
+                  ("absorptivity / transmissivity", "güneş için"), ("inlets[]", "count, mass_flow_kg_s, supply_c [[s, °C]…]"),
+                  ("reference", "cfd / test eğrileri ve kabul kriterleri")],
+         notes=["Alanlar CAD'den ölçülmeli; şablondaki alanlar örnektir.", "Doğrulama: Kabin termal sayfasında CFD ortalamasıyla karşılaştırılır."]),
     dict(key="line", group="senaryo", label="Hat ve tarife dosyası", filename="hat_sablonu.yaml",
          family="importer", upload="#/yukle/dosya", upload_label="Veri yükle → YAML dosyası",
          description="Durak listesi (biniş sayıları) ve saat bantları (sefer aralığı, trafik, talep). Güzergâh CSV'sindeki durak sayısıyla eşleşmeli.",
@@ -343,6 +351,27 @@ def _b_scenario(lib):
     return (head + yaml.safe_dump(d, sort_keys=False, allow_unicode=True)).encode("utf-8")
 
 
+def _b_cabin(lib):
+    from .cabin import DEFAULT_MATERIALS
+    d = {"kind": "cabin", "name": "Örnek kabin (şablon)", "description": "ŞABLON. Yüzey alanlarını CAD'den ölçüp girin.",
+         "materials": {k: dict(v) for k, v in DEFAULT_MATERIALS.items()},
+         "surfaces": [
+             {"name": "Tavan", "orientation": "roof", "area_m2": 30.0, "layers": [{"material": "frp", "thickness_mm": 3.0}, {"material": "insulation", "thickness_mm": 40.0}, {"material": "abs", "thickness_mm": 2.5}], "absorptivity": 0.8, "transmissivity": 0.0, "h_out_w_m2k": 30.0, "h_in_w_m2k": 4.0},
+             {"name": "Yan paneller", "orientation": "side_left", "area_m2": 26.0, "layers": [{"material": "steel", "thickness_mm": 1.0}, {"material": "insulation", "thickness_mm": 36.0}, {"material": "abs", "thickness_mm": 2.5}], "absorptivity": 0.4, "transmissivity": 0.0, "h_out_w_m2k": 30.0, "h_in_w_m2k": 4.0},
+             {"name": "Yan camlar", "orientation": "side_right", "area_m2": 21.0, "layers": [{"material": "glass", "thickness_mm": 6.4}], "absorptivity": 0.1, "transmissivity": 0.8, "h_out_w_m2k": 30.0, "h_in_w_m2k": 4.0},
+             {"name": "Taban (motor üstü)", "orientation": "floor", "area_m2": 7.0, "outer": "fixed", "outer_c": 80.0, "layers": [{"material": "insulation", "thickness_mm": 36.0}, {"material": "plywood", "thickness_mm": 12.0}], "absorptivity": 0.4, "transmissivity": 0.0, "h_out_w_m2k": 30.0, "h_in_w_m2k": 4.0}],
+         "air_volume_m3": 56.0, "interior_mass_kg": 250.0, "interior_cp_j_kgk": 1075.0, "interior_contact_area_m2": 100.0, "interior_h_w_m2k": 4.0,
+         "occupants": 50, "occupant_w": 100.0,
+         "inlets": [{"name": "A/C üfleyicileri", "count": 12, "mass_flow_kg_s": 0.15, "supply_c": [[0, 41.0], [300, 42.0], [600, 27.5], [1000, 22.0], [1500, 18.5], [2400, 16.0], [3600, 13.8]]}],
+         "infiltration_ach": 0.3, "location": {"lat": 37.0, "lon": 35.32, "day_of_year": 200, "hour_local": 15.0, "utc_offset_h": 3.0, "heading_deg": 90.0},
+         "reference": {"cfd": {"label": "CFD (örnek)", "times_min": [0, 10, 20, 30, 40], "avg_c": [55.0, 35.85, 27.59, 23.98, 21.96]},
+                       "criteria": [{"at_min": 30, "max_c": 31.0}, {"at_min": 45, "max_c": 29.0}]},
+         "validated": False, "notes": "ŞABLON"}
+    head = ("# Kabin katman modeli şablonu. surfaces[].layers dıştan içe; outer: ambient | fixed (outer_c ile).\n"
+            "# orientation: roof | side_left | side_right | front | rear | floor. inlets[].supply_c: [[saniye, °C], ...]\n")
+    return (head + yaml.safe_dump(d, sort_keys=False, allow_unicode=True)).encode("utf-8")
+
+
 def _b_line(lib):
     d = {"kind": "line", "code": "ÖRN-1", "name": "Örnek hat (şablon)", "example": True,
          "route": "route/<guzergah>.csv", "layover_min": 8,
@@ -439,6 +468,7 @@ _BUILDERS = {
     "curve_ocv": (_b_curve_ocv, XLSX), "curve_cop": (_b_curve_cop, XLSX),
     "engine_fuel_map": (_b_engine_fuel_map, "text/csv"), "engine_full_load": (_b_engine_full_load, "text/csv"), "loss_map": (_b_loss_map, "text/csv"),
     "vehicle": (_b_vehicle, "application/x-yaml"), "scenario": (_b_scenario, "application/x-yaml"), "line": (_b_line, "application/x-yaml"),
+    "cabin": (_b_cabin, "application/x-yaml"),
     "log_electric": (_b_log_electric, XLSX), "log_diesel": (_b_log_diesel, "text/csv"), "testlog_meta": (_b_testlog_meta, "application/x-yaml"),
 }
 for _k in COMPONENT_KINDS:

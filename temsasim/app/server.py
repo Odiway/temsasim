@@ -49,6 +49,8 @@ from ..share import (LABELS_TR as SHARE_LABELS_TR, copy_item, export_library, ex
                      read_raw, write_raw)
 from .. import __version__
 from ..templates import all_templates_zip, build_template, list_templates
+from ..cabin import (DEFAULT_MATERIALS, ORIENTATIONS, OUTER_KINDS, CabinModel, compare_with_reference, hvac_fields_from_cabin,
+                     list_cabins, load_cabin, save_cabin, simulate as simulate_cabin)
 from ..report_compare import render_compare, run_facts
 from ..testlog import correlate_diesel, grade_along, list_campaigns, read_can_log, run_campaign
 from ..traffic import LEVELS as TRAFFIC_LEVELS
@@ -1029,6 +1031,10 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                 raise FileNotFoundError(f"Güzergâh yok: route/{sc.duty['route']}.csv")
             path = save_scenario(L.root, sc, overwrite=overwrite)
             return jsonify({"kind": "scenario", "stem": sc.stem, "saved": f"scenario/{path.name}", "name": sc.name, "label": "Senaryo"})
+        if kind == "cabin":
+            m = CabinModel.from_dict(data, stem=str(data.get("stem") or fname_stem))
+            p = save_cabin(L.root, m, overwrite=overwrite)
+            return jsonify({"kind": "cabin", "stem": m.stem, "saved": f"cabin/{p.name}", "name": m.name, "label": "Kabin katman modeli"})
         if kind == "route_spec":
             spec = RouteSpec(**_spec_kwargs({k: v for k, v in data.items() if k != "kind"}))
             out = save_spec(L.root, spec, overwrite=overwrite)
@@ -1060,6 +1066,81 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
             raise
         return jsonify({"kind": kind, "stem": stem, "saved": f"{folders[kind]}/{path.name}",
                         "name": getattr(obj, "name", stem), "label": KIND_LABELS_TR.get(kind, "Hat" if kind == "line" else kind)})
+
+    # ------------------------------------------------------------ layered cabin thermal model
+    @app.get("/api/cabins")
+    def cabins_list():
+        L = lib()
+        hvacs = []
+        for stem in L.list_kind("hvac"):
+            raw = yaml.safe_load((L.root / "hvac" / f"{stem}.yaml").read_text(encoding="utf-8")) or {}
+            hvacs.append({"stem": stem, "name": raw.get("name", stem), "cabin_model": raw.get("cabin_model") or ""})
+        return jsonify({"cabins": list_cabins(L.root), "materials": DEFAULT_MATERIALS,
+                        "orientations": [[k, v] for k, v in ORIENTATIONS.items()], "outer_kinds": [[k, v] for k, v in OUTER_KINDS.items()],
+                        "hvacs": hvacs})
+
+    @app.get("/api/cabin/<stem>")
+    def cabin_get(stem):
+        m = load_cabin(lib_root, stem)
+        return jsonify({"cabin": m.to_dict(), "stem": m.stem, "lumped": m.lumped_equivalent(), "hvac_fields": hvac_fields_from_cabin(m),
+                        "surface_u": {s.name: m.surface_u(s) for s in m.surfaces},
+                        "surface_c": {s.name: m.surface_capacitance(s) for s in m.surfaces}})
+
+    @app.post("/api/cabin")
+    def cabin_save():
+        b = request.get_json(force=True)
+        d = dict(b.get("cabin") or b)
+        if not b.get("stem"):
+            d.pop("stem", None)                      # a new file: the stem follows the name
+        m = CabinModel.from_dict(d, stem=str(b.get("stem") or ""))
+        if not m.surfaces:
+            raise ValueError("En az bir yüzey tanımlayın.")
+        p = save_cabin(lib_root, m, overwrite=bool(b.get("overwrite")))
+        return jsonify({"saved": f"cabin/{p.name}", "stem": m.stem, "hvac_fields": hvac_fields_from_cabin(m)})
+
+    @app.post("/api/cabin/<stem>/delete")
+    def cabin_delete(stem):
+        L = lib()
+        src = L.root / "cabin" / f"{safe_stem(stem)}.yaml"
+        users = [h for h in L.list_kind("hvac") if (yaml.safe_load((L.root / "hvac" / f"{h}.yaml").read_text(encoding="utf-8")) or {}).get("cabin_model", "").endswith(f"{safe_stem(stem)}.yaml")]
+        if users:
+            raise ValueError("Bu kabin modelini kullanan klima bileşeni var: " + ", ".join(users))
+        trash = L.root / ".cop_kutusu" / "cabin"; trash.mkdir(parents=True, exist_ok=True)
+        dst = trash / f"{src.stem}_{time.strftime('%Y%m%d_%H%M%S')}.yaml"
+        shutil.move(str(src), dst)
+        return jsonify({"moved_to": str(dst.relative_to(L.root))})
+
+    @app.post("/api/cabin/run")
+    def cabin_run():
+        """The cool-down transient for a model given inline or by stem."""
+        b = request.get_json(force=True)
+        m = CabinModel.from_dict(b["cabin"], stem=str(b.get("stem") or "")) if b.get("cabin") else load_cabin(lib_root, b["stem"])
+        sc = b.get("scenario") or {}
+        num = lambda k, d: float(sc[k]) if sc.get(k) not in (None, "") else d
+        r = simulate_cabin(m, ambient_c=num("ambient_c", 40.0), initial_c=num("initial_c", 55.0),
+                           duration_s=max(60.0, num("duration_min", 40.0) * 60.0), dt_s=max(1.0, min(60.0, num("dt_s", 10.0))),
+                           solar=bool(sc.get("solar", True)), hvac=bool(sc.get("hvac", True)),
+                           occupants=None if sc.get("occupants") in (None, "") else int(sc["occupants"]),
+                           supply_offset_c=num("supply_offset_c", 0.0))
+        cmp = compare_with_reference(m, r)
+        return jsonify({"result": r, "compare": cmp, "reference": m.reference, "lumped": m.lumped_equivalent(),
+                        "hvac_fields": hvac_fields_from_cabin(m)})
+
+    @app.post("/api/cabin/<stem>/link")
+    def cabin_link(stem):
+        """Point an HVAC component at this cabin model (or clear the link)."""
+        b = request.get_json(force=True)
+        L = lib()
+        hv = safe_stem(b["hvac"])
+        path = L.root / "hvac" / f"{hv}.yaml"
+        if not path.exists():
+            raise FileNotFoundError(f"hvac/{hv}.yaml bulunamadı")
+        ref = "" if b.get("unlink") else f"cabin/{safe_stem(stem)}.yaml"
+        _set_yaml_key(path, "cabin_model", f"'{ref}'" if ref else "''")
+        obj = L.load_component(f"hvac/{hv}.yaml", "hvac")        # must still load
+        return jsonify({"hvac": hv, "cabin_model": ref, "ua_w_per_k": obj.ua_w_per_k,
+                        "interior_thermal_mass_j_per_k": obj.interior_thermal_mass_j_per_k, "shgc": obj.shgc,
+                        "glazing_area_m2": obj.glazing_area_m2, "opaque_area_m2": obj.opaque_area_m2})
 
     # ------------------------------------------------------------ comparison of finished runs
     @app.post("/api/compare/report")

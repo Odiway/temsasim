@@ -328,6 +328,21 @@ class Library:
             raise LibraryError(f"{path}: unknown kind {declared!r}")
         data = {**data, **overrides}
         data.setdefault("source", f"library:{path.relative_to(self.root).as_posix()}")
+        if cls is HVAC and data.get("cabin_model"):
+            # the layered cabin model is the source of truth for the envelope
+            from .cabin import hvac_fields_from_cabin, load_cabin
+            ref = str(data["cabin_model"])
+            stem = pathlib.Path(ref).stem
+            try:
+                cab = load_cabin(self.root, stem)
+            except FileNotFoundError as exc:
+                raise LibraryError(f"{path}: kabin modeli bulunamadı: {ref}") from exc
+            derived = hvac_fields_from_cabin(cab)
+            for k in list(data):
+                # drop any alias of a derived field (e.g. interior_thermal_mass_kj_per_k)
+                if k.startswith("interior_thermal_mass") or k in derived:
+                    data.pop(k)
+            data.update(derived)
         return build(cls, data, base_dir=path.parent, where=str(path))
 
     def load_vehicle(self, ref: str) -> Vehicle:

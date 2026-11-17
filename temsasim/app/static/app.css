@@ -563,3 +563,27 @@ table.cmp-table td.best { color: var(--ok); font-weight: 700; background: var(--
 details.menu > summary.sm { padding: 2px 6px; }
 @media (max-width: 1100px) { .cmp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cmp-charts { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .cmp-grid { grid-template-columns: 1fr; } }
+
+/* ---- cabin thermal model ------------------------------------------------ */
+.cab-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 1200px) { .cab-grid { grid-template-columns: 1fr; } }
+.cab-table td input[type=text], .cab-table td select { padding: 3px 6px; font-size: 12.5px; min-width: 0; }
+.cab-table td { padding: 4px 6px; }
+.cab-table td.name input { width: 150px; }
+.cab-table td.n input { width: 64px; text-align: right; font-family: var(--mono); }
+.cab-table td.layers input { width: 230px; font-family: var(--mono); font-size: 12px; }
+.cab-table td.sel select { width: 108px; }
+.cab-table td.u { font: 11.5px var(--mono); color: var(--muted); white-space: nowrap; }
+.cab-table .del { padding: 2px 7px; }
+.cab-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--rule-2); border: 1px solid var(--rule-2); }
+.cab-kpi { background: var(--panel); padding: 8px 10px; }
+.cab-kpi .k { font: 600 10px var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.cab-kpi .v { font: 600 18px var(--display); font-variant-numeric: tabular-nums; }
+.cab-kpi .d { font: 11.5px var(--mono); color: var(--muted); }
+.cab-kpi .d.bad { color: var(--err); } .cab-kpi .d.ok { color: var(--ok); }
+.cab-crit { display: flex; gap: 8px; flex-wrap: wrap; }
+.cab-crit span { font: 600 11px var(--cond); letter-spacing: .06em; text-transform: uppercase; padding: 4px 9px; border: 1px solid var(--rule); }
+.cab-crit span.ok { color: var(--ok); border-color: var(--ok); background: var(--ok-wash); }
+.cab-crit span.bad { color: var(--err); border-color: var(--err); background: var(--err-wash); }
+.cab-supply textarea { font: 12px var(--mono); min-height: 70px; width: 100%; }
+.cab-lump td:first-child { color: var(--ink-2); }
