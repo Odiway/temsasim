@@ -244,6 +244,13 @@ def render_report(result: SimulationResult, *, lang: str = "en", **kw) -> str:
             html = html.replace(en, trs)
         html = html.replace(_FMT_EN, _FMT_TR)
     html = html.replace("__LANG__", lang)
+    from .signals import explorer_html
+    title, note = (("Sinyal inceleme", "İstediğiniz sinyalleri işaretleyin: aynı düzlemde üst üste çizilir, her birim kendi "
+                    "ölçeğinde. Grafikte sürükleyerek yakınlaştırın; imleç o andaki değerleri okur. Motor, batarya, tüketim ve "
+                    "bütün güç kalemleri listededir.") if lang == "tr" else
+                   ("Signal explorer", "Tick the signals you want: they are drawn over each other, each unit on its own scale. "
+                    "Drag across the plot to zoom; the cursor reads the values."))
+    html = html.replace("<!--__EXPLORER__-->", f'<div class="card"><h2>{title}</h2><p class="note">{note}</p>{explorer_html(result)}</div>')
     return html.replace("/*__PAYLOAD__*/", json.dumps(build_payload(result, lang=lang, **kw)))
 
 
@@ -550,6 +557,8 @@ summary { cursor:pointer; color:var(--ink-2); font-size:13px; }
   temperatures that decide whether the numbers above hold up.</p>
   <div id="panels"></div>
 </div>
+
+<!--__EXPLORER__-->
 
 <div class="grid2">
   <div class="card">

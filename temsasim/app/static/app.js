@@ -592,16 +592,60 @@ async function openFileDialog(kind, stem, name) {
   dlg.showModal();
 }
 
+/* The signal explorer over a finished run: any signals on one plane. */
+async function openSignals(reportId, title) {
+  const data = await api.get(`/report/${reportId}/signals`);
+  const dlg = h("dialog", { class: "sig-dlg" });
+  const close = () => { dlg.close(); dlg.remove(); };
+  const box = h("div", {});
+  dlg.append(h("div", { class: "dlg-head" }, h("div", {}, h("h2", {}, "Sinyal inceleme"), h("div", { class: "muted small" }, title || data.title)), h("span", { class: "spacer" }),
+      h("a", { class: "btn ghost", href: `/report/${reportId}/csv`, download: "" }, "CSV"), h("button", { type: "button", class: "ghost", onclick: close }, "Kapat")),
+    h("div", { class: "dlg-body" }, box));
+  document.body.append(dlg);
+  dlg.showModal();
+  window.TsimExplorer.mount(box, data, { height: 420 });
+}
+
 /* ================================================================ router */
 const PAGES = {
   baslangic: pageHome, kutuphane: pageLibrary, yukle: pageUpload, bilesen: pageComponent,
   arac: pageVehicle, simulasyon: pageSim, surus: pageDrive, hat: pageNetwork, dogrulama: pageValidate,
-  guzergah: pageRouteBuilder, senaryo: pageScenarios, bicimler: pageFormats, karsilastir: pageCompare, kabin: pageCabin,
+  guzergah: pageRouteBuilder, senaryo: pageScenarios, bicimler: pageFormats, karsilastir: pageCompare, kabin: pageCabin, vites: pageShift,
 };
 const PAGE_GRP = { baslangic: "home", kutuphane: "veri", yukle: "veri", bilesen: "veri", arac: "veri", guzergah: "veri", senaryo: "veri", bicimler: "veri", kabin: "veri",
-  simulasyon: "kos", surus: "kos", hat: "kos", karsilastir: "kos", dogrulama: "dogrula" };
+  simulasyon: "kos", surus: "kos", hat: "kos", karsilastir: "kos", vites: "kos", dogrulama: "dogrula" };
 const PAGE_SIGN = { baslangic: "Başlangıç", kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bileşen", arac: "Araç kur", simulasyon: "Simülasyon", surus: "Serbest sürüş", hat: "Hat ve sefer", dogrulama: "Doğrulama",
-  guzergah: "Güzergâh", senaryo: "Senaryo", bicimler: "Veri biçimleri", karsilastir: "Çoklu koşu", kabin: "Kabin termal" };
+  guzergah: "Güzergâh", senaryo: "Senaryo", bicimler: "Veri biçimleri", karsilastir: "Çoklu koşu", kabin: "Kabin termal", vites: "Vites" };
+
+/* ================================================================ one workbench
+   Every calculation is a tab of the same screen and works on the vehicle
+   chosen in its bar: the run, the shift logic, the cabin, the comparison, the
+   test data, the free drive, the line. Everything that is data (library,
+   uploads, builders, formats) sits on a second, plainer bar. The rail then
+   only needs three doors. */
+const BENCH = [["simulasyon", "Koşu", "Enerji ve yakıt simülasyonu"], ["vites", "Vites", "Vites mantığı ve şanzıman kalibrasyonu"],
+  ["kabin", "Kabin", "Kabin içi termal yönetim modeli"], ["karsilastir", "Karşılaştır", "2–4 koşu yan yana"],
+  ["dogrulama", "Test verisi", "Ölçümle karşılaştırma"], ["surus", "Serbest sürüş", "Aracı kendiniz sürün"], ["hat", "Hat ve sefer", "Bir hattın bütün günü"]];
+const SHELF = [["kutuphane", "Kütüphane"], ["yukle", "Veri yükle"], ["arac", "Araç kur"], ["guzergah", "Güzergâh"], ["senaryo", "Senaryolar"], ["bicimler", "Veri biçimleri"]];
+function frameOf(page) { return BENCH.some(b => b[0] === page) ? "bench" : (SHELF.some(b => b[0] === page) || page === "bilesen") ? "shelf" : null; }
+function frameBar(page) {
+  const kind = frameOf(page);
+  if (!kind || !OV) return null;
+  if (kind === "shelf") {
+    return h("div", { class: "bench shelf" }, h("div", { class: "bench-name" }, "Veri"),
+      h("nav", { class: "bench-tabs", "aria-label": "Veri" }, SHELF.map(([p, l]) => h("a", { href: p === "arac" ? "#/arac/yeni" : `#/${p}`, "aria-current": p === page || (page === "bilesen" && p === "kutuphane") ? "page" : null }, l))));
+  }
+  const vehicles = OV.vehicles.filter(v => !v.error);
+  const cur = vehicles.find(v => v.stem === store.get("vehicle")) || vehicles[0];
+  const sel = vehicles.length ? select(vehicles.map(v => [v.stem, v.name]), cur ? cur.stem : null) : null;
+  if (sel) { sel.id = "benchVehicle"; sel.title = "Bütün sekmeler bu araçla çalışır"; sel.addEventListener("change", () => { store.set("vehicle", sel.value); route(); }); }
+  const href = p => (p === "kabin" && cur && cur.cabin ? `#/kabin/${encodeURIComponent(cur.cabin)}` : `#/${p}`);
+  const off = p => (p === "vites" && cur && !cur.gears ? "Bu araçta çok vitesli şanzıman yok" : null);
+  return h("div", { class: "bench" }, h("div", { class: "bench-name" }, "Çalışma masası"),
+    sel ? h("label", { class: "bench-veh" }, h("span", {}, "Araç"), sel) : null,
+    h("nav", { class: "bench-tabs", "aria-label": "Hesaplar" }, BENCH.map(([p, l, t]) => h("a", { href: href(p), title: off(p) || t, class: off(p) ? "dim" : null, "aria-current": p === page ? "page" : null }, l,
+      p === "dogrulama" && cur && cur.campaigns ? h("span", { class: "n" }, String(cur.campaigns)) : null))));
+}
 /* The shared toolkit the page modules (network.js, drive.js, routes.js) receive. */
 /* A data table: columns [{label, n (numeric), acts}] and an empty body to fill. */
 function dataTable(cols) {
@@ -617,6 +661,7 @@ function pageKit() {
 async function pageFormats(group) { const mod = await import("/static/formats.js"); return mod.pageFormats(pageKit(), group); }
 async function pageCompare() { const mod = await import("/static/compare.js"); return mod.pageCompare(pageKit()); }
 async function pageCabin(stem) { const mod = await import("/static/cabin.js"); return mod.pageCabin(pageKit(), stem); }
+async function pageShift() { const mod = await import("/static/shift.js"); return mod.pageShift(pageKit()); }
 /* The home roadmap sends people to a builder or an upload page; when that page
    saves, it comes back here instead of its usual next page. */
 function rmGo(hash) { store.set("rmReturn", true); location.hash = hash; }
@@ -630,7 +675,8 @@ async function pageScenarios(stem) { const mod = await import("/static/routes.js
 async function route() {
   const parts = (location.hash || "#/baslangic").replace(/^#\/?/, "").split("/").map(decodeURIComponent);
   const page = PAGES[parts[0]] ? parts[0] : "baslangic";
-  $$("nav.rail a").forEach(a => { if (a.dataset.page === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+  const railPage = frameOf(page) === "bench" ? "simulasyon" : frameOf(page) === "shelf" ? "kutuphane" : page;
+  $$("nav.rail a").forEach(a => { if (a.dataset.page === railPage) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
   Sign.set(vehicleCode(store.get("vehicle")), PAGE_SIGN[page]);
   if (pageCleanup) { try { pageCleanup(); } catch (e) { console.error(e); } pageCleanup = null; }
   const main = $("#main");
@@ -640,9 +686,22 @@ async function route() {
   try {
     await overview();
     const view = await PAGES[page](...parts.slice(1));
-    main.replaceChildren(view);
+    const bar = frameBar(page);
+    main.classList.toggle("framed", !!bar);
+    main.replaceChildren(...(bar ? [bar, view] : [view]));
+    if (bar && frameOf(page) === "bench") {
+      // a tab's own vehicle select and the bar's stay in step
+      const stems = new Set(OV.vehicles.map(v => v.stem));
+      $$("select", view).forEach(s => {
+        if (s.options.length && [...s.options].every(o => stems.has(o.value))) s.addEventListener("change", () => {
+          store.set("vehicle", s.value); const b = $("#benchVehicle"); if (b) b.value = s.value; Sign.set(vehicleCode(s.value), PAGE_SIGN[page]);
+        });
+      });
+    }
   } catch (e) {
-    main.replaceChildren(notice("err", "Bu sayfa açılamadı.", [e.message]));
+    const bar = frameBar(page);
+    main.classList.toggle("framed", !!bar);
+    main.replaceChildren(...(bar ? [bar] : []), notice("err", "Bu sayfa açılamadı.", [e.message]));
   }
   main.focus({ preventScroll: true });
   scrollTo(0, 0);
@@ -1525,8 +1584,11 @@ async function pageVehicle(stem) {
   const descIn = h("textarea", {}, cur ? cur.description : "");
   const ptBox = h("div", { class: "field" }, h("div", { class: "lab" }, "Güç aktarma"));
   const tankField = field("Yakıt deposu", tankIn, { hint: "Yalnızca menzil ve oyun içi yakıt göstergesi için." });
+  // an electric vehicle has no tank: its stored energy is the battery's, read from the chosen battery
+  const energyOut = h("input", { type: "text", class: "numeric", readonly: true, tabindex: -1, value: "—" });
+  const energyField = field("Batarya enerjisi", h("div", { class: "inputwrap" }, energyOut, h("span", { class: "suffix" }, "kWh")), { hint: "Seçili batarya bileşeninin anma enerjisi. Değiştirmek için aşağıdan başka bir batarya seçin." });
   root.append(h("div", { class: "panel" }, h("div", { class: "formgrid" },
-    field("Ad", nameIn), field("Varyant", varIn), ptBox, field("Oturan yolcu", seats), field("Ayakta yolcu", stand), tankField,
+    field("Ad", nameIn), field("Varyant", varIn), ptBox, field("Oturan yolcu", seats), field("Ayakta yolcu", stand), tankField, energyField,
     h("div", { class: "wide" }, field("Açıklama", descIn)))));
 
   const slotSel = {};
@@ -1547,7 +1609,18 @@ async function pageVehicle(stem) {
       slotSel[slot] = sel;
       grid.append(h("div", { class: "field" }, h("div", { class: "lab" }, g ? g.label : kind, h("span", { class: "spacer" }), h("a", { href: `#/bilesen/${kind}/yeni`, class: "small" }, "yeni ekle")), sel, info));
     });
-    tankField.hidden = powertrain !== "diesel";
+    // .field sets its own display, which beats the hidden attribute: switch the style itself
+    tankField.style.display = powertrain === "diesel" ? "" : "none";
+    energyField.style.display = powertrain === "diesel" ? "none" : "";
+    const batSel = slotSel.battery;
+    const showEnergy = () => {
+      const g = ov.components.find(x => x.kind === "battery");
+      const it = g && batSel ? g.items.find(i => i.stem === batSel.value) : null;
+      const m = it ? /([\d.,]+)\s*kWh/.exec(it.summary || "") : null;
+      energyOut.value = m ? m[1] : "—";
+    };
+    if (batSel) batSel.addEventListener("change", showEnergy);
+    showEnergy();
     ctlPanel.hidden = powertrain === "diesel";
   };
   if (isNew) ptBox.append(seg(ov.powertrains, powertrain, v => { powertrain = v; store.set("newPowertrain", v); drawSlots(); }));
@@ -2034,6 +2107,7 @@ async function pageSim() {
           h("div", { class: "tele-sub" }, `${pl.profile.name} · ${fmt(p.ambient, 0)} °C · ${fmt(p.passengers, 0)} yolcu${p.night ? " · gece" : ""}` +
             (pl.traffic && pl.traffic.traffic && pl.traffic.traffic !== "yok" ? ` · trafik ${pl.traffic.traffic_label.toLocaleLowerCase("tr-TR")}` : ""))),
         h("span", { class: "spacer" }),
+        h("button", { type: "button", class: "btn tele-report", title: "Vites, devir, tork, tüketim… istediğiniz sinyalleri aynı grafikte üst üste çizin", onclick: () => openSignals(r.report_id, `${veh.name} · ${pl.profile.name}`) }, "Sinyaller"),
         h("a", { class: "btn tele-report", href: `/report/${r.report_id}`, target: "_blank", rel: "noopener" }, "Tam rapor"),
         menu("Diğer", [{ label: "Rapor (HTML)", href: `/report/${r.report_id}/html`, download: "" }, { label: "Zaman serisi (CSV)", href: `/report/${r.report_id}/csv`, download: "", hint: "Excel ; ayraçlı" }, "-",
           { label: "Çoklu koşuya ekle", onclick: () => addCompare(p), hint: "yan yana karşılaştır" }, { label: "Çoklu koşu sayfası", href: "#/karsilastir" }], { cls: "tele-report" })),

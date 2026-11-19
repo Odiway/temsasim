@@ -143,6 +143,8 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                     items.append({"stem": stem, "name": stem, "error": str(exc)})
             groups.append({"kind": kind, "label": KIND_LABELS_TR[kind], "items": items})
         vehicles = []
+        from ..testlog import list_campaigns
+        campaigns = list_campaigns(L.root)
         for stem in L.list_kind("vehicle"):
             try:
                 v = L.load_vehicle(stem)
@@ -157,6 +159,10 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                                f"{_SYSTEM_TR.get(v.hvac.system_type, v.hvac.system_type)} · "
                                f"{v.passenger_capacity} yolcu")
                 vehicles.append({
+                    "gears": int(v.transmission.n_gears) if v.is_diesel else 0,
+                    "shift_strategy": v.transmission.shift_strategy if v.is_diesel else None,
+                    "cabin": pathlib.Path(v.hvac.cabin_model).stem if getattr(v.hvac, "cabin_model", "") else None,
+                    "campaigns": sum(1 for c in campaigns if c.get("vehicle") == stem),
                     "stem": stem, "name": v.name, "variant": v.variant, "powertrain": v.powertrain,
                     "powertrain_tr": POWERTRAINS.get(v.powertrain, v.powertrain),
                     "capacity": capacity, "seats": int(v.seats), "standees": int(v.standees),
@@ -669,6 +675,15 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
         rep = reports.get(rid)
         name = f"rapor_{safe_stem(rep['result'].vehicle.name) if rep.get('result') is not None else 'karsilastirma'}_{rid}.html"
         return Response(rep["html"], mimetype="text/html", headers={"Content-Disposition": f"attachment; filename={name}"})
+
+    @app.get("/report/<rid>/signals")
+    def report_signals(rid):
+        """The run's time series as named signals, for the signal explorer."""
+        from ..signals import explorer_payload
+        res = reports.get(rid)["result"]
+        if res is None:
+            raise ValueError("Karşılaştırma raporunun tek bir zaman serisi yok.")
+        return jsonify(explorer_payload(res))
 
     @app.get("/report/<rid>/csv")
     def download_series(rid):
@@ -1225,6 +1240,9 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
                         "metrics": {k: v for k, v in m.items() if k != "by_phase"}, "by_phase": m["by_phase"],
                         "notes": [n.tr if hasattr(n, "tr") else str(n) for n in c.notes],
                         "overlay": _overlay(log, c), "summary": c.summary()})
+
+    from .shift_api import register as register_shift
+    register_shift(app, lib, cycle_from=_cycle_from, env_from=_env_from)
 
     return app
 

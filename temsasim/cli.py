@@ -257,6 +257,55 @@ def cmd_correlate(args):
     return 0
 
 
+def cmd_shift(args):
+    """Score, calibrate and save the gearshift set points against a test campaign."""
+    from . import shiftcal
+    from .shift import SET_POINT_INFO, ShiftSetPoints, setpoints_of
+    lib = Library(args.library)
+    veh, runs = shiftcal.prepare_campaign(lib, args.campaign, vehicle=args.vehicle)
+    if not runs:
+        print("Bu kampanyanın loglarında vites sinyali yok.")
+        return 1
+    sp = ShiftSetPoints() if args.vecto else setpoints_of(veh.transmission)
+
+    def line(tag, ev):
+        print(f"{tag:<10} vites uyumu {100 * ev['agreement']:5.1f} %  geçişlerde {100 * ev['transient_agreement']:5.1f} %  ±1 vites {100 * ev['within_one']:5.1f} %  "
+              f"devir hatası {ev['rpm_rmse']:4.0f} d/d  kalkış {100 * ev['launch_agreement']:3.0f} %  vites değişimi {ev['shifts_sim']}/{ev['shifts_meas']}")
+
+    print(f"{veh.name} · {veh.transmission.name} · {len(runs)} koşu · başlangıç: {'VECTO değerleri' if args.vecto else 'kayıtlı ayarlar'}")
+    before = shiftcal.evaluate(runs, sp)
+    line("şimdi", before)
+    if not args.calibrate:
+        for r in before["runs"]:
+            print(f"  {r['key']:<16} {100 * r['agreement']:5.1f} %  ±1 {100 * r['within_one']:5.1f} %  {r['rpm_rmse']:4.0f} d/d  {r['shifts_sim']}/{r['shifts_meas']}")
+        return 0
+    cal = shiftcal.calibrate(runs, sp, budget_s=args.budget,
+                             progress=lambda n, v, r: print(f"  {SET_POINT_INFO[n]['label']:<44} -> {v:g}   (uyum {100 * r['agreement']:.1f} %)"))
+    line("kalibre", cal.after)
+    print(f"{cal.evaluations} deneme, {cal.seconds:.0f} s, {cal.stopped}. VECTO'dan farklı ayarlar:")
+    for k, v in cal.changed().items():
+        print(f"  {k}: {v:g}   # {SET_POINT_INFO[k]['label']} [{SET_POINT_INFO[k]['unit']}]")
+    if args.save:
+        from .app.shift_api import _transmission_path, write_shift_block
+        import yaml
+        stem = args.vehicle or (yaml.safe_load((lib.root / "testlog" / args.campaign / "meta.yaml").read_text(encoding="utf-8")) or {}).get("vehicle")
+        path = _transmission_path(lib, stem)
+        import datetime
+        write_shift_block(path, "vecto_effshift", cal.changed(),
+                          f"{datetime.date.today().isoformat()}, {args.campaign} loglarına göre kalibre edildi; vites uyumu %{100 * cal.after['agreement']:.1f}")
+        print(f"Kaydedildi: {path.relative_to(lib.root)}")
+    return 0
+
+
+def cmd_vecto_missions(args):
+    """Write VECTO's bus mission cycles into the library as routes."""
+    from .vecto_cycles import import_missions
+    for r in import_missions(args.folder, args.library):
+        print(f"{r['mission']:<11} -> route/{r['file']:<24} {r['length_km']:6.1f} km  {r['stops']:3d} duruş  azami {r['v_max_kmh']:.0f} km/h  "
+              f"eğim {r['grade_min_pct']:.1f}…{r['grade_max_pct']:.1f} %")
+    return 0
+
+
 def cmd_gui(args):
     from .app.server import serve
     serve(args.library, port=args.port, open_browser=not args.no_browser)
@@ -402,6 +451,19 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--runs", default=None, help="comma-separated run keys")
     sp.add_argument("--overlay", default=None, help="write per-run measured/simulated CSVs into this folder")
     sp.set_defaults(func=cmd_correlate)
+
+    sp = sub.add_parser("shift", help="score or calibrate the gearshift set points against a test campaign's logged gears")
+    sp.add_argument("campaign", help="test campaign under library/testlog")
+    sp.add_argument("--vehicle", default=None, help="vehicle to use (default: the campaign's own)")
+    sp.add_argument("--calibrate", action="store_true", help="search the set points for the best agreement")
+    sp.add_argument("--budget", type=float, default=60.0, help="search time in seconds")
+    sp.add_argument("--vecto", action="store_true", help="start from VECTO's generic values instead of the saved ones")
+    sp.add_argument("--save", action="store_true", help="write the calibrated set points into the transmission file")
+    sp.set_defaults(func=cmd_shift)
+
+    sp = sub.add_parser("vecto-missions", help="import VECTO's bus mission cycles (Coach, Interurban, ...) as library routes")
+    sp.add_argument("folder", help="VECTO source or installation folder")
+    sp.set_defaults(func=cmd_vecto_missions)
 
     sp = sub.add_parser("export", help="zip a library item with everything it references (or the whole library)")
     sp.add_argument("what", help="kind/stem, e.g. vehicle/maraton_13_dizel, or 'library'")

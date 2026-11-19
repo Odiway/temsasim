@@ -204,3 +204,6 @@ main.fullbleed { padding: 0; max-width: none; }
 .drv-msg.bad { background: color-mix(in srgb, #d03b3b 22%, transparent); font-weight: 600; }
 .drv-done { display: grid; gap: 4px; padding: 10px 12px; border-radius: 9px; background: color-mix(in srgb, #2fbf71 12%, transparent); margin-bottom: 10px; }
 .drv-setup .seg { flex-wrap: wrap; }
+
+/* the workbench bar sits above the stage */
+main.framed .simx-stage { height: calc(100vh - 65px - 43px); }

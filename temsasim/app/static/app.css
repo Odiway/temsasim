@@ -587,3 +587,52 @@ details.menu > summary.sm { padding: 2px 6px; }
 .cab-crit span.bad { color: var(--err); border-color: var(--err); background: var(--err-wash); }
 .cab-supply textarea { font: 12px var(--mono); min-height: 70px; width: 100%; }
 .cab-lump td:first-child { color: var(--ink-2); }
+
+/* ---- workbench bar: every calculation is a tab of one screen ------------ */
+.bench { display: flex; align-items: stretch; gap: 0; min-height: 42px; margin: -22px -32px 18px; padding: 0 18px 0 0;
+  background: var(--panel); border-bottom: 1px solid var(--rule); position: sticky; top: 0; z-index: 6; }
+main.fullbleed .bench { margin: 0; }
+.bench-name { display: flex; align-items: center; padding: 0 16px 0 18px; font: 600 11px var(--cond); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--panel); background: var(--ink); white-space: nowrap; }
+.bench.shelf .bench-name { background: var(--panel-2); color: var(--ink-2); border-right: 1px solid var(--rule); }
+.bench-veh { display: flex; align-items: center; gap: 8px; padding: 0 14px; border-right: 1px solid var(--rule); }
+.bench-veh span { font: 600 10.5px var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.bench-veh select { padding: 4px 26px 4px 8px; font: 600 13px var(--display); max-width: 250px; border-color: var(--rule); }
+.bench-tabs { display: flex; align-items: stretch; overflow-x: auto; flex: 1; min-width: 0; }
+.bench-tabs a { display: inline-flex; align-items: center; gap: 7px; padding: 0 15px; text-decoration: none; white-space: nowrap;
+  font: 600 12px var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border-bottom: 3px solid transparent; border-top: 3px solid transparent; }
+.bench-tabs a:hover { color: var(--ink); }
+.bench-tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--amber); }
+.bench-tabs a.dim { opacity: .45; }
+.bench-tabs a .n { font: 500 11px var(--mono); letter-spacing: 0; color: var(--muted); }
+main.framed .bench:not(.shelf) ~ * .tblock { display: none; }
+@media (max-width: 860px) { .bench { margin: -22px -16px 14px; flex-wrap: wrap; } .bench-name { display: none; } }
+
+/* ---- shift logic panel ---------------------------------------------------- */
+.shf-grid { display: grid; grid-template-columns: minmax(360px, 430px) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 1100px) { .shf-grid { grid-template-columns: 1fr; } }
+.shf-grp > summary { cursor: pointer; list-style: none; }
+.shf-grp > summary::-webkit-details-marker { display: none; }
+.shf-grp > summary h3::before { content: "▸ "; color: var(--muted); }
+.shf-grp[open] > summary h3::before { content: "▾ "; }
+table.shf-sp td { padding: 4px 8px; white-space: normal; }
+table.shf-sp td.name { font: 500 12.5px var(--body); }
+table.shf-sp td.n input[type=number] { width: 78px; padding: 3px 6px; text-align: right; font: 12.5px var(--mono); }
+table.shf-sp td.u { font: 11px var(--mono); color: var(--muted); white-space: nowrap; }
+table.shf-sp td.vd { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+table.shf-sp tr.chg td.name { box-shadow: inset 3px 0 0 var(--amber); }
+table.shf-sp tr.chg td.n input { border-color: var(--amber); background: var(--amber-wash); }
+.shf-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 1300px) { .shf-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.shf-map svg { display: block; width: 100%; }
+.shf-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0; color: var(--ink-2); }
+.shf-legend i { display: inline-block; width: 14px; height: 3px; margin-right: 6px; vertical-align: middle; }
+.shf-legend i.dash { height: 0; background: none; border-top: 2px dashed; }
+.shf-ev { max-height: 300px; overflow: auto; }
+.shf-ev tr.item { cursor: pointer; }
+.shf-plist { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 3px 14px; margin-top: 8px; font-size: 12.5px; }
+.shf-plist label { display: flex; gap: 6px; align-items: center; }
+dialog.shf-dlg { width: min(860px, calc(100vw - 32px)); }
+.shf .row select { width: auto; max-width: 340px; }
+.shf .row .section-title { white-space: nowrap; }
+dialog.sig-dlg { width: min(1380px, calc(100vw - 32px)); }

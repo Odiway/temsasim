@@ -420,6 +420,8 @@ class Route:
         """
         from .traffic import drive
 
+        if self.kind == "vecto":
+            traffic = "yok"         # a certification mission: its stops are in the cycle, nothing is added
         if isinstance(occupancy, str) and occupancy == "stops":
             occupancy = self.occupancy_from_stops()
         a_limit_fn = None
@@ -481,7 +483,10 @@ class Route:
         ``speed_limit_kmh`` and an optional ``stop`` flag column."""
         path = pathlib.Path(path)
         with path.open(newline="", encoding="utf-8-sig") as fh:
-            rows = list(csv.DictReader(line for line in fh if not line.lstrip().startswith('#')))
+            lines = fh.readlines()
+        # a VECTO mission carries its own stops and wants no traffic on top
+        kind = "vecto" if lines and lines[0].startswith("# VECTO") else ""
+        rows = list(csv.DictReader(line for line in lines if not line.lstrip().startswith('#')))
         d = np.array([float(r["distance_m"]) for r in rows])
         e = np.array([float(r["elevation_m"]) for r in rows])
         if "speed_limit_kmh" in rows[0]:
@@ -500,7 +505,7 @@ class Route:
                 detail[float(r["distance_m"])] = {"name": r.get("stop_name") or "", "dwell_s": num(r, "dwell_s", None),
                                                   "board": num(r, "board", 0.0), "alight": num(r, "alight", 0.0)}
         return cls(d, e, vl, stops, name=name or path.stem, source=f"csv:{path.name}",
-                   signal_positions_m=signals, surface_factor=surf, headwind_mps=wind, stops=detail)
+                   signal_positions_m=signals, surface_factor=surf, headwind_mps=wind, stops=detail, kind=kind)
 
     def summary(self) -> str:
         climb = float(np.sum(np.clip(np.diff(self.elevation_m), 0, None)))

@@ -89,3 +89,13 @@ torque_reserve: 0.1
 validated: true
 notes: Kayıp haritaları sertifikadan. Vites stratejisi penceresi motor anma devrinden
   türetildi; ölçülmüş devir izine göre ayarlayın.
+# vites mantığı: 2026-11-18, mersin_adana_2026_09 loglarına (9 koşu) göre kalibre edildi; vites uyumu %89,5, ±1 vites %98,4, kalkış vitesi %100
+shift_strategy: vecto_effshift
+shift_setpoints:
+  time_between_gearshifts_s: 1
+  rating_factor_current_gear: 0.975
+  torque_reserve: 0.25
+  min_engine_speed_post_upshift_rpm: 870
+  driver_decel_threshold_mps2: 0.05
+  brake_downshift_speed_rpm: 950
+  brake_downshift_min_decel_mps2: 0.4

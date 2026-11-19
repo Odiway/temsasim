@@ -151,7 +151,7 @@ LABELS_TR = {
     "cabin_volume_m3": "Kabin hacmi", "glazing_area_m2": "Cam alanı", "opaque_area_m2": "Opak gövde alanı",
     "u_glazing_w_per_m2k": "Cam U-değeri", "u_opaque_w_per_m2k": "Gövde U-değeri",
     "thermal_bridge_factor": "Isı köprüsü çarpanı", "interior_thermal_mass_j_per_k": "İç ısıl kütle",
-    "shgc": "Güneş ısı kazanç katsayısı (SHGC)",
+    "shgc": "Güneş ısı kazanç katsayısı (SHGC)", "solar_exposed_share": "Güneş alan cam payı",
     "fresh_air_m3_per_h_per_passenger": "Yolcu başına taze hava",
     "fresh_air_minimum_m3_per_h": "Asgari taze hava", "door_count": "Kapı sayısı",
     "door_width_m": "Kapı genişliği", "door_height_m": "Kapı yüksekliği",

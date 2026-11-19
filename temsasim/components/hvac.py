@@ -94,6 +94,16 @@ class HVAC:
     shgc: float = 0.45
     """Solar heat gain coefficient of the glazing including any tint."""
 
+    solar_exposed_share: float = 0.30
+    """Share of the glazing the sun effectively reaches, relative to the whole
+    glazed area facing the scenario's (horizontal) irradiance square on. The
+    windows of a bus stand upright on all four sides: at any moment the sun
+    lights one side at a slant and the rest only sees diffuse light. The
+    layered cabin model (``temsasim.cabin``) gives 0.26-0.41 for the Maraton
+    glazing in Adana in July between noon and 15:00, whichever way the bus
+    points; VECTO's bus HVAC model (SSM) takes a flat 0.25. Without this share
+    the solar load was about three times too high and so was the A/C power."""
+
     # --- ventilation and doors --------------------------------------------
     fresh_air_m3_per_h_per_passenger: float = 12.0
     fresh_air_minimum_m3_per_h: float = 300.0
@@ -212,7 +222,7 @@ class HVAC:
 
     def q_solar(self, solar_irradiance_w_per_m2: float,
                 shading_factor: float = 1.0) -> float:
-        return (self.glazing_area_m2 * self.shgc
+        return (self.glazing_area_m2 * self.shgc * self.solar_exposed_share
                 * solar_irradiance_w_per_m2 * shading_factor)
 
     # --- the step ----------------------------------------------------------

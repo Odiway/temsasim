@@ -399,9 +399,23 @@ def write_twin(lib: Library, plan: TwinPlan, *, name: str, stem: str | None = No
     tdata["downshift_speed_rpm"] = round(max(e["idle_rpm"] * 1.45, 0.5 * e["rated_rpm"]))
     tdata["upshift_speed_rpm"] = round(0.95 * e["rated_rpm"])
     tdata["torque_reserve"] = 0.10
+    # an AMT shifts by VECTO's EffShift logic with VECTO's generic set points until it is calibrated
+    # against a logged gear trace (workbench, "Vites" tab); other gearbox types keep the window rules
+    if str(tdata.get("transmission_type", "AMT")).upper() == "AMT":
+        tdata["shift_strategy"] = "vecto_effshift"
     tdata["validated"] = bool(gl) and bool(a.get("loss_map"))
     tdata["notes"] = ("Kayıp haritaları sertifikadan. Vites stratejisi penceresi motor anma devrinden türetildi; "
                       "ölçülmüş devir izine göre ayarlayın.")
+    if t_path.exists():
+        # a re-import must not throw away a gearbox calibration
+        import yaml as _y
+        try:
+            prev = _y.safe_load(t_path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            prev = {}
+        for k in ("shift_strategy", "shift_setpoints", "shift_polygons"):
+            if prev.get(k) is not None:
+                tdata[k] = prev[k]
     _yaml(t_path, {k: val for k, val in tdata.items() if val is not None}, HEADER)
     written["transmission"] = f"transmission/{t_path.name}"
 

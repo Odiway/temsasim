@@ -17,8 +17,10 @@ which is implicit in ``T_in``; two fixed-point passes are enough because the
 loss is a small fraction of the torque.
 
 **Shift strategy.** An AMT shifts by its own rules, not the driver's, so the
-model carries them: an engine-speed window, a torque reserve and a minimum
-time between shifts. The highest gear that keeps the engine inside the window
+model carries them. Two strategies are available (``shift_strategy``): VECTO's
+AMT EffShift logic with all its set points (``temsasim.shift``), and the older
+window rules described next: an engine-speed window, a torque reserve and a
+minimum time between shifts. The highest gear that keeps the engine inside the window
 with ``torque_reserve`` still in hand is chosen; the box stays in its current
 gear while that gear is still acceptable, so it does not hunt. This is the
 structure of VECTO's AMT strategy with its tuning constants exposed as fields;
@@ -103,6 +105,20 @@ class Transmission:
     starts drop to 2 or 1 (the AMT's clutch-protection logic); light ones may
     go up to ``launch_gear_max``."""
     launch_gear_max: int = 5
+
+    shift_strategy: str = "window"
+    """``window``: the engine-speed window rules above. ``vecto_effshift``:
+    VECTO's AMT EffShift strategy (``temsasim.shift``): shift polygons from the
+    full-load curve, fuel-efficiency shifts within two gears, VECTO's timers
+    and start-gear rule, with the set points in ``shift_setpoints``."""
+    shift_setpoints: dict | None = None
+    """Set points of the EffShift strategy that differ from VECTO's defaults
+    (see ``temsasim.shift.ShiftSetPoints``), usually written by the gearbox
+    calibration."""
+    shift_polygons: dict | None = None
+    """Optional hand-made shift polygons per gear number, in VECTO's ``.vgbs``
+    form: rows of [engine torque Nm, downshift rpm, upshift rpm]. A gear
+    without an entry gets VECTO's computed polygon."""
 
     source: str = "unspecified"
     validated: bool = False
@@ -272,6 +288,7 @@ class Transmission:
         who = f"{self.manufacturer} {self.model}".strip() or self.name
         maps = ("ölçülmüş kayıp haritası" if self.gearbox_loss_map is not None else "sabit verim")
         ret = "" if self.retarder_type == "none" else f", retarder {self.retarder_type} x{self.retarder_ratio:g}"
+        strat = "VECTO EffShift" if self.shift_strategy == "vecto_effshift" else "devir penceresi"
         return (f"{who}: {self.transmission_type} {self.n_gears} vites "
                 f"({self.gear_ratios[0]:.2f}…{self.gear_ratios[-1]:.2f}) x aks {self.axle_ratio:.2f}, "
-                f"{maps}{ret} [{flag}]")
+                f"{maps}{ret}, vites mantığı {strat} [{flag}]")

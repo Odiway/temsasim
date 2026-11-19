@@ -90,7 +90,8 @@ class DieselLog:
         g = grade_rad if grade_rad is not None else self.grade_rad
         return DriveCycle(self.time_s - self.time_s[0], v, grade_rad=g,
                           passengers=np.full(n, float(passengers)),
-                          doors_open=np.zeros(n, dtype=bool), name=self.name, source=self.source)
+                          doors_open=np.zeros(n, dtype=bool), name=self.name, source=self.source,
+                          meta={"measured": True})
 
     def phases(self) -> dict:
         """Masks for the four phases the test team talks about."""
@@ -214,6 +215,26 @@ class DieselCorrelation:
         return "\n".join(lines)
 
 
+def replay_cycle(vehicle, log: DieselLog, *, mass_kg: float | None = None, grade_rad: np.ndarray | None = None,
+                 distance_km: float | None = None) -> tuple:
+    """The vehicle at its test mass and the logged speed trace as a drive
+    cycle: what both the correlation and the gearbox calibration replay.
+    Returns ``(vehicle, cycle, speed_scale, notes)``."""
+    from dataclasses import replace
+    if not vehicle.is_diesel:
+        raise ValueError("Bu karşılaştırma dizel araç içindir.")
+    veh = vehicle
+    if mass_kg:
+        veh = replace(veh, chassis=replace(veh.chassis, kerb_mass_kg=float(mass_kg)),
+                      variant=f"{veh.variant} · test kütlesi {mass_kg:.0f} kg".strip(" ·"))
+    scale = 1.0
+    notes: list = [n for n in log.notes if not (grade_rad is not None and "eğim yok" in str(n))]
+    if distance_km and log.distance_km > 0:
+        scale = distance_km / log.distance_km
+        notes.append(f"CAN hızı, sabit parkur uzunluğu {distance_km:.1f} km ile ölçeklendi (çarpan {scale:.4f}).")
+    return veh, log.to_cycle(scale_speed=scale, grade_rad=grade_rad), scale, notes
+
+
 def correlate_diesel(vehicle, log: DieselLog, *, environment: Environment | None = None,
                      mass_kg: float | None = None, grade_rad: np.ndarray | None = None,
                      distance_km: float | None = None, fuel_device_l: float | None = None,
@@ -226,21 +247,9 @@ def correlate_diesel(vehicle, log: DieselLog, *, environment: Environment | None
     speed over-reads by a fraction of a percent). ``fuel_device_l`` is the
     external flow-meter reading, when the test sheet has one.
     """
-    from dataclasses import replace
     from .simulator import run
-    if not vehicle.is_diesel:
-        raise ValueError("Bu karşılaştırma dizel araç içindir.")
-    veh = vehicle
-    if mass_kg:
-        veh = replace(veh, chassis=replace(veh.chassis, kerb_mass_kg=float(mass_kg)),
-                      variant=f"{veh.variant} · test kütlesi {mass_kg:.0f} kg".strip(" ·"))
-    scale = 1.0
-    notes: list = [n for n in log.notes if not (grade_rad is not None and "eğim yok" in str(n))]
-    if distance_km and log.distance_km > 0:
-        scale = distance_km / log.distance_km
-        notes.append(f"CAN hızı, sabit parkur uzunluğu {distance_km:.1f} km ile ölçeklendi (çarpan {scale:.4f}).")
+    veh, cyc, scale, notes = replay_cycle(vehicle, log, mass_kg=mass_kg, grade_rad=grade_rad, distance_km=distance_km)
     env = environment or Environment()
-    cyc = log.to_cycle(scale_speed=scale, grade_rad=grade_rad)
     res = run(veh, cyc, env, dt_s=dt_s)
     s = res.series
     t = s["time_s"]
@@ -399,16 +408,19 @@ def load_campaign(library_root, name: str) -> tuple:
     return meta, runs
 
 
-def run_campaign(lib, name: str, *, vehicle: str | None = None, runs: list | None = None) -> dict:
-    """Replay every run of a test campaign and return the comparison table.
+def campaign_cases(lib, name: str, *, vehicle=None, runs: list | None = None) -> tuple:
+    """What each run of a campaign is replayed with: ``(meta, vehicle,
+    route_found, cases)``, a case being ``{"run", "env", "grade", "mass_kg",
+    "distance_km"}``.
 
-    The vehicle, the route (for gradient), the test mass, the HVAC state and
-    each run's weather come from ``meta.yaml``. Wind is applied with the
-    campaign's stated convention (``wind_convention``: ``headwind_on_gidis``
-    or ``tailwind_on_gidis``)."""
+    The vehicle (a name, or a loaded ``Vehicle`` to try unsaved changes), the
+    route (for gradient), the test mass, the HVAC state and each run's weather
+    come from ``meta.yaml``. Wind is applied with the campaign's stated
+    convention (``wind_convention``: ``headwind_on_gidis`` or
+    ``tailwind_on_gidis``)."""
     from .cycle import Route
     meta, all_runs = load_campaign(lib.root, name)
-    veh = lib.load_vehicle(vehicle or meta["vehicle"])
+    veh = vehicle if hasattr(vehicle, "chassis") else lib.load_vehicle(vehicle or meta["vehicle"])
     route = None
     if meta.get("route"):
         rp = lib.root / "route" / f"{meta['route']}.csv"
@@ -419,6 +431,7 @@ def run_campaign(lib, name: str, *, vehicle: str | None = None, runs: list | Non
     L_km = float(meta.get("route_length_km") or 0) or None
     mass = meta.get("test_mass_kg")
     selected = [r for r in all_runs if runs is None or r.key in runs]
+    cases = []
     for cr in selected:
         r = cr.meta
         gidis = str(r.get("direction", "gidis")).lower().startswith("gid")
@@ -433,8 +446,19 @@ def run_campaign(lib, name: str, *, vehicle: str | None = None, runs: list | Non
             scale = (L_km / cr.log.distance_km) if (L_km and cr.log.distance_km > 0) else 1.0
             travelled = np.cumsum(np.r_[0.0, cr.log.speed_mps[:-1] * scale * np.diff(cr.log.time_s)])
             grade = grade_along(route, travelled, reverse=not gidis)
-        cr.correlation = correlate_diesel(veh, cr.log, environment=env, mass_kg=mass, grade_rad=grade,
-                                          distance_km=L_km, fuel_device_l=r.get("fuel_device_l"))
+        cases.append({"run": cr, "env": env, "grade": grade, "mass_kg": mass, "distance_km": L_km})
+    return meta, veh, route is not None, cases
+
+
+def run_campaign(lib, name: str, *, vehicle=None, runs: list | None = None) -> dict:
+    """Replay every run of a test campaign and return the comparison table."""
+    meta, veh, route_found, cases = campaign_cases(lib, name, vehicle=vehicle, runs=runs)
+    selected = []
+    for c in cases:
+        cr = c["run"]
+        cr.correlation = correlate_diesel(veh, cr.log, environment=c["env"], mass_kg=c["mass_kg"], grade_rad=c["grade"],
+                                          distance_km=c["distance_km"], fuel_device_l=cr.meta.get("fuel_device_l"))
+        selected.append(cr)
     rows = [cr.row() for cr in selected]
     can = sum(x["fuel_can_l"] for x in rows if x["fuel_can_l"]); sim = sum(x["fuel_sim_l"] for x in rows if x["fuel_sim_l"])
     dev = sum(x["fuel_device_l"] or 0 for x in rows)
@@ -443,4 +467,4 @@ def run_campaign(lib, name: str, *, vehicle: str | None = None, runs: list | Non
                "mean_abs_err_device": float(np.mean([abs(x["err_device"]) for x in rows if x.get("err_device") is not None])) if dev else None,
                "mean_gear_agreement": float(np.mean([x["gear_agreement"] for x in rows if x.get("gear_agreement") is not None])) if rows else None}
     return {"name": name, "meta": {k: v for k, v in meta.items() if k != "runs"}, "vehicle": veh.name,
-            "route_found": route is not None, "rows": rows, "summary": summary, "runs": selected}
+            "route_found": route_found, "rows": rows, "summary": summary, "runs": selected}

@@ -215,15 +215,43 @@ def render_diesel_report(result: DieselResult, *, lang: str = "tr", daily_km: fl
          + line_chart(km, [("motor devri (rpm)", s["engine_speed_rads"] / RPM, "var(--s1)")], xlabel="km", ylabel="rpm", y0=0, height=170)),
         ("Eğim ve motor gücü",
          line_chart(km, [("eğim (%)", np.tan(s["grade_rad"]) * 100, "var(--s5)")], xlabel="km", ylabel="%", y0=0, height=140)
-         + line_chart(km, [("motor mili gücü (kW)", s["p_engine_w"] / 1e3, "var(--s1)"),
-                           ("sürtünmeli fren (kW)", -s["p_friction_brake_w"] / 1e3, "var(--s2)")], xlabel="km", ylabel="kW", y0=0, height=170)),
+         + line_chart(km, [("krank gücü (kW)", s["p_engine_w"] / 1e3, "var(--s1)"),
+                           ("fren (kW)", -s["p_friction_brake_w"] / 1e3, "var(--s2)")], xlabel="km", ylabel="kW", y0=0, height=170)),
     ]
     chart_html = "".join(f'<div class="card"><h2>{esc(title)}</h2>{svg}</div>' for title, svg in charts)
+    from .signals import explorer_html
+    chart_html += ('<div class="card"><h2>Sinyal inceleme</h2><p class="note">İstediğiniz sinyalleri işaretleyin: aynı düzlemde üst üste '
+                   'çizilir, her birim kendi ölçeğinde. Grafikte sürükleyerek yakınlaştırın; imleç o andaki değerleri okur. '
+                   'Vites, motor devri, tork, anlık l/100 km ve bütün güç kalemleri listededir.</p>'
+                   + explorer_html(result) + '</div>')
+
+    # --- gear changes and why -------------------------------------------------
+    shift_html = ""
+    plan = getattr(result, "shift_plan", None)
+    if plan is not None:
+        from .shift import REASONS, SET_POINT_INFO
+        counts = plan.reason_counts()
+        rows_r = "".join(f"<tr><td>{esc(REASONS.get(k, k))}</td><td class=num>{n}</td></tr>"
+                         for k, n in sorted(counts.items(), key=lambda kv: -kv[1]))
+        ch = plan.setpoints.changed()
+        rows_s = "".join(f"<tr><td>{esc(SET_POINT_INFO[k]['label'])}</td><td class=num>{_fmt(float(val), 3).rstrip('0').rstrip(',')}"
+                         f" {esc(SET_POINT_INFO[k]['unit'])}</td></tr>" for k, val in ch.items() if k in SET_POINT_INFO)
+        shift_html = (
+            '<div class="grid2"><div class="card"><h2>Vites değişimleri</h2>'
+            f'<p class="note">Vites mantığı: VECTO EffShift. Kalkış vitesi en çok {plan.max_start_gear}. '
+            'Her değişimin nedeni kaydedilir; "verim" satırları yakıt için yapılan değişimlerdir.</p>'
+            f'<table class="bal"><tbody>{rows_r}</tbody></table></div>'
+            '<div class="card"><h2>Vites ayar değerleri</h2>'
+            '<p class="note">VECTO varsayılanından farklı olan ayarlar (kalibrasyon). Liste boşsa bütün değerler VECTO\'nun değerleridir.</p>'
+            f'<table class="bal"><tbody>{rows_s or "<tr><td>VECTO varsayılanları</td><td></td></tr>"}</tbody></table></div></div>')
 
     assumptions = [
         f"24 V yükleri alternatör verimi 0,70 ile mekanik güce çevrildi; direksiyon pompası ve hava kompresörü doğrudan mekanik.",
         f"Kabin ısıtması motor soğutma suyundan (yakıt enerjisinin %28'i kabul); yetmeyen kısım yakıtlı ısıtıcıdan (%{_fmt(100 * v.hvac.fuel_fired_efficiency, 0)} verim).",
-        f"Vites stratejisi: motor devri {_fmt(tr.downshift_speed_rads / RPM, 0)}–{_fmt(tr.upshift_speed_rads / RPM, 0)} rpm penceresi, %{_fmt(100 * tr.torque_reserve, 0)} tork rezervi, iki vites arası en az {_fmt(tr.min_shift_interval_s, 1)} s.",
+        ("Vites stratejisi: VECTO EffShift (acil durum, vites hatları, ±2 vites içinde yakıt verimi); ayar değerleri yukarıdaki tabloda. "
+         "Çekiş kesintisi karar ve zamanlayıcılarda hesaba katılır, enerjide katılmaz: hız izi birebir takip edilir."
+         if tr.shift_strategy == "vecto_effshift" else "")
+        or f"Vites stratejisi: motor devri {_fmt(tr.downshift_speed_rads / RPM, 0)}–{_fmt(tr.upshift_speed_rads / RPM, 0)} rpm penceresi, %{_fmt(100 * tr.torque_reserve, 0)} tork rezervi, iki vites arası en az {_fmt(tr.min_shift_interval_s, 1)} s.",
         f"Yakıt özellikleri (VECTO): {_fmt(eng.fuel_density_kg_per_m3, 0)} kg/m³, {_fmt(eng.fuel_lhv_j_per_kg / 1e6, 1)} MJ/kg, {_fmt(eng.co2_kg_per_kg_fuel, 2)} kg CO₂ / kg yakıt. Yakıt haritası çarpanı {_fmt(eng.correction_factor, 4)}.",
         "Vites değiştirme sırasındaki çekiş kesintisi ve debriyaj kayıpları modellenmedi; çevrim birebir takip edildi.",
     ]
@@ -262,6 +290,7 @@ table.bal td.num {{ text-align:right; font-variant-numeric:tabular-nums; white-s
     <table class="bal" style="margin-top:8px"><thead><tr><td>Vites</td><td class=num>Sürüş süresi payı</td></tr></thead><tbody>{gear_rows}</tbody></table></div>
 </div>
 {chart_html}
+{shift_html}
 <div class="grid2">
   <div class="card"><h2>Kabin ısı yükleri</h2>
     <p class="note">Koşu boyunca toplam ısı; pozitif kabini ısıtır, negatif soğutur. Dizel araçta ısıtma önce motor soğutma suyundan karşılanır.</p>

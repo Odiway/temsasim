@@ -333,10 +333,40 @@ advisor/             original NREL ADVISOR 2002 source, for reference
   optimistic.
 - The demo route is synthetic. Replace it with DEM-based elevation and real
   stop positions.
-- **Diesel:** no traction interruption during AMT shifts, no torque converter
-  (an AT box is run like an AMT), constant CdxA (no VECTO cross-wind
-  correction), raw certificate fuel map (no WHTC weighting), and no log-based
-  validation yet. The VECTO fuel comparison for the diesel twin is still to do.
+- **Diesel:** the AMT shifts by VECTO's EffShift logic (`temsasim/shift.py`),
+  but the 1 s traction interruption only enters the shift decision, not the
+  energy (the speed trace is followed exactly). No torque converter (an AT box
+  is run like an AMT), constant CdxA (no VECTO cross-wind correction), raw
+  certificate fuel map (no WHTC weighting). The VECTO fuel comparison for the
+  diesel twin is still to do.
+- **Electric:** the driveline is a fixed ratio; there is no multi-speed electric
+  gearbox, so the shift logic does not apply to battery buses yet.
+
+## One workbench, shift logic, VECTO missions
+
+Every calculation is a tab of one screen that shares the vehicle chosen in its
+bar: the run, the shift logic, the cabin, the comparison, the test data, the
+free drive, the line. Data (library, uploads, builders, formats) sits on a
+second bar. The rail has three doors.
+
+- **Vites** (`#/vites`): VECTO's AMT EffShift strategy with all its set points
+  (`temsasim/shift.py`), the shift lines over the engine map, the logged gear
+  trace of a test run under the simulated one, and a calibration that searches
+  the set points for the best agreement (`temsasim/shiftcal.py`). From the
+  command line: `python -m temsasim shift mersin_adana_2026_09 --calibrate --save`.
+  The Maraton's TraXon is calibrated against the nine Mersin–Adana runs: the
+  simulated gear is the logged one in 89.5 % of the driving samples and within
+  one gear in 98.4 % (VECTO's generic values: 79.5 %).
+- **VECTO missions**: Coach, Interurban, Suburban, Urban and Heavy Urban are in
+  `library/route/vecto_*.csv`; `python -m temsasim vecto-missions <VECTO folder>`
+  rebuilds them.
+- **Signal explorer**: in the run's panel ("Sinyaller") and inside every report,
+  any signals on one plane (speed, gear, engine speed, torque, instantaneous
+  l/100 km, SOC, current…), each unit on its own scale, drag to zoom.
+
+`docs/vecto_stable_envanter.md` says what of the VECTO source tree is used and
+what is not. Material derived from VECTO (EUPL-1.2) is listed in
+`THIRD_PARTY.md`.
 
 ADVISOR is © Alliance for Sustainable Energy, LLC, under a permissive license
 (`advisor/license.txt`). temsasim does not contain ADVISOR code; it uses

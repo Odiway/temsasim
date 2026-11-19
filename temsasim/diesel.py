@@ -57,6 +57,9 @@ class DieselResult:
     warnings: list
     unmet_samples: int
     kind: str = "diesel"
+    shift_plan: object = None
+    """The gear plan (``temsasim.shift.ShiftPlan``) when the gearbox uses a
+    planning strategy: shift events with their reasons, and the shift polygons."""
 
     @property
     def achievable(self) -> bool:
@@ -141,6 +144,48 @@ class DieselResult:
         return sinks
 
 
+def accessory_pass(vehicle: Vehicle, cyc: DriveCycle, env: Environment, *, dt_s: float = 1.0,
+                   initial_cabin_c: float | None = None) -> dict:
+    """Auxiliaries and climate along an already resampled cycle, as mechanical
+    power on the crankshaft.
+
+    Neither depends on the gear, so both are settled before the driveline. The
+    shift strategy can then see the whole crankshaft load when it rates a
+    gear, and a gear plan can be made for the complete trace in one go."""
+    eng, hvac, aux = vehicle.engine, vehicle.hvac, vehicle.auxiliaries
+    n = cyc.time_s.size
+    cabin_c = env.ambient_c if initial_cabin_c is None else initial_cabin_c
+    stops_per_hour = cyc.stop_count / max(cyc.duration_s / 3600.0, 1e-9)
+    p_aux_a = np.zeros(n)
+    p_hvac_a = np.zeros(n)
+    p_fan_a = np.full(n, float(eng.fan_power_w))
+    cabin_a = np.zeros(n)
+    hv_a: list = [None] * n
+    saturated = 0
+    for i in range(n):
+        v = float(cyc.speed_mps[i])
+        pax = float(cyc.passengers[i])
+        doors = bool(cyc.doors_open[i])
+        aux_d = aux.power(v, night=env.night, stops_per_hour=stops_per_hour, doors_open=doors)
+        lv_w = aux_d["lv_loads_w"] * aux.dcdc_efficiency          # the 24 V loads themselves
+        p_aux_a[i] = lv_w / ALTERNATOR_EFFICIENCY + aux_d["steering_w"] + aux_d["air_compressor_w"]
+        cabin_c, p_hvac_elec, hv = hvac.step(
+            cabin_c, env.ambient_c, dt_s, n_passengers=pax, doors_open=doors,
+            solar_irradiance_w_per_m2=env.solar_irradiance_w_per_m2,
+            shading_factor=env.shading_factor, enabled=env.hvac_enabled)
+        if hv["saturated"]:
+            saturated += 1
+        q_hvac = hv["q_hvac_w"]
+        if q_hvac < 0.0:
+            p_hvac_a[i] = p_hvac_elec            # compressor + fans, mechanical
+        elif q_hvac > 0.0:
+            p_hvac_a[i] = hvac.blower_power_w    # heat comes from coolant / heater below
+        cabin_a[i] = cabin_c
+        hv_a[i] = hv
+    return {"p_aux_w": p_aux_a, "p_hvac_w": p_hvac_a, "p_fan_w": p_fan_a, "cabin_c": cabin_a, "hvac": hv_a,
+            "saturated_samples": saturated, "total_w": p_aux_a + p_hvac_a + p_fan_a}
+
+
 def simulate_diesel(
     vehicle: Vehicle,
     cycle: DriveCycle,
@@ -172,7 +217,7 @@ def simulate_diesel(
             "engine_speed_rads", "engine_torque_nm", "engine_torque_max_nm", "p_engine_w",
             "fuel_g_per_s", "heater_fuel_g_per_s", "fuel_cum_g",
             "axle_loss_w", "gearbox_loss_w", "retarder_loss_w", "clutch_loss_w",
-            "p_aux_w", "p_hvac_w", "p_fan_w", "idle", "unmet", "p_undelivered_w",
+            "p_aux_w", "p_hvac_w", "p_fan_w", "idle", "unmet", "p_undelivered_w", "clutch_open",
             "cabin_c", "hvac_q_w", "hvac_mode_code", "q_engine_heat_w", "q_heater_w",
             "q_doors_w", "q_envelope_w", "q_solar_w", "q_passengers_w", "q_ventilation_w"]
     s = {k: np.zeros(n) for k in keys}
@@ -189,6 +234,18 @@ def simulate_diesel(
     saturated_hvac_samples = 0
     warnings: list = []
 
+    # --- pass 1: auxiliaries and climate -----------------------------------------
+    acc = accessory_pass(vehicle, cyc, env, dt_s=dt_s, initial_cabin_c=cabin_c)
+    p_aux_a, p_hvac_a, p_fan_a = acc["p_aux_w"], acc["p_hvac_w"], acc["p_fan_w"]
+    cabin_a, hv_a = acc["cabin_c"], acc["hvac"]
+    saturated_hvac_samples = acc["saturated_samples"]
+
+    # --- pass 2: gear plan (VECTO-type strategies plan the whole trace) ----------
+    plan = None
+    if getattr(tr, "shift_strategy", "window") != "window":
+        from .shift import plan_for_cycle
+        plan = plan_for_cycle(vehicle, cyc, env, p_aux_a + p_hvac_a + p_fan_a, rho=rho)
+
     for i in range(n):
         t_now = float(cyc.time_s[i])
         v = float(cyc.speed_mps[i])
@@ -199,9 +256,14 @@ def simulate_diesel(
 
         mass = ch.mass(pax)
         moving = v > 0.05
+        clutch_open = False
+        if plan is not None and moving:
+            gear = int(plan.gear[i])
+            clutch_open = bool(plan.clutch_open[i])
 
         # --- road load ---------------------------------------------------------
-        m_eq = ch.equivalent_rotating_mass_kg(tr.referred_inertia_kgm2(gear, eng.inertia_kgm2) if moving else 0.0)
+        m_eq = ch.equivalent_rotating_mass_kg(
+            tr.referred_inertia_kgm2(gear, eng.inertia_kgm2) if (moving and not clutch_open) else 0.0)
         forces = ch.resistive_force(v, mass_kg=mass, grade_rad=theta,
                                     air_density=rho, headwind_mps=env.headwind_mps + float(cyc.headwind_mps[i]))
         f_roll = float(forces["rolling"]) * float(cyc.surface_factor[i])
@@ -214,24 +276,12 @@ def simulate_diesel(
         p_wheel = f_total * v
 
         # --- auxiliaries and climate (mechanical, on the crankshaft) -----------
-        aux_d = aux.power(v, night=env.night, stops_per_hour=stops_per_hour, doors_open=doors)
-        lv_w = aux_d["lv_loads_w"] * aux.dcdc_efficiency          # the 24 V loads themselves
-        p_aux = lv_w / ALTERNATOR_EFFICIENCY + aux_d["steering_w"] + aux_d["air_compressor_w"]
-        p_fan = eng.fan_power_w
-
-        cabin_c, p_hvac_elec, hv = hvac.step(
-            cabin_c, env.ambient_c, dt_s, n_passengers=pax, doors_open=doors,
-            solar_irradiance_w_per_m2=env.solar_irradiance_w_per_m2,
-            shading_factor=env.shading_factor, enabled=env.hvac_enabled)
-        if hv["saturated"]:
-            saturated_hvac_samples += 1
+        p_aux = float(p_aux_a[i])
+        p_fan = float(p_fan_a[i])
+        p_hvac = float(p_hvac_a[i])
+        cabin_c = float(cabin_a[i])
+        hv = hv_a[i]
         q_hvac = hv["q_hvac_w"]
-        if q_hvac < 0.0:
-            p_hvac = p_hvac_elec                 # compressor + fans, mechanical
-        elif q_hvac > 0.0:
-            p_hvac = hvac.blower_power_w         # heat comes from coolant / heater below
-        else:
-            p_hvac = 0.0
 
         # --- driveline backwards to the engine --------------------------------------
         axle_loss = gbx_loss = t_ret = clutch_loss_w = 0.0
@@ -240,15 +290,23 @@ def simulate_diesel(
             w_prop, t_prop, axle_loss = tr.axle_input(w_wheel, t_wheel)
             t_ret = tr.retarder_drag_nm(w_prop)
             t_out = t_prop + t_ret
-            new_gear = tr.choose_gear(w_prop, t_out, eng, gear, t_now - t_last_shift, v)
-            if new_gear != gear:
-                gear, t_last_shift = new_gear, t_now
-                shifts += 1
-                m_eq = ch.equivalent_rotating_mass_kg(tr.referred_inertia_kgm2(gear, eng.inertia_kgm2))
-            w_in, t_in, gbx_loss = tr.gearbox_input(w_prop, t_out, gear)
-            t_in += tr.retarder_input_drag_nm(w_in)
-            w_eng = max(w_in, eng.idle_speed_rads)
-            clutch_loss_w = max(t_in, 0.0) * (w_eng - w_in)
+            if plan is None:
+                new_gear = tr.choose_gear(w_prop, t_out, eng, gear, t_now - t_last_shift, v)
+                if new_gear != gear:
+                    gear, t_last_shift = new_gear, t_now
+                    shifts += 1
+                    m_eq = ch.equivalent_rotating_mass_kg(tr.referred_inertia_kgm2(gear, eng.inertia_kgm2))
+            if clutch_open:
+                # rolling to a halt with the clutch open: the engine idles and
+                # carries only its auxiliaries; the brakes take the rest
+                w_in = w_prop * float(tr.gear_ratios[gear])
+                t_in = 0.0
+                w_eng = eng.idle_speed_rads
+            else:
+                w_in, t_in, gbx_loss = tr.gearbox_input(w_prop, t_out, gear)
+                t_in += tr.retarder_input_drag_nm(w_in)
+                w_eng = max(w_in, eng.idle_speed_rads)
+                clutch_loss_w = max(t_in, 0.0) * (w_eng - w_in)
         else:
             w_prop = w_in = 0.0
             t_in = 0.0
@@ -274,6 +332,11 @@ def simulate_diesel(
             p_friction = (t_drag - t_req) * w_eng
         else:
             t_eng = t_req
+        if clutch_open:
+            if t_out <= 0.0:
+                p_friction = -t_out * w_prop
+            else:
+                p_undelivered = t_out * w_prop
         p_eng = t_eng * w_eng
         fuel_gps = eng.fuel_rate_g_per_s(w_eng, t_eng)
 
@@ -323,6 +386,7 @@ def simulate_diesel(
         s["p_hvac_w"][i] = p_hvac
         s["p_fan_w"][i] = p_fan
         s["idle"][i] = 1.0 if idle else 0.0
+        s["clutch_open"][i] = 1.0 if clutch_open else 0.0
         s["p_undelivered_w"][i] = p_undelivered
         s["cabin_c"][i] = cabin_c
         s["hvac_q_w"][i] = q_hvac
@@ -334,6 +398,9 @@ def simulate_diesel(
         s["q_solar_w"][i] = hv["q_solar_w"]
         s["q_passengers_w"][i] = hv["q_passengers_w"]
         s["q_ventilation_w"][i] = hv["q_ventilation_w"]
+
+    if plan is not None:
+        shifts = plan.shifts
 
     # --- integrate --------------------------------------------------------------------
     def kwh(arr) -> float:
@@ -385,6 +452,8 @@ def simulate_diesel(
         "mean_engine_rpm": float(np.mean(s["engine_speed_rads"][moving_mask]) / RPM) if moving_mask.any() else eng.idle_speed_rads / RPM,
         "mean_cabin_c": float(np.mean(s["cabin_c"])),
         "shifts": shifts,
+        "shift_strategy": getattr(tr, "shift_strategy", "window"),
+        "shift_reasons": plan.reason_counts() if plan is not None else {},
         "gear_share": gear_share,
         "stops": cyc.stop_count,
         "stops_per_km": cyc.stops_per_km,
@@ -432,4 +501,4 @@ def simulate_diesel(
             + "): sonuçlar yol gösterici, savunulabilir değil."))
 
     return DieselResult(vehicle=vehicle, cycle=cyc, environment=env, dt_s=dt_s,
-                        series=s, totals=totals, warnings=warnings, unmet_samples=unmet)
+                        series=s, totals=totals, warnings=warnings, unmet_samples=unmet, shift_plan=plan)

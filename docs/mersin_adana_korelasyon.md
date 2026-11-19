@@ -76,3 +76,31 @@ CdxA CFD'den, lastik RRC sertifikadan, kütle tartıdan.
    yakıt tabanlı erken vites mantığı eklenirse yükselir.
 6. Öztürkler'deki tam gaz kalkışlar (kick-down'sız) için pedal kaydı var; sürücü
    modeli kalibre edilebilir.
+
+## 18 Kasım 2026: vites mantığı VECTO EffShift'e geçti
+
+Eski devir penceresi kuralları aracı yokuşta 11. vitese indiriyor, gerçek TraXon ise
+12. viteste ~1000 d/d'de kalıyordu. Şanzıman artık VECTO'nun AMT EffShift mantığıyla
+(`temsasim/shift.py`) vites değiştiriyor; yedi ayar değeri bu dokuz koşunun vites ve devir
+izine oturtuldu (`python -m temsasim shift mersin_adana_2026_09 --calibrate`, arayüzde
+*Çalışma masası → Vites*).
+
+| | Devir penceresi (eski) | EffShift, VECTO değerleri | EffShift, kalibre |
+|---|---|---|---|
+| Vites uyumu (yalnız vites planı, 9 koşu) | – | %79,5 | **%89,5** |
+| ±1 vites içinde | – | %96,1 | **%98,4** |
+| Devir hatası (RMSE) | – | 143 d/d | **93 d/d** |
+| Kalkış vitesi (45 kalkış) | – | %100 | %100 |
+| Tam çözücüde vites uyumu | %76,2 | %77,4 | **%87,2** |
+| Yakıt, CAN'a göre | +7,4 % | +5,0 % | +5,9 % |
+| Yakıt, cihaza göre | −2,4 % | −4,6 % | −3,9 % |
+
+Kalibre edilen ayarlar: büyütme sonrası asgari devir 870 d/d; verim büyütmesinde tork
+rezervi 0,25; mevcut vites lehine pay 0,975; iki vites arası 1 s; frenlemede 950 d/d
+altında küçültme (0,4 m/s² üstü yavaşlamada); yavaşlama eşiği 0,05 m/s².
+
+Okuma: vites doğru seçilince model yakıtı %1,5 daha az buluyor (11. vites yerine 12.).
+CAN'a göre fark küçüldü, cihaza göre büyüdü; yani önceki "cihaza −%2,4" sonucunun bir
+kısmı yanlış vitesin fazladan yaktığı yakıttı. Kalan fark yol yükü (eğim, rüzgâr, CdxA)
+ve yardımcı yük kabullerindedir, vites seçiminde değil. Seyir devri dokuz koşunun
+yedisinde ±10 d/d içinde (önce +14 … +80 d/d).

@@ -30,3 +30,8 @@ ARAÇ VERİLERİ/
 
 # raw test-team exports (xlsx/docx); the library keeps compact CSV copies + meta.yaml
 tEST VERİ/
+
+# VECTO stable source checkout and its archives (770 MB, EUPL): local only
+vecto-stable/
+vecto-stable.zip
+tests/vecto-stable.zip
