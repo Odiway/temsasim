@@ -346,7 +346,8 @@ export function createDriveStage(host, { raster } = {}) {
     if (city3d && extra) city3d.update(extra, dt, camera);
     const e = world.height(D.s, D.lat), slope = world.gradePct(D.s, D.lat, D.psi) / 100;
     bus.group.position.set(D.s, e + 0.02, D.lat);
-    bus.group.rotation.set(0, -D.psi, Math.atan(slope), "YZX");
+    // lean out of the turn and dive or squat, from the vehicle's suspension (zero without one)
+    bus.group.rotation.set(-(D.roll || 0) * Math.PI / 180, -D.psi, Math.atan(slope) - (D.pitch || 0) * Math.PI / 180, "YZX");
     spin += D.v * dt / 0.5;
     const steerAng = D.delta || 0;
     bus.wheels.forEach((w, i) => w.rotation.set(0, i < 2 ? -steerAng : 0, -spin, "YZX"));

@@ -610,20 +610,21 @@ async function openSignals(reportId, title) {
 const PAGES = {
   baslangic: pageHome, kutuphane: pageLibrary, yukle: pageUpload, bilesen: pageComponent,
   arac: pageVehicle, simulasyon: pageSim, surus: pageDrive, hat: pageNetwork, dogrulama: pageValidate,
-  guzergah: pageRouteBuilder, senaryo: pageScenarios, bicimler: pageFormats, karsilastir: pageCompare, kabin: pageCabin, vites: pageShift,
+  guzergah: pageRouteBuilder, senaryo: pageScenarios, bicimler: pageFormats, karsilastir: pageCompare, kabin: pageCabin, vites: pageShift, suspansiyon: pageSuspension,
 };
 const PAGE_GRP = { baslangic: "home", kutuphane: "veri", yukle: "veri", bilesen: "veri", arac: "veri", guzergah: "veri", senaryo: "veri", bicimler: "veri", kabin: "veri",
-  simulasyon: "kos", surus: "kos", hat: "kos", karsilastir: "kos", vites: "kos", dogrulama: "dogrula" };
+  simulasyon: "kos", surus: "kos", hat: "kos", karsilastir: "kos", vites: "kos", suspansiyon: "kos", dogrulama: "dogrula" };
 const PAGE_SIGN = { baslangic: "Başlangıç", kutuphane: "Kütüphane", yukle: "Veri yükle", bilesen: "Bileşen", arac: "Araç kur", simulasyon: "Simülasyon", surus: "Serbest sürüş", hat: "Hat ve sefer", dogrulama: "Doğrulama",
-  guzergah: "Güzergâh", senaryo: "Senaryo", bicimler: "Veri biçimleri", karsilastir: "Çoklu koşu", kabin: "Kabin termal", vites: "Vites" };
+  guzergah: "Güzergâh", senaryo: "Senaryo", bicimler: "Veri biçimleri", karsilastir: "Çoklu koşu", kabin: "Kabin termal", vites: "Vites", suspansiyon: "Süspansiyon" };
 
 /* ================================================================ one workbench
    Every calculation is a tab of the same screen and works on the vehicle
-   chosen in its bar: the run, the shift logic, the cabin, the comparison, the
+   chosen in its bar: the run, the shift logic, the suspension, the cabin, the comparison, the
    test data, the free drive, the line. Everything that is data (library,
    uploads, builders, formats) sits on a second, plainer bar. The rail then
    only needs three doors. */
 const BENCH = [["simulasyon", "Koşu", "Enerji ve yakıt simülasyonu"], ["vites", "Vites", "Vites mantığı ve şanzıman kalibrasyonu"],
+  ["suspansiyon", "Süspansiyon", "Düşey dinamik, dalma, yalpa ve devrilme"],
   ["kabin", "Kabin", "Kabin içi termal yönetim modeli"], ["karsilastir", "Karşılaştır", "2–4 koşu yan yana"],
   ["dogrulama", "Test verisi", "Ölçümle karşılaştırma"], ["surus", "Serbest sürüş", "Aracı kendiniz sürün"], ["hat", "Hat ve sefer", "Bir hattın bütün günü"]];
 const SHELF = [["kutuphane", "Kütüphane"], ["yukle", "Veri yükle"], ["arac", "Araç kur"], ["guzergah", "Güzergâh"], ["senaryo", "Senaryolar"], ["bicimler", "Veri biçimleri"]];
@@ -662,6 +663,7 @@ async function pageFormats(group) { const mod = await import("/static/formats.js
 async function pageCompare() { const mod = await import("/static/compare.js"); return mod.pageCompare(pageKit()); }
 async function pageCabin(stem) { const mod = await import("/static/cabin.js"); return mod.pageCabin(pageKit(), stem); }
 async function pageShift() { const mod = await import("/static/shift.js"); return mod.pageShift(pageKit()); }
+async function pageSuspension() { const mod = await import("/static/suspension.js"); return mod.pageSuspension(pageKit()); }
 /* The home roadmap sends people to a builder or an upload page; when that page
    saves, it comes back here instead of its usual next page. */
 function rmGo(hash) { store.set("rmReturn", true); location.hash = hash; }

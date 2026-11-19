@@ -35,3 +35,10 @@ tEST VERİ/
 vecto-stable/
 vecto-stable.zip
 tests/vecto-stable.zip
+
+# shared suspension data, books and supplier drawings (794 MB, copyrighted / confidential): local only
+OneDrive_2026-11-19/
+OneDrive_2026-11-19.zip
+
+# Maraton suspension data taken from supplier drawings marked "strictly confidential": local only
+library/suspension/maraton_*.yaml

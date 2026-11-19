@@ -131,6 +131,11 @@ def explorer_payload(result, *, max_points: int = 6000) -> dict:
     add("cabin_c", "Kabin sıcaklığı", "°C", s["cabin_c"], "Kabin")
     add("hvac_q_kw", "Klima ısıl gücü", "kW", s["hvac_q_w"] / 1e3, "Kabin", digits=2)
     add("doors_open", "Kapılar açık", "", s["doors_open"], "Kabin", step=True, digits=0)
+    sus = getattr(result, "suspension_state", None)
+    if sus is not None:
+        # steady dive and squat for the run's acceleration; the Süspansiyon tab has the transient
+        from .suspension import pitch_trace
+        add("pitch_deg", "Yunuslama açısı (+ dalma)", "°", pitch_trace(sus, v, dt), "Şasi", digits=2)
     return {
         "title": f"{result.vehicle.name} · {result.cycle.name}",
         "x": [{"key": "time_s", "label": "Zaman", "unit": "s", "values": _clean(s["time_s"][sl], 1)},

@@ -3,7 +3,8 @@
    The report's fixed charts answer the usual questions. This is for the rest:
    tick the signals you want (speed, gear and engine speed; torque against
    full load; current against SOC), they are drawn over each other, each unit
-   on its own scale, and a drag across the plot zooms in. Stand-alone on
+   on its own scale, and a drag across the plot zooms in; the two boxes in
+   the bar take the same range as numbers. Stand-alone on
    purpose (no imports, its own styles): the application loads this file and
    the HTML report embeds it, so a saved report keeps the tool. */
 (function (root) {
@@ -17,6 +18,9 @@
     ".tx-bar button:hover{border-color:var(--amber,#ffb000)}",
     ".tx-bar button[aria-pressed=true]{border-color:var(--amber,#ffb000);box-shadow:inset 0 -2px 0 var(--amber,#ffb000)}",
     ".tx-bar .tx-sp{flex:1}",
+    ".tx-rng{display:inline-flex;gap:5px;align-items:center;font-size:11.5px;color:var(--muted,#6f6a60);white-space:nowrap}",
+    ".tx-rng input{width:76px;padding:4px 6px;font:12px var(--mono,ui-monospace,monospace);border:1px solid var(--rule,#cfc9bd);border-radius:3px;background:var(--panel,#fff);color:var(--ink,#1c1b19);text-align:right}",
+    ".tx-rng input:focus{outline:none;border-color:var(--amber,#ffb000)}",
     ".tx-hint{font-size:11.5px;color:var(--muted,#6f6a60)}",
     ".tx-body{display:grid;grid-template-columns:220px minmax(0,1fr);gap:12px;align-items:start}",
     "@media(max-width:860px){.tx-body{grid-template-columns:1fr}}",
@@ -98,10 +102,24 @@
       });
       bar.appendChild(el("span", { class: "tx-sp" }));
       if (data.x.length > 1) {
-        var sel = el("select", { "aria-label": "Yatay eksen", onchange: function () { st.xi = +sel.value; st.x0 = st.x1 = null; draw(); } },
+        var sel = el("select", { "aria-label": "Yatay eksen", onchange: function () { st.xi = +sel.value; st.x0 = st.x1 = null; drawBar(); draw(); } },
           data.x.map(function (x, i) { return el("option", { value: i, selected: i === st.xi ? "selected" : null, text: x.label + " [" + x.unit + "]" }); }));
         bar.appendChild(sel);
       }
+      /* the range as numbers: type a start and an end to look at just that part */
+      var X = data.x[st.xi], xd = X.digits != null ? X.digits : X.unit === "km" ? 2 : 0, stepX = Math.pow(10, -xd);
+      function typed() {
+        var a = parseFloat(st.inA.value), b = parseFloat(st.inB.value), xs = X.values, lo = xs[0], hi = xs[xs.length - 1];
+        if (!isFinite(a)) a = lo; if (!isFinite(b)) b = hi;
+        a = Math.min(Math.max(a, lo), hi); b = Math.min(Math.max(b, lo), hi);
+        if (b - a < stepX) { st.x0 = st.x1 = null; } else { st.x0 = a <= lo ? null : a; st.x1 = b >= hi ? null : b; if (st.x0 == null && st.x1 != null) st.x0 = lo; if (st.x1 == null && st.x0 != null) st.x1 = hi; }
+        draw();
+      }
+      st.inA = el("input", { type: "number", step: stepX, "aria-label": X.label + " başlangıcı", title: "Başlangıç", onchange: typed });
+      st.inB = el("input", { type: "number", step: stepX, "aria-label": X.label + " bitişi", title: "Bitiş", onchange: typed });
+      st.inA.value = (+(st.x0 == null ? X.values[0] : st.x0)).toFixed(xd);
+      st.inB.value = (+(st.x1 == null ? X.values[X.values.length - 1] : st.x1)).toFixed(xd);
+      bar.appendChild(el("span", { class: "tx-rng" }, [el("span", { text: "Aralık" }), st.inA, el("span", { text: "–" }), st.inB, el("span", { text: X.unit })]));
       bar.appendChild(el("button", { type: "button", text: "Tümünü göster", title: "Yakınlaştırmayı sıfırla (çift tık da olur)", onclick: function () { st.x0 = st.x1 = null; draw(); } }));
       bar.appendChild(el("span", { class: "tx-hint", text: "Sürükle: yakınlaştır · en çok " + MAX + " sinyal · aynı birim aynı ölçekte" }));
     }
@@ -149,6 +167,9 @@
       var T = 12, B = 34, L = 54, R = 54;
       var xa = st.x0 == null ? xs[0] : st.x0, xb = st.x1 == null ? xs[n - 1] : st.x1;
       if (!(xb > xa)) { xa = xs[0]; xb = xs[n - 1] || xa + 1; }
+      var xdig = X.digits != null ? X.digits : X.unit === "km" ? 2 : 0;
+      if (st.inA && document.activeElement !== st.inA) st.inA.value = (+xa).toFixed(xdig);
+      if (st.inB && document.activeElement !== st.inB) st.inB.value = (+xb).toFixed(xdig);
       var i0 = Math.max(0, lowerBound(xs, xa) - 1), i1 = Math.min(n - 1, lowerBound(xs, xb) + 1);
       var sx = function (v) { return L + (v - xa) / (xb - xa) * (W - L - R); };
       var svg = sv("svg", { viewBox: "0 0 " + W + " " + H, height: H, role: "img", "aria-label": "Sinyal grafiği" });
@@ -221,7 +242,7 @@
         var xv = valAt(px), i = lowerBound(xs, xv);
         if (i > 0 && (i >= n || xv - xs[i - 1] < xs[i] - xv)) i--;
         cur.setAttribute("x1", sx(xs[i])); cur.setAttribute("x2", sx(xs[i])); cur.setAttribute("opacity", 1);
-        read.replaceChildren(el("span", { class: "k" }, [X.label + ": ", el("b", { text: num(xs[i], X.unit === "km" ? 2 : 0) + " " + X.unit })]));
+        read.replaceChildren(el("span", { class: "k" }, [X.label + ": ", el("b", { text: num(xs[i], xdig) + " " + X.unit })]));
         sigs.forEach(function (s) {
           read.appendChild(el("span", { class: "k" }, [el("span", { class: "tx-sw", style: "background:" + PALETTE[colorOf[s.key]] + ";border-color:transparent" }),
             s.label + ": ", el("b", { text: num(s.values[i], s.digits == null ? 1 : s.digits) + (s.unit ? " " + s.unit : "") })]));

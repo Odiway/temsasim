@@ -371,3 +371,30 @@ what is not. Material derived from VECTO (EUPL-1.2) is listed in
 ADVISOR is © Alliance for Sustainable Energy, LLC, under a permissive license
 (`advisor/license.txt`). temsasim does not contain ADVISOR code; it uses
 ADVISOR's published drive-cycle data.
+
+## Suspension, body roll and rollover
+
+The workbench has a **Süspansiyon** tab (`temsasim/suspension.py`,
+`library/suspension/*.yaml`): a seven-degree-of-freedom model of the selected
+vehicle (body heave, pitch and roll on four wheel stations) with air springs at
+the pressure the load asks for, the dampers' force-velocity curves, anti-roll
+bars, bump stops and tyres that can lift.
+
+- **What it gives:** ride frequencies and damping ratios, dive under braking and
+  squat under traction, settling time and oscillation frequency after a
+  manoeuvre, roll angle per g, the rollover threshold (rigid, with compliance,
+  in a sudden manoeuvre), the tilt-table angle against the 28 degrees of UN R107,
+  the rollover speed on a curve, and ISO 2631 comfort on ISO 8608 roads.
+- **Manoeuvres:** braking, launch, release test, speed bump, sudden steer, lane
+  change, rough road. Every chart zooms by dragging or by typing a time range.
+- **Adjustable:** load, centre of gravity (x, y, z), geometry, and every node
+  of the damper curves (drag the node, type the force or use the slider).
+- **Linked:** a run's signals now carry the steady dive/squat angle, and the
+  free drive steers with the steady-state cornering equation
+  (delta = L/R + K ay), leans and pitches with the same numbers.
+- **Checked against** the worked examples of Gillespie's *Fundamentals of
+  Vehicle Dynamics* and the ISO tables: `docs/suspansiyon_modeli.md`,
+  `tests/test_suspension.py`.
+
+The file in the repository is a generic 13 m coach built from assumptions.
+Files made from supplier drawings stay local (`.gitignore`).

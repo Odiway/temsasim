@@ -1,7 +1,7 @@
 /* Free drive: the road and the live vehicle model.
 
    The live model is deliberately simple -- one longitudinal force balance,
-   a kinematic bicycle for steering, steady thermal loads -- so it can run in
+   a steady-state cornering bicycle for steering, steady thermal loads -- so it can run in
    the browser at frame rate. It uses the selected vehicle's own parameters
    (from /api/drive/setup), so the bus pulls, climbs and regenerates like that
    vehicle. Its numbers are a live estimate only: when the drive is over, the
@@ -14,7 +14,8 @@ export const LANES = 3, LANE_W = 3.5, MEDIAN = 1.2;
 export const ROAD_HALF = MEDIAN / 2 + LANES * LANE_W + 0.5;   // 11.6 m: six lanes, a median, shoulders
 export const WALK_W = 5.0;
 export const EDGE = ROAD_HALF + WALK_W;                        // outer edge of the pavement
-export const WHEELBASE = 6.0;                                  // front axle 3.55 m, rear -2.45 m (sim3d: buildBus)
+export const WHEELBASE = 6.0;                                  // front axle 3.55 m, rear -2.45 m (sim3d: buildBus); the vehicle's own is used when its suspension file gives one
+const AY_DRIVER = 0.3 * 9.81;                                  // lateral acceleration a bus driver uses in a hard turn [m/s2]
 const BUS_HALF_W = 1.29;
 const G = 9.81;
 const STEP = 2;                                                // metres between road samples
@@ -125,7 +126,7 @@ export function createDriver(P, world, { passengers = 0 } = {}) {
   function reset() {
     Object.assign(st, {
       t: 0, s: world.start.x, lat: world.start.z, psi: world.start.psi, v: 0, a: 0, gear: 0,
-      thr: 0, brk: 0, steer: 0, doors: 0, dir: 1,
+      thr: 0, brk: 0, steer: 0, doors: 0, dir: 1, delta: 0, ay: 0, roll: 0, pitch: 0,
       soc: P.battery.soc_start, dist: 0,
       e_batt: 0, e_trac: 0, e_regen: 0, e_hvac: 0, e_aux: 0, e_thermal: 0, e_fric: 0,
       p_batt: 0, p_motor: 0, p_crank: 0, p_aux: 0, p_fric: 0, cruise: null, scrape: false, atEnd: false, kerb: false, blocked: false,
@@ -212,11 +213,25 @@ export function createDriver(P, world, { passengers = 0 } = {}) {
     }
     a = (vNew - v) / dt;
 
-    // steering: kinematic bicycle, lock reduced with speed (reversing swings the nose the other way)
-    const delta = st.steer * world.steerLock / (1 + Math.abs(vNew) / 8);
-    st.delta = delta;
+    // steering: the steady-state cornering equation delta = L/R + K ay (Gillespie Eq. 6-16), so the
+    // path curvature for a road-wheel angle is tan(delta) / (L + K v^2): the same lock turns the bus
+    // less and less as speed rises. The driver never asks for more lateral acceleration than a bus is
+    // driven with, the tyres can hold, or the body can take before the inner wheels lift.
+    const HD = P.handling || {};
+    const wb = HD.wheelbase_m || WHEELBASE, kUs = HD.understeer_rad_per_mps2 != null ? HD.understeer_rad_per_mps2 : 2.0 / 57.3 / G;
+    const ayMax = Math.min(AY_DRIVER, 0.85 * (HD.friction || 0.8) * G, 0.9 * (HD.rollover_g || 0.45) * G);
+    const lenEff = wb + kUs * vNew * vNew;
+    let kappa = Math.tan(st.steer * world.steerLock) / lenEff;
+    const ayAsk = vNew * vNew * kappa;
+    if (Math.abs(ayAsk) > ayMax) kappa *= ayMax / Math.abs(ayAsk);
+    st.delta = Math.atan(kappa * lenEff);                       // the road-wheel angle that is actually used
+    st.ay = vNew * vNew * kappa;
+    // the body leans out of the turn and pitches with the acceleration, with the lag of its roll mode
+    const lag = Math.min(1, dt * 2 * Math.PI * (HD.roll_hz || 0.8));
+    st.roll = (st.roll || 0) + ((HD.roll_deg_per_g || 0) * st.ay / G - (st.roll || 0)) * lag;
+    st.pitch = (st.pitch || 0) + ((a < 0 ? (HD.dive_deg_per_g || 0) : (HD.squat_deg_per_g || 0)) * -a / G - (st.pitch || 0)) * lag;
     const prev = { s: st.s, lat: st.lat, psi: st.psi };
-    st.psi += vNew / WHEELBASE * Math.tan(delta) * dt;
+    st.psi += vNew * kappa * dt;
     st.s += vNew * Math.cos(st.psi) * dt;
     st.lat += vNew * Math.sin(st.psi) * dt;
     // kerbs, buildings, barriers: the world decides

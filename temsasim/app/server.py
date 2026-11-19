@@ -102,6 +102,12 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
     def put_report(result, **kw) -> str:
         """The rendered page and the result itself, so the same run can also be
         handed out as a CSV of its time series."""
+        try:
+            # dive and squat along the run, when the library has a suspension for the vehicle
+            from .suspension_api import vehicle_suspension_state
+            result.suspension_state = vehicle_suspension_state(lib(), result.vehicle, float(np.mean(result.series["passengers"])))
+        except Exception:                                    # never let an optional signal stop a report
+            result.suspension_state = None
         return reports.put({"html": _render(result, **kw), "result": result})
 
     # ------------------------------------------------------------ errors
@@ -458,7 +464,17 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
             aux_w = [aux.power(v, night=env.night)["total_w"] for v in v_tab]
             thermal_w, pack_c = float(np.mean(s["p_pack_thermal_w"][-300:])), float(s["pack_c"][-1])
             fuel_kwh_per_l = None
+        handling = None
+        try:
+            # steering response, lean and the lateral limit from the vehicle's suspension file
+            from .suspension_api import clean, vehicle_suspension_state
+            from ..suspension import handling as _handling
+            sus = vehicle_suspension_state(L, base, pax)
+            handling = clean(_handling(sus)) if sus is not None else None
+        except Exception:
+            handling = None
         return jsonify({
+            "handling": handling,
             "vehicle": {"name": veh.name, "variant": veh.variant, "powertrain": veh.powertrain},
             "powertrain": veh.powertrain, "fuel_kwh_per_l": fuel_kwh_per_l,
             "mass_kg": ch.kerb_mass_kg, "passenger_mass_kg": ch.passenger_mass_kg,
@@ -1243,6 +1259,8 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
 
     from .shift_api import register as register_shift
     register_shift(app, lib, cycle_from=_cycle_from, env_from=_env_from)
+    from .suspension_api import register as register_suspension
+    register_suspension(app, lib)
 
     return app
 

@@ -635,4 +635,29 @@ table.shf-sp tr.chg td.n input { border-color: var(--amber); background: var(--a
 dialog.shf-dlg { width: min(860px, calc(100vw - 32px)); }
 .shf .row select { width: auto; max-width: 340px; }
 .shf .row .section-title { white-space: nowrap; }
+
+/* ---------- suspension tab ---------- */
+table.sus-sp td.sl { width: 30%; padding-left: 4px; }
+table.sus-sp td.n input[type=number] { width: 70px; }
+.sus .pagehead select { width: auto; max-width: 300px; padding: 5px 28px 5px 9px; font-size: 13px; }
+.sus .sus-loadline { padding: 6px 10px 8px; }
+.sus .tbl-x { overflow-x: auto; }
+.sus table.data select { width: auto; max-width: 230px; padding: 3px 24px 3px 7px; font-size: 12.5px; }
+table.sus-sp td.n.chg input { border-color: var(--amber); background: var(--amber-wash); }
+input[type=range].sus-rng { width: 100%; min-width: 90px; accent-color: var(--blue); margin: 0; vertical-align: middle; }
+.sus-par { flex-wrap: wrap; gap: 8px 16px; margin: 10px 0 8px; align-items: center; }
+.sus-f { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; white-space: nowrap; }
+.sus-f > span { font: 600 10.5px var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.sus-f input[type=number] { width: 76px; padding: 3px 6px; text-align: right; font: 12.5px var(--mono); }
+.sus-f input[type=range] { width: 130px; }
+.sus-f em { font: normal 11px var(--mono); color: var(--muted); }
+.sus-f select { width: auto; }
+.sus-dmp svg { display: block; width: 100%; touch-action: none; }
+.sus-node { cursor: ns-resize; }
+.sus-node:hover, .sus-node:focus { stroke-width: 3.2; outline: none; }
+table.sus-nodes td.sl { width: 30%; }
+.sus-kpis { margin: 10px 0 0; }
+.sus .stack > .sus-kpis { margin: 0; }
+.sus table.data td.bad { color: var(--err); font-weight: 600; }
+.sus .panel p { margin: 4px 0; max-width: 100ch; }
 dialog.sig-dlg { width: min(1380px, calc(100vw - 32px)); }

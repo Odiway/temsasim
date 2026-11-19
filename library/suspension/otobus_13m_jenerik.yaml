@@ -1,0 +1,149 @@
+# Süspansiyon dosyası (Çalışma masası → Süspansiyon). SI birimleri; x ön akstan geriye, y sağa, z yerden yukarı.
+# 'measured' listesindeki alanlar çizim ya da test verisidir; geri kalan her şey KABULDÜR.
+kind: suspension
+name: 13 m otobüs · jenerik (yer tutucu)
+description: 'Yer tutucu. Hiçbir değer bir tedarikçi çiziminden gelmez: körükler etkin alan ve hacimden (politropik), amortisörler tasarım kuralından (sönüm
+  oranı 0,3; çekme/basma 3:1; 0,2 m/s''de diz) üretilmiştir. Geometri 13 m, iki akslı, arkadan motorlu bir yolcu otobüsü için KABULDÜR. Gerçek araç için
+  körük ve amortisör verisini girip aracın adını ''vehicles'' listesine yazın.'
+vehicles: []
+measured: []
+wheelbase_m: 6.92
+cog_x_m: 4.5
+cog_y_m: 0.0
+cog_z_m: 1.2
+passenger_x_m: 3.4
+passenger_z_m: 2.0
+luggage_x_m: 3.6
+luggage_z_m: 0.9
+pitch_gyration_m: 3.5
+roll_gyration_m: 1.0
+friction: 0.8
+understeer_deg_per_g: 2.0
+stop_stiffness_n_per_m: 2000000.0
+linearisation_speed_mps: 0.13
+air_springs:
+  jenerik_on:
+    name: Jenerik körük · ön (etkin alan 450 cm², 12 dm³)
+    source: 'KABUL: p × A; politropik n = 1,38'
+    force_kn_by_bar:
+    - - 1
+      - 4.5
+    - - 5
+      - 22.5
+    - - 9
+      - 40.5
+    rate_n_mm_by_bar: []
+    frequency_hz_by_bar: []
+    rate_basis: polytropic
+    volume_dm3: 12.0
+    polytropic_index: 1.38
+    max_pressure_bar: 9.0
+    bump_travel_mm: 90
+    rebound_travel_mm: 150
+    design_height_mm: 0.0
+    note: ''
+  jenerik_arka:
+    name: Jenerik körük · arka (etkin alan 400 cm², 14 dm³)
+    source: 'KABUL: p × A; politropik n = 1,38'
+    force_kn_by_bar:
+    - - 1
+      - 4.0
+    - - 5
+      - 20.0
+    - - 8
+      - 32.0
+    rate_n_mm_by_bar: []
+    frequency_hz_by_bar: []
+    rate_basis: polytropic
+    volume_dm3: 14.0
+    polytropic_index: 1.38
+    max_pressure_bar: 8.0
+    bump_travel_mm: 110
+    rebound_travel_mm: 150
+    design_height_mm: 0.0
+    note: ''
+dampers:
+  jenerik_on:
+    name: Jenerik amortisör · ön
+    source: 'KABUL: tasarım kuralı'
+    speeds_mps:
+    - 0.05
+    - 0.1
+    - 0.2
+    - 0.35
+    - 0.52
+    rebound_n:
+    - 1100
+    - 2200
+    - 4400
+    - 6100
+    - 8000
+    compression_n:
+    - 370
+    - 740
+    - 1500
+    - 2000
+    - 2700
+    note: ''
+  jenerik_arka:
+    name: Jenerik amortisör · arka
+    source: 'KABUL: tasarım kuralı'
+    speeds_mps:
+    - 0.05
+    - 0.1
+    - 0.2
+    - 0.35
+    - 0.52
+    rebound_n:
+    - 800
+    - 1600
+    - 3200
+    - 4500
+    - 5800
+    compression_n:
+    - 270
+    - 540
+    - 1100
+    - 1500
+    - 1950
+    note: ''
+front:
+  spring: jenerik_on
+  springs_per_side: 1
+  spring_track_m: 2.06
+  spring_motion_ratio: 1.0
+  damper: jenerik_on
+  dampers_per_side: 1
+  damper_track_m: 1.9
+  damper_motion_ratio: 0.95
+  track_m: 2.06
+  tyres_per_side: 1
+  tyre_stiffness_n_per_m: 950000.0
+  tyre_damping_ns_per_m: 1500.0
+  unsprung_mass_kg: 650.0
+  unsprung_cg_height_m: 0.5
+  roll_centre_height_m: 0.2
+  arb_stiffness_nm_per_rad: 150000.0
+  anti_dive: 0.0
+  anti_squat: 0.0
+  driven: false
+rear:
+  spring: jenerik_arka
+  springs_per_side: 2
+  spring_track_m: 0.95
+  spring_motion_ratio: 1.0
+  damper: jenerik_arka
+  dampers_per_side: 2
+  damper_track_m: 1.0
+  damper_motion_ratio: 0.95
+  track_m: 1.82
+  tyres_per_side: 2
+  tyre_stiffness_n_per_m: 950000.0
+  tyre_damping_ns_per_m: 1500.0
+  unsprung_mass_kg: 1250.0
+  unsprung_cg_height_m: 0.5
+  roll_centre_height_m: 0.75
+  arb_stiffness_nm_per_rad: 400000.0
+  anti_dive: 0.0
+  anti_squat: 0.0
+  driven: true
