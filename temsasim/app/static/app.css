@@ -661,3 +661,17 @@ table.sus-nodes td.sl { width: 30%; }
 .sus table.data td.bad { color: var(--err); font-weight: 600; }
 .sus .panel p { margin: 4px 0; max-width: 100ch; }
 dialog.sig-dlg { width: min(1380px, calc(100vw - 32px)); }
+
+/* ---------- help: what is calculated ---------- */
+dialog.help-dlg { width: min(1100px, calc(100vw - 32px)); }
+dialog.help-dlg .dlg-head { gap: 8px; }
+dialog.help-dlg .dlg-head input[type=search] { width: 250px; padding: 5px 9px; font-size: 13px; }
+.help-intro { max-width: 90ch; color: var(--ink-2); margin: 0 0 14px; }
+.help-grp { border: 1px solid var(--rule); background: var(--panel); margin: 0 0 12px; }
+.help-head { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--rule-2); background: var(--panel-2); }
+.help-head h3 { margin: 0; font: 600 14px var(--display); }
+.help-head .btn { padding: 3px 9px; font-size: 11px; }
+.help-grp > p { margin: 8px 12px 4px; }
+table.help-tbl td { padding: 5px 12px; white-space: normal; vertical-align: top; font-size: 13px; }
+table.help-tbl td.name { width: 30%; font-weight: 600; }
+table.help-tbl td.u { width: 14%; font: 11.5px var(--mono); color: var(--muted); white-space: nowrap; }

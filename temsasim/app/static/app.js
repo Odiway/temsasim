@@ -592,6 +592,44 @@ async function openFileDialog(kind, stem, name) {
   dlg.showModal();
 }
 
+/* Help: everything the simulator calculates, by area, with the tab it is on.
+   The same list is the first section of the calculation map and
+   docs/hesaplananlar.md (all three come from temsasim/catalogue.py). */
+async function openHelp() {
+  if ($("dialog.help-dlg")) return;
+  const data = await api.get("/api/calculations");
+  const dlg = h("dialog", { class: "help-dlg" });
+  const close = () => { dlg.close(); dlg.remove(); };
+  const q = h("input", { type: "search", placeholder: "Ara: menzil, yalpa, vites…", "aria-label": "Hesaplananlarda ara" });
+  const body = h("div", { class: "help-body" });
+  const count = h("span", { class: "muted small" });
+  function draw() {
+    const term = q.value.trim().toLocaleLowerCase("tr");
+    let n = 0;
+    body.replaceChildren(...data.groups.map(g => {
+      const items = g.items.filter(i => !term || `${i.name} ${i.how} ${i.unit} ${g.title}`.toLocaleLowerCase("tr").includes(term));
+      if (!items.length) return null;
+      n += items.length;
+      return h("section", { class: "help-grp" },
+        h("div", { class: "help-head" }, h("h3", {}, g.title), h("span", { class: "spacer" }),
+          h("a", { class: "btn ghost", href: g.hash, onclick: close, title: g.where }, g.where.split("→").pop().trim() + " →"),
+          h("a", { class: "btn ghost", href: `/static/hesap-haritasi.html#${g.map}`, target: "_blank", rel: "noopener", title: "Denklemler (yeni sekmede)" }, "Denklemler")),
+        h("p", { class: "muted small" }, g.lede),
+        h("table", { class: "data help-tbl" }, h("tbody", {}, items.map(i => h("tr", {}, h("td", { class: "name" }, i.name), h("td", { class: "u" }, i.unit), h("td", {}, i.how))))));
+    }));
+    count.textContent = term ? `${n} sonuç` : `${data.groups.length} başlık · ${data.count} büyüklük`;
+    if (!n) body.append(h("p", { class: "muted" }, "Eşleşen büyüklük yok."));
+  }
+  q.addEventListener("input", draw);
+  dlg.append(h("div", { class: "dlg-head" }, h("div", {}, h("h2", {}, "Neler hesaplanıyor"), count), h("span", { class: "spacer" }), q,
+      h("a", { class: "btn ghost", href: "/static/hesap-haritasi.html", target: "_blank", rel: "noopener" }, "Hesap haritası"), h("button", { type: "button", class: "ghost", onclick: close }, "Kapat")),
+    h("div", { class: "dlg-body" }, h("p", { class: "help-intro" }, data.intro), body));
+  dlg.addEventListener("close", () => dlg.remove());
+  document.body.append(dlg);
+  dlg.showModal();
+  draw();
+}
+
 /* The signal explorer over a finished run: any signals on one plane. */
 async function openSignals(reportId, title) {
   const data = await api.get(`/report/${reportId}/signals`);
@@ -709,6 +747,7 @@ async function route() {
   scrollTo(0, 0);
 }
 addEventListener("hashchange", route);
+$("#helpBtn").addEventListener("click", () => openHelp().catch(e => toast(e.message)));
 $("#themeBtn").addEventListener("click", () => {
   const cur = document.documentElement.getAttribute("data-theme");
   const dark = cur ? cur === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;

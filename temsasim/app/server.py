@@ -1262,6 +1262,12 @@ def create_app(library_root: str | pathlib.Path = "library") -> Flask:
     from .suspension_api import register as register_suspension
     register_suspension(app, lib)
 
+    @app.get("/api/calculations")
+    def calculations():
+        """Everything the simulator calculates, for the in-app help."""
+        from ..catalogue import as_dict
+        return jsonify(as_dict())
+
     return app
 
 

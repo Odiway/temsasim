@@ -306,6 +306,18 @@ def cmd_vecto_missions(args):
     return 0
 
 
+def cmd_hesaplananlar(args):
+    """The list of what the simulator calculates; --write refreshes the document and the calculation map."""
+    from . import catalogue
+    if args.write:
+        changed = catalogue.write_files()
+        print("güncellendi: " + ", ".join(changed) if changed else "zaten güncel")
+        return 0
+    sys.stdout.reconfigure(encoding="utf-8")
+    print(catalogue.to_markdown())
+    return 0
+
+
 def cmd_gui(args):
     from .app.server import serve
     serve(args.library, port=args.port, open_browser=not args.no_browser)
@@ -480,6 +492,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("what", help="kind/stem, e.g. engine/daf_mx_11_h5_330")
     sp.add_argument("--name", default=None)
     sp.set_defaults(func=cmd_copy)
+
+    sp = sub.add_parser("hesaplananlar", help="list everything the simulator calculates (Turkish); --write refreshes docs/hesaplananlar.md and the calculation map")
+    sp.add_argument("--write", action="store_true")
+    sp.set_defaults(func=cmd_hesaplananlar)
 
     sp = sub.add_parser("gui", help="open the web interface in a browser")
     sp.add_argument("--port", type=int, default=8765)

@@ -398,3 +398,22 @@ bars, bump stops and tyres that can lift.
 
 The file in the repository is a generic 13 m coach built from assumptions.
 Files made from supplier drawings stay local (`.gitignore`).
+
+## What is calculated (the list)
+
+Everything the simulator computes, by area, with its unit and the tab it is
+shown on: **[docs/hesaplananlar.md](docs/hesaplananlar.md)** (Turkish; 12 areas,
+97 quantities). The same list is
+
+- in the application, behind the **Yardım** button in the top bar (searchable,
+  each area links to its tab and to its equations),
+- the first section of the calculation map (`Hesap haritası`),
+- on the command line: `python -m temsasim hesaplananlar`.
+
+All three are generated from `temsasim/catalogue.py`; after editing it run
+`python -m temsasim hesaplananlar --write` (a test fails when they drift).
+
+Other documents: `docs/suspansiyon_modeli.md` (suspension model and its
+validation), `docs/mersin_adana_korelasyon.md` (diesel correlation with the
+test campaign), `docs/vecto_stable_envanter.md` (what was taken from VECTO),
+`docs/vecto_dosyalarindan_dijital_ikiz.md` (building a vehicle from VECTO files).
